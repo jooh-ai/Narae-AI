@@ -1,0 +1,2099 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>자재마스터 자동 수정 도구</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --success: #16a34a;
+    --error: #dc2626;
+    --warning: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Malgun Gothic', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 24px 16px;
+    line-height: 1.5;
+  }
+  .container { max-width: 920px; margin: 0 auto; }
+  .header { margin-bottom: 20px; }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 700; }
+  .subtitle { color: var(--text-muted); margin: 0; font-size: 13px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 14px;
+  }
+  .step-title {
+    display: flex; align-items: center; gap: 10px;
+    margin: 0 0 14px; font-size: 15px; font-weight: 600;
+  }
+  .step-num {
+    background: var(--primary); color: white;
+    border-radius: 50%; width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0;
+  }
+  .file-drop {
+    border: 1.5px dashed var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 6px;
+  }
+  .file-drop:hover { border-color: var(--primary); background: #eff6ff; }
+  .file-drop.has-file {
+    border-color: var(--success); background: #f0fdf4; border-style: solid;
+    animation: flashSuccess 0.6s ease-out;
+  }
+  .file-drop.loading {
+    border-color: var(--warning); background: #fffbeb; border-style: solid;
+    animation: pulseLoading 1.4s ease-in-out infinite;
+  }
+  @keyframes pulseLoading {
+    0%, 100% { background: #fffbeb; }
+    50%      { background: #fef3c7; }
+  }
+  @keyframes flashSuccess {
+    0%   { background: #bbf7d0; }
+    100% { background: #f0fdf4; }
+  }
+  .file-drop.dragover { border-color: var(--primary); background: #eff6ff; }
+  .file-drop input[type=file] { display: none; }
+  .file-label { font-size: 12px; color: var(--text-muted); margin-bottom: 2px; }
+  .file-name { font-weight: 500; font-size: 13px; word-break: break-all; }
+  .status-icon-ok {
+    display: inline-block; width: 18px; height: 18px;
+    line-height: 18px; text-align: center;
+    background: var(--success); color: white;
+    border-radius: 50%; font-size: 11px; font-weight: bold;
+    margin-right: 4px; vertical-align: middle;
+  }
+  .status-icon-fail {
+    display: inline-block; width: 18px; height: 18px;
+    line-height: 18px; text-align: center;
+    background: var(--error); color: white;
+    border-radius: 50%; font-size: 11px; font-weight: bold;
+    margin-right: 4px; vertical-align: middle;
+  }
+  .row { display: grid; gap: 10px; margin-bottom: 10px; }
+  .row.cols-2 { grid-template-columns: 1fr 1fr; }
+  .row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .row.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .row.cols-5 { grid-template-columns: 2fr 1fr 1fr 1fr 36px; align-items: end; }
+  .row.cols-6 { grid-template-columns: 1.6fr 0.7fr 0.8fr 1.3fr 0.8fr 36px; align-items: end; }
+  .row.cols-7 { grid-template-columns: 1.5fr 0.65fr 0.75fr 1.2fr 0.7fr 0.95fr 36px; align-items: end; }
+  .rev-row {
+    display: none;
+    margin-top: 8px;
+    padding: 8px 10px 6px;
+    background: #ecfdf5;
+    border-left: 3px solid #10b981;
+    border-radius: 4px;
+    align-items: end;
+    grid-template-columns: auto 200px 1fr;
+    gap: 10px;
+  }
+  .rev-row.show { display: grid; }
+  .rev-row .rev-label {
+    font-size: 12px; color: #065f46; font-weight: 600;
+    padding-bottom: 8px;
+  }
+  .rev-row .rev-hint { font-size: 11px; color: #047857; padding-bottom: 8px; }
+  .field label {
+    display: block; font-size: 11px; color: var(--text-muted);
+    margin-bottom: 3px; font-weight: 500;
+  }
+  input[type=text], input[type=number], select {
+    width: 100%; padding: 7px 10px;
+    border: 1px solid var(--border); border-radius: 5px;
+    font-size: 13px; font-family: inherit; background: white;
+  }
+  input:focus, select:focus {
+    outline: 2px solid var(--primary); outline-offset: -1px;
+    border-color: var(--primary);
+  }
+  input:disabled, select:disabled { background: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+  .col-letter { text-transform: uppercase; text-align: center; }
+  .toggle-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 11px; border-radius: 6px;
+    background: #f8fafc; margin-bottom: 6px; cursor: pointer;
+    user-select: none;
+  }
+  .toggle-row:hover { background: #f1f5f9; }
+  .toggle-row input[type=checkbox] { margin-top: 2px; cursor: pointer; }
+  .toggle-text strong { display: block; font-size: 13px; margin-bottom: 1px; }
+  .toggle-text span { color: var(--text-muted); font-size: 12px; }
+  .toggle-clickable { cursor: pointer; display: inline-block; }
+  .toggle-clickable:hover strong { color: var(--primary); }
+  .sub-options {
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+  }
+  .sub-options .radio-row {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 6px 4px; cursor: pointer; font-size: 12px;
+    color: var(--text); border-radius: 4px;
+  }
+  .sub-options .radio-row:hover { background: #f8fafc; }
+  .sub-options .radio-row:not(:last-child) {
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 8px; margin-bottom: 4px;
+  }
+  .sub-options .radio-row input[type=radio] {
+    margin-top: 3px; cursor: pointer;
+    width: 14px; height: 14px;
+    accent-color: var(--primary);
+    flex-shrink: 0;
+  }
+  .sub-options .radio-row strong { color: var(--primary); display: inline; }
+  .sub-options .radio-row span { color: var(--text); display: block; line-height: 1.5; }
+  .custom-removal {
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: #fefce8;
+    border: 1px solid #fde047;
+    border-radius: 5px;
+  }
+  .custom-removal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .custom-removal-header strong { color: #854d0e; }
+  .regex-toggle {
+    display: flex; align-items: center; gap: 4px;
+    cursor: pointer; font-size: 11px; color: #78350f;
+  }
+  .regex-toggle input { cursor: pointer; }
+  #custom_removal_input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #fde047;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    background: white;
+    resize: vertical;
+    min-height: 40px;
+  }
+  #custom_removal_input:focus {
+    outline: 2px solid var(--primary); outline-offset: -1px;
+    border-color: var(--primary);
+  }
+  .custom-removal-hint {
+    font-size: 11px; color: #78350f;
+    margin-top: 4px; line-height: 1.5;
+  }
+  .custom-removal-hint code {
+    background: rgba(0,0,0,0.06); padding: 1px 4px;
+    border-radius: 3px; font-size: 10px;
+  }
+  .mapping-card {
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 6px;
+  }
+  .remove-btn {
+    background: none; border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text-muted); cursor: pointer; padding: 6px 0;
+    font-size: 14px; height: 32px;
+  }
+  .remove-btn:hover { color: var(--error); border-color: var(--error); }
+  .add-btn {
+    background: white;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 8px 12px; cursor: pointer; font-size: 13px;
+    color: var(--primary); width: 100%;
+  }
+  .add-btn:hover { border-color: var(--primary); background: #eff6ff; }
+  .actions { display: flex; gap: 10px; margin-top: 4px; }
+  .btn {
+    background: var(--primary); color: white; border: none;
+    padding: 11px 22px; border-radius: 6px;
+    font-size: 14px; font-weight: 600; cursor: pointer; flex: 1;
+    font-family: inherit;
+  }
+  .btn:hover { background: var(--primary-hover); }
+  .btn:disabled { background: #cbd5e1; cursor: not-allowed; }
+  .log {
+    background: #0f172a; color: #e2e8f0;
+    border-radius: 6px; padding: 12px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px; line-height: 1.5;
+    max-height: 280px; overflow-y: auto;
+    margin-top: 12px; white-space: pre-wrap; word-break: break-word;
+  }
+  .log.empty { display: none; }
+  .log .log-success { color: #4ade80; }
+  .log .log-warn { color: #fbbf24; }
+  .log .log-error { color: #f87171; }
+  .log .log-info { color: #60a5fa; }
+  .info-box {
+    background: #eff6ff; border-left: 3px solid var(--primary);
+    padding: 8px 12px; border-radius: 4px;
+    font-size: 12px; color: #1e3a8a; margin-bottom: 12px;
+  }
+  .save-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+  .pick-btn {
+    background: white; color: var(--text); border: 1px solid var(--border);
+    padding: 7px 14px; border-radius: 5px; font-size: 13px;
+    cursor: pointer; font-family: inherit; white-space: nowrap;
+  }
+  .pick-btn:hover { background: #f8fafc; border-color: #cbd5e1; }
+  .save-target {
+    margin-top: 6px; font-size: 12px; color: var(--text-muted);
+    word-break: break-all;
+  }
+  .save-target.set { color: var(--success); }
+  .badge {
+    display: inline-block; background: #16a34a; color: white;
+    font-size: 10px; padding: 2px 6px; border-radius: 3px;
+    margin-left: 6px; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <h1>자재마스터 자동 수정 도구 <span class="badge">서식유지</span></h1>
+  <p class="subtitle">엑셀 두 파일을 업로드하여 MX 코드 매칭 · spec 제거 · MAKER P/N 추출을 자동 수행합니다. (셀 서식 보존)</p>
+</div>
+
+<!-- ───── 1. 파일 업로드 ───── -->
+<div class="card">
+  <h2 class="step-title"><span class="step-num">1</span>파일 업로드</h2>
+  <div class="row cols-2">
+    <div>
+      <label class="file-drop" id="file1Drop">
+        <div class="file-label">첨부1 (수정 대상)</div>
+        <div class="file-name" id="file1Name">클릭하거나 파일을 끌어다 놓으세요</div>
+        <input type="file" id="file1" accept=".xlsx,.xlsm" />
+      </label>
+    </div>
+    <div>
+      <label class="file-drop" id="file2Drop">
+        <div class="file-label">첨부2 (참조용)</div>
+        <div class="file-name" id="file2Name">클릭하거나 파일을 끌어다 놓으세요</div>
+        <input type="file" id="file2" accept=".xlsx,.xlsm" />
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- ───── 2. 첨부1 컬럼 설정 ───── -->
+<div class="card">
+  <h2 class="step-title"><span class="step-num">2</span>첨부1 (수정 대상) 설정</h2>
+  <div class="info-box">
+    파일을 업로드하면 시트 목록이 자동으로 채워집니다. 컬럼은 알파벳(A, B, C…)으로 입력하세요.
+  </div>
+  <div class="row cols-2">
+    <div class="field">
+      <label>수정할 시트</label>
+      <select id="sheet1" disabled><option>먼저 첨부1을 업로드하세요</option></select>
+    </div>
+    <div class="field">
+      <label>헤더 행 번호</label>
+      <input type="number" id="header1" value="1" min="1" />
+    </div>
+  </div>
+  <div class="row cols-3">
+    <div class="field">
+      <label>MX 코드 컬럼</label>
+      <input type="text" class="col-letter" id="col_mx" value="A" maxlength="3" />
+    </div>
+    <div class="field">
+      <label>자재명 컬럼 (B)</label>
+      <input type="text" class="col-letter" id="col_name" value="B" maxlength="3" />
+    </div>
+    <div class="field">
+      <label>사양 컬럼 (M, [MAKER P/N:] 추출용)</label>
+      <input type="text" class="col-letter" id="col_spec" value="M" maxlength="3" />
+    </div>
+  </div>
+  <div class="row cols-3">
+    <div class="field">
+      <label>제조사 컬럼 (J)</label>
+      <input type="text" class="col-letter" id="col_maker" value="J" maxlength="3" />
+    </div>
+    <div class="field">
+      <label>모델명 컬럼 (K)</label>
+      <input type="text" class="col-letter" id="col_model" value="K" maxlength="3" />
+    </div>
+    <div class="field">
+      <label>MAKER P/N 컬럼 (L)</label>
+      <input type="text" class="col-letter" id="col_pn" value="L" maxlength="3" />
+    </div>
+  </div>
+</div>
+
+<!-- ───── 3. 처리 옵션 ───── -->
+<div class="card">
+  <h2 class="step-title"><span class="step-num">3</span>처리 옵션</h2>
+
+  <div class="toggle-row" id="opt_clean_wrapper">
+    <input type="checkbox" id="opt_clean" checked />
+    <div class="toggle-text">
+      <label for="opt_clean" class="toggle-clickable"><strong>자재명 spec 제거</strong></label>
+      <span>3/8", DR 6각, 1", 4CH, E/P, M6, 220V 등 부가 사양을 자재명에서 제거합니다.</span>
+      <div class="sub-options" id="clean_mode_options">
+        <label class="radio-row">
+          <input type="radio" name="clean_mode" value="append" checked />
+          <span><strong>새 컬럼에 추가</strong> — 시트 맨 끝에 '자재명(정리)' 컬럼을 만들고 정리된 값을 기입 (B열 원본 보존)</span>
+        </label>
+        <label class="radio-row">
+          <input type="radio" name="clean_mode" value="overwrite" />
+          <span><strong>B열 덮어쓰기</strong> — B열의 원본 자재명을 정리된 값으로 직접 덮어씀 (원본은 시트 맨 끝 '자재명(원본백업)' 컬럼에 자동 백업)</span>
+        </label>
+      </div>
+
+      <div class="custom-removal" id="custom_removal_box">
+        <div class="custom-removal-header">
+          <span><strong>+ 사용자 정의 제거 키워드</strong> <span style="color:#94a3b8;font-weight:400">(선택사항)</span></span>
+          <label class="regex-toggle">
+            <input type="checkbox" id="custom_removal_regex" />
+            <span>정규식 모드</span>
+          </label>
+        </div>
+        <textarea id="custom_removal_input" rows="2" placeholder="예: FOR PUMP, MADE IN KOREA, 견본, OBSOLETE&#10;콤마(,) 또는 줄바꿈으로 구분하여 여러 키워드 입력 가능"></textarea>
+        <div class="custom-removal-hint">
+          기본 spec 제거 후 추가로 적용됩니다. 대소문자 무시 · 단어 경계 자동 인식.
+          정규식 모드를 켜면 각 항목을 정규식으로 처리합니다 (예: <code>\bTEST\d+\b</code>).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <label class="toggle-row">
+    <input type="checkbox" id="opt_mx" checked />
+    <div class="toggle-text">
+      <strong>MX 코드 매칭으로 제조사 / 모델명 / MAKER P/N 채우기</strong>
+      <span>첨부2의 시트들에서 MX 코드를 찾아 첨부1의 빈 셀에 데이터를 기입합니다. 기존 데이터가 있는 셀은 보존됩니다.</span>
+    </div>
+  </label>
+
+  <label class="toggle-row">
+    <input type="checkbox" id="opt_pn_extract" checked />
+    <div class="toggle-text">
+      <strong>사양 컬럼에서 [MAKER P/N:…] 자동 추출</strong>
+      <span>M열(사양)에 <code style="background:rgba(0,0,0,0.07);padding:1px 4px;border-radius:3px">[MAKER P/N: ABC123]</code> 형식이 있으면 K(모델명)·L(P/N)의 비어있는 셀에 자동 채웁니다. 둘 다 비어있으면 같은 값을, 한쪽만 비어있으면 그 셀만 채우며, 기존 값은 보존합니다.</span>
+    </div>
+  </label>
+
+  <label class="toggle-row">
+    <input type="checkbox" id="opt_maker_fallback" checked />
+    <div class="toggle-text">
+      <strong>제조사 보조 추출 (J열이 비어있을 때만)</strong>
+      <span>MX 매칭으로 제조사를 못 찾거나 첨부2의 제조사 셀이 비어있는 경우, M열 사양에서 다음 순서로 시도합니다: ① 명시적 라벨 추출(<code style="background:rgba(0,0,0,0.07);padding:1px 4px;border-radius:3px">[MAKER: ABC]</code>, <code style="background:rgba(0,0,0,0.07);padding:1px 4px;border-radius:3px">제조사: ABC</code>, <code style="background:rgba(0,0,0,0.07);padding:1px 4px;border-radius:3px">MFG: ABC</code> 등) → ② 동적 제조사 목록(J열 + 사양 라벨에서 학습)으로 매칭 → ③ 사전 정의된 키워드(Swagelok, AUMA 등) → ④ 같은 모델명/PN으로 다른 행에 매칭된 제조사 적용. 기존 J열 값이 있으면 변경하지 않습니다.</span>
+    </div>
+  </label>
+
+  <label class="toggle-row">
+    <input type="checkbox" id="opt_spec_to_pn" checked />
+    <div class="toggle-text">
+      <strong>MX 매칭 실패 시 사양을 L열(MAKER P/N)에 복사</strong>
+      <span>첨부2에 해당 MX 코드가 없어 L열을 채우지 못한 경우, M열 사양 전체를 L열에 그대로 복사합니다(라벨 형식이면 값만 추출). 기존 L열 값이 있거나 MX 매칭으로 이미 채워진 경우는 변경하지 않습니다.</span>
+    </div>
+  </label>
+
+  <label class="toggle-row">
+    <input type="checkbox" id="opt_attr_fill" checked />
+    <div class="toggle-text">
+      <strong>개별속성 자동 채우기 (O~AH열)</strong>
+      <span>개별속성1(O열)이 비어있는 행을 찾아, 동일 자재명(B열, spec 제거된 형태로 비교)을 가진 다른 행에서 개별속성 1~20(O~AH열)을 복사합니다. 자재명이 같으면 동일 개별속성을 갖는다는 규칙을 적용합니다.</span>
+    </div>
+  </label>
+
+  <label class="toggle-row">
+    <input type="checkbox" id="opt_highlight" checked />
+    <div class="toggle-text">
+      <strong>새로 입력된 데이터에 빨간색 강조</strong>
+      <span>이 도구로 새로 기입된 모든 셀(spec 정리본, 제조사, 모델명, P/N, 개별속성 등)의 글자색을 빨간색으로 표시하여 기존 데이터와 시각적으로 구분합니다. 결과 검토에 편리합니다.</span>
+    </div>
+  </label>
+</div>
+
+<!-- ───── 4. 첨부2 매핑 ───── -->
+<div class="card" id="card_mapping">
+  <h2 class="step-title"><span class="step-num">4</span>첨부2 매핑 설정</h2>
+  <div class="info-box">
+    첨부2의 어느 시트·컬럼에서 데이터를 가져올지 지정합니다. <strong>시트를 선택하면 위례 자재마스터 표준에 맞춰 컬럼이 자동으로 채워집니다.</strong> 다른 사업소 파일의 경우 자동으로 채워진 값을 직접 수정해 사용하세요.<br>
+    <strong>제조사 강제값</strong>이 입력된 시트는 제조사 컬럼을 무시하고 그 값(예: SIEMENS)을 J열에 기입합니다. 비워두면 컬럼에서 읽습니다.<br>
+    <strong>Siemens Parts</strong>가 포함된 시트에는 Revision P/N 옵션이 자동으로 표시됩니다.
+  </div>
+  <div id="mappings"></div>
+  <button class="add-btn" id="addMappingBtn">＋ 매핑 추가</button>
+</div>
+
+<!-- ───── 5. 출력 설정 ───── -->
+<div class="card">
+  <h2 class="step-title"><span class="step-num">5</span>결과 파일 저장</h2>
+  <div class="field" style="margin-bottom:10px">
+    <label>결과 파일명 <span style="color:#94a3b8;font-weight:400">(첨부1 파일명_저장날짜_시각으로 자동 입력)</span></label>
+    <input type="text" id="outputName" placeholder="자재마스터_수정본.xlsx" />
+  </div>
+  <div class="field">
+    <label>저장 위치 (선택사항)</label>
+    <div class="save-row">
+      <input type="text" id="savePathDisplay" placeholder="기본 다운로드 폴더에 저장됩니다" readonly />
+      <button class="pick-btn" id="pickPathBtn">위치 선택…</button>
+    </div>
+    <div class="save-target" id="saveTarget">미리 폴더를 선택하지 않은 경우, '수행'을 누르면 저장 위치를 묻는 대화상자가 먼저 뜹니다.</div>
+  </div>
+</div>
+
+<!-- ───── 6. 수행 ───── -->
+<div class="card">
+  <h2 class="step-title"><span class="step-num">6</span>실행</h2>
+  <div class="actions">
+    <button class="btn" id="runBtn" disabled>수행</button>
+  </div>
+  <div class="log empty" id="log"></div>
+</div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────
+const state = {
+  // ArrayBuffer 보관: 매번 fresh load → 원본 보존, 반복 실행 안전
+  file1Buffer: null,
+  file2Buffer: null,
+  // 첨부1 파일명 (확장자 제거된 베이스명) - 결과 파일명 자동 생성에 사용
+  file1Basename: '',
+  // 시트명/매핑 표시 용도 (참조 워크북)
+  wb1Sheets: [],
+  wb2Sheets: [],
+  saveDirHandle: null,
+};
+
+// ─────────────────────────────────────────────
+// Output filename generation
+// ─────────────────────────────────────────────
+// "YYMMDD_HHMM" 형식의 현재 시각 문자열
+function nowStamp() {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const yy = pad(d.getFullYear() % 100);
+  return `${yy}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+         `_${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+// 파일명에서 확장자 제거: "abc.xlsx" → "abc"
+function stripExtension(filename) {
+  if (!filename) return '';
+  const idx = filename.lastIndexOf('.');
+  return idx > 0 ? filename.substring(0, idx) : filename;
+}
+
+// 결과 파일명 자동 생성: "{첨부1베이스명}_{YYYYMMDD_HHMM}.xlsx"
+function buildOutputFilename() {
+  const base = state.file1Basename || '자재마스터_수정본';
+  return `${base}_${nowStamp()}.xlsx`;
+}
+
+// 결과 파일명 입력란을 자동 갱신 (사용자가 직접 수정한 경우 보존)
+function refreshOutputFilename() {
+  const input = document.getElementById('outputName');
+  if (!input) return;
+  if (input.dataset.userEdited === 'true') return; // 사용자가 수정했으면 그대로 유지
+  input.value = buildOutputFilename();
+}
+
+// 기본 매핑 (위례 자재마스터 표준)
+// makerOverride: 지정하면 제조사 컬럼 대신 이 값으로 강제 입력
+// pnRevisionCol: revision PN이 있으면 이 컬럼 우선 사용 (12·13 시트 전용)
+const DEFAULT_MAPPINGS = [
+  { sheet: 'maximo',                      mxCol: 'A', makerCol: '',  pnCol: 'B' },
+  { sheet: '02.일반자재',                mxCol: 'C', makerCol: 'F', pnCol: 'H' },
+  { sheet: '03.ISP',                      mxCol: 'A', makerCol: '',  pnCol: 'J', makerOverride: 'SIEMENS' },
+  { sheet: '04.SSP',                      mxCol: 'B', makerCol: '',  pnCol: 'K', makerOverride: 'SIEMENS' },
+  { sheet: '06.MG',                       mxCol: 'A', makerCol: '',  pnCol: 'H', makerOverride: 'SIEMENS' },
+  { sheet: '07.2YEAR(SK건설)',            mxCol: 'A', makerCol: '',  pnCol: 'H' },
+  { sheet: '08.2YEAR(지멘스)',            mxCol: 'A', makerCol: '',  pnCol: 'H' },
+  { sheet: '09.2YEAR(감일)',              mxCol: 'C', makerCol: 'F', pnCol: 'H' },
+  { sheet: '10.MN(2,3)',                  mxCol: 'C', makerCol: '',  pnCol: 'G' },
+  { sheet: '11.MN4',                      mxCol: 'C', makerCol: '',  pnCol: 'G' },
+  { sheet: '12.Siemens Parts(LTSA)',      mxCol: 'A', makerCol: '',  pnCol: 'E', pnRevisionCol: 'F', makerOverride: 'SIEMENS' },
+  { sheet: '13.Siemens Parts(LTSA_CO)',   mxCol: 'A', makerCol: '',  pnCol: 'E', pnRevisionCol: 'F', makerOverride: 'SIEMENS' },
+];
+
+// 시트명 키워드 → 기본 컬럼 매핑 (시트가 선택될 때 자동으로 컬럼 채우기에 사용)
+// 시트명에 키워드가 포함되면 매칭 (대소문자 무시, 공백·점 무시 비교)
+function getDefaultColumnsForSheet(sheetName) {
+  if (!sheetName) return null;
+  const norm = String(sheetName).toLowerCase().replace(/[\s.]/g, '');
+
+  // 우선순위 순서대로 매칭 검사
+  // (구체적인 키워드를 먼저 체크 - "siemens parts ltsa_co"가 "siemens parts ltsa"보다 먼저)
+  const patterns = [
+    { match: /siemensparts\(ltsa_co\)|siemenspartsltsa_co/, defaults: { mxCol: 'A', makerCol: '', makerOverride: 'SIEMENS', pnCol: 'E', pnRevisionCol: 'F' } },
+    { match: /siemensparts\(ltsa\)|siemenspartsltsa/,       defaults: { mxCol: 'A', makerCol: '', makerOverride: 'SIEMENS', pnCol: 'E', pnRevisionCol: 'F' } },
+    { match: /11mn4|mn4/,                                    defaults: { mxCol: 'C', makerCol: '', makerOverride: '',        pnCol: 'G', pnRevisionCol: '' } },
+    { match: /10mn|mn\(2,3\)|mn23/,                          defaults: { mxCol: 'C', makerCol: '', makerOverride: '',        pnCol: 'G', pnRevisionCol: '' } },
+    { match: /09\.?2year\(?감일\)?|2year감일/,               defaults: { mxCol: 'C', makerCol: 'F',makerOverride: '',        pnCol: 'H', pnRevisionCol: '' } },
+    { match: /08\.?2year\(?지멘스\)?|2year지멘스/,           defaults: { mxCol: 'A', makerCol: '', makerOverride: '',        pnCol: 'H', pnRevisionCol: '' } },
+    { match: /07\.?2year\(?sk건설\)?|2yearsk건설/,           defaults: { mxCol: 'A', makerCol: '', makerOverride: '',        pnCol: 'H', pnRevisionCol: '' } },
+    { match: /06\.?mg|^mg$/,                                 defaults: { mxCol: 'A', makerCol: '', makerOverride: 'SIEMENS', pnCol: 'H', pnRevisionCol: '' } },
+    { match: /05\.?ipp/,                                     defaults: { mxCol: 'A', makerCol: 'D',makerOverride: 'SIEMENS', pnCol: 'H', pnRevisionCol: '' } },
+    { match: /04\.?ssp/,                                     defaults: { mxCol: 'B', makerCol: '', makerOverride: 'SIEMENS', pnCol: 'K', pnRevisionCol: '' } },
+    { match: /03\.?isp/,                                     defaults: { mxCol: 'A', makerCol: '', makerOverride: 'SIEMENS', pnCol: 'J', pnRevisionCol: '' } },
+    { match: /02\.?일반자재|일반자재/,                       defaults: { mxCol: 'C', makerCol: 'F',makerOverride: '',        pnCol: 'H', pnRevisionCol: '' } },
+    { match: /^maximo|01\.?maximo/,                          defaults: { mxCol: 'A', makerCol: '', makerOverride: '',        pnCol: 'B', pnRevisionCol: '' } },
+  ];
+
+  for (const p of patterns) {
+    if (p.match.test(norm)) return p.defaults;
+  }
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// Logging
+// ─────────────────────────────────────────────
+function log(msg, type = '') {
+  const el = document.getElementById('log');
+  el.classList.remove('empty');
+  const span = document.createElement('div');
+  if (type) span.className = 'log-' + type;
+  span.textContent = msg;
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() {
+  const el = document.getElementById('log');
+  el.innerHTML = '';
+  el.classList.add('empty');
+}
+
+// ─────────────────────────────────────────────
+// Column / cell helpers (ExcelJS - 1-based)
+// ─────────────────────────────────────────────
+function colToNum(letter) {
+  // "A"→1, "B"→2, "AA"→27. 잘못된 입력은 0 반환.
+  const s = String(letter || '').trim().toUpperCase();
+  if (!s) return 0;
+  let n = 0;
+  for (const ch of s) {
+    if (ch < 'A' || ch > 'Z') return 0;
+    n = n * 26 + (ch.charCodeAt(0) - 64);
+  }
+  return n;
+}
+
+// 1→"A", 27→"AA"
+function columnLetter(num) {
+  let n = num;
+  let s = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function getCellText(cell) {
+  // ExcelJS의 cell.value는 string/number/boolean/object(formula·hyperlink·richText) 가능
+  if (!cell) return '';
+  const v = cell.value;
+  if (v == null) return '';
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+  if (v.richText) return v.richText.map(rt => rt.text).join('');
+  if (v.text != null) return v.text;          // hyperlink
+  if (v.result != null) return v.result;      // formula
+  if (v.formula) return '';                   // formula 결과 미평가 시
+  return String(v);
+}
+
+function isEmpty(v) {
+  if (v == null) return true;
+  if (typeof v === 'number') return false;        // 0도 값으로 인정
+  if (typeof v === 'boolean') return false;       // false도 값으로 인정
+  if (typeof v === 'string') {
+    // 일반 공백 + non-breaking space(U+00A0) + zero-width chars 등 모두 trim
+    const cleaned = v.replace(/[\s ​‌‍﻿]+/g, '');
+    return cleaned === '';
+  }
+  return false;
+}
+
+// 셀에 기입할 값에서 라벨 패턴 제거
+//   "[제조사: SIEMENS]" → "SIEMENS"
+//   "[MAKER P/N: ABC123]" → "ABC123"
+//   "[MODEL: XYZ]" → "XYZ"
+//   "제조사: SIEMENS" → "SIEMENS"
+//   "SIEMENS" → "SIEMENS" (라벨 없으면 원본 유지)
+// 외곽 대괄호가 짝맞는 한 쌍인지 확인
+// 예: "[ABC]" → true, "[A][B]" → false, "[A[B]C]" → true
+function isWrappedInBalancedBrackets(s) {
+  if (!s.startsWith('[') || !s.endsWith(']')) return false;
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '[') depth++;
+    else if (s[i] === ']') {
+      depth--;
+      // 마지막 글자 전에 깊이가 0이 되면 짝이 안 맞는 외곽
+      if (depth === 0 && i < s.length - 1) return false;
+    }
+  }
+  return depth === 0;
+}
+
+function stripLabel(value) {
+  if (typeof value !== 'string') return value;
+  let s = value.trim();
+  if (!s) return s;
+
+  // 1) 외곽 대괄호 제거 (짝맞는 한 쌍일 때만)
+  //    "[ABC]" → "ABC"           ✓ 외곽 한 쌍이므로 제거
+  //    "[A][B]" → "[A][B]"       ✗ 두 개의 분리된 쌍이므로 제거하지 않음
+  //    "[[ABC]]" → "[ABC]" → "ABC"  ✓ 중첩된 외곽 쌍은 차례로 제거
+  while (s.length > 1 && isWrappedInBalancedBrackets(s)) {
+    s = s.slice(1, -1).trim();
+    if (!s) return '';
+  }
+
+  // 2) "[라벨: 값]" 또는 "라벨: 값" 형태에서 값만 추출
+  //    인식하는 라벨: 제조사, 제조회사, 메이커, MAKER P/N, MAKER, MODEL, P/N, PN,
+  //                  TYPE, MFG, MFR, Manufacturer, Vendor, Supplier, Brand, SPEC
+  //    선택적 시작 '[' 와 끝의 ']' 도 허용
+  const labelPattern = /^\[?\s*(?:제조사|제조\s*회사|메이커|MAKER\s*P\s*\/?\s*N|MAKER|MFG|MFR\.?|Manufacturer|Vendor|Supplier|Brand|MODEL|P\s*\/?\s*N|TYPE|SPEC)\s*[:：]\s*/i;
+  const labelMatch = s.match(labelPattern);
+  if (labelMatch) {
+    s = s.substring(labelMatch[0].length).trim();
+
+    // 라벨 뒤 값에서 종료 위치를 명시적으로 찾기
+    // 종료 신호:
+    //   1) 닫는 ']'
+    //   2) 새 필드 시작 '['
+    //   3) 인라인 필드 마커 (콤마/세미콜론 뒤 대문자 단어 + ':')
+    //   4) 줄바꿈
+    const stopRegex = /[\]\[\r\n]|[,;|]\s*[A-Z][A-Za-z\/\s.]{0,20}\s*:/;
+    const stopMatch = s.match(stopRegex);
+    if (stopMatch) {
+      s = s.substring(0, stopMatch.index).trim();
+    }
+  }
+
+  // 3) 앞뒤의 잔여 대괄호/구두점/공백 정리
+  s = s.replace(/^[\[\s,;:\-]+|[\]\s,;\-]+$/g, '').trim();
+
+  return s;
+}
+
+function getMaxRow(ws) {
+  // ExcelJS의 actualRowCount는 빈 행을 건너뛸 수 있어 rowCount 사용
+  return Math.max(ws.rowCount, ws.actualRowCount || 0);
+}
+
+// 새 셀에 값을 쓰면서 인접 셀의 스타일을 복사 (서식 일관성 유지)
+function setCellValueWithStyle(ws, row, col, value, styleSourceCol) {
+  const cell = ws.getCell(row, col);
+  cell.value = value;
+  if (styleSourceCol) {
+    const src = ws.getCell(row, styleSourceCol);
+    if (src && src.style && Object.keys(src.style).length > 0) {
+      // 깊은 복사로 참조 공유 방지
+      cell.style = JSON.parse(JSON.stringify(src.style));
+    }
+  }
+}
+
+// 새 컬럼(또는 빈 셀)에 값을 쓰면서 스타일을 소스 셀에서 복사하고,
+// 빨간색 폰트를 한 번에 적용 (별도 적용보다 안전)
+// 핵심: 스타일 객체를 한 번만 만들고, 그 안에서 폰트만 빨강으로 설정
+function setCellValueWithStyleAndRed(ws, row, col, value, styleSourceCol, useRed) {
+  const cell = ws.getCell(row, col);
+  cell.value = value;
+
+  // 소스 셀의 style을 깊은 복사
+  let newStyle = {};
+  if (styleSourceCol) {
+    const src = ws.getCell(row, styleSourceCol);
+    if (src && src.style && Object.keys(src.style).length > 0) {
+      try {
+        newStyle = JSON.parse(JSON.stringify(src.style));
+      } catch {}
+    }
+  }
+
+  if (useRed) {
+    // 디버그 추적
+    try {
+      const colNum = cell.col || cell._column?.number;
+      if (colNum) {
+        const colLetter = columnLetter(colNum);
+        window._redColStats[colLetter] = (window._redColStats[colLetter] || 0) + 1;
+      }
+    } catch {}
+
+    // 폰트 색상만 빨강으로 (다른 폰트 속성은 보존)
+    const f = newStyle.font || {};
+    newStyle.font = {
+      name: f.name, family: f.family, scheme: f.scheme, charset: f.charset,
+      size: f.size, bold: f.bold, italic: f.italic, underline: f.underline,
+      strike: f.strike, outline: f.outline, vertAlign: f.vertAlign,
+      color: { argb: 'FFFF0000' }
+    };
+    for (const k of Object.keys(newStyle.font)) {
+      if (newStyle.font[k] === undefined) delete newStyle.font[k];
+    }
+  }
+
+  // 한 번에 할당 (소스 셀에 영향 없음)
+  if (Object.keys(newStyle).length > 0) {
+    cell.style = newStyle;
+  }
+}
+
+// 디버그용: 빨간색 처리된 셀의 행/열 추적
+window._redCells = [];
+window._redColStats = {}; // 컬럼별 빨간색 적용 카운트
+const DEBUG_RED_LIMIT = 100; // 처음 100개 케이스 기록
+
+// 셀의 기존 폰트 속성을 보존하면서 색상만 빨강으로 변경
+// 핵심: ExcelJS는 동일 스타일을 가진 셀들이 style 객체를 공유하므로,
+//       단순히 cell.font를 수정하면 같은 스타일을 가진 다른 셀들의 폰트까지 함께 바뀜
+//       → 셀의 style 객체 전체를 JSON 복제하여 공유 끊기
+function applyRedFont(cell) {
+  if (!cell) return;
+
+  // 디버그: 컬럼별 카운트 + 처음 100개 위치 기록
+  try {
+    const colNum = cell.col || cell._column?.number;
+    if (colNum) {
+      const colLetter = columnLetter(colNum);
+      window._redColStats[colLetter] = (window._redColStats[colLetter] || 0) + 1;
+    }
+    if (window._redCells.length < DEBUG_RED_LIMIT) {
+      window._redCells.push({
+        address: cell.address,
+        row: cell.row,
+        col: cell.col,
+        value: String(cell.value).substring(0, 40)
+      });
+    }
+  } catch {}
+
+  // 1) 셀의 전체 style을 깊은 복사 (JSON 사용)
+  let newStyle;
+  try {
+    newStyle = cell.style ? JSON.parse(JSON.stringify(cell.style)) : {};
+  } catch {
+    newStyle = {};
+  }
+
+  // 2) 폰트 객체만 새로 구성 (행/열 공유 객체 참조 차단)
+  const f = newStyle.font || {};
+  newStyle.font = {
+    name:      f.name,
+    family:    f.family,
+    scheme:    f.scheme,
+    charset:   f.charset,
+    size:      f.size,
+    bold:      f.bold,
+    italic:    f.italic,
+    underline: f.underline,
+    strike:    f.strike,
+    outline:   f.outline,
+    vertAlign: f.vertAlign,
+    color:     { argb: 'FFFF0000' }
+  };
+  for (const k of Object.keys(newStyle.font)) {
+    if (newStyle.font[k] === undefined) delete newStyle.font[k];
+  }
+
+  // 3) 전체 style을 한 번에 할당
+  cell.style = newStyle;
+}
+
+// 안전한 셀 쓰기 + 빨간색 강조
+//   - 셀이 비어있을 때만 값을 쓰고 빨간색 적용 (이중 안전장치)
+//   - 이미 값이 있으면 무시 (기존 데이터 보호)
+// 반환: 실제로 썼는지 여부 (true/false)
+function writeIfEmpty(cell, value, highlightEnabled) {
+  if (!cell) return false;
+  const existingValue = getCellText(cell);
+  if (!isEmpty(existingValue)) {
+    // 디버그용: 의도치 않게 빈 셀로 판정될 케이스를 콘솔에 기록
+    // 보통은 호출되지 않지만, 호출되면 문제 단서
+    return false;
+  }
+  if (value === null || value === undefined || value === '') return false;
+  cell.value = value;
+  if (highlightEnabled) applyRedFont(cell);
+  return true;
+}
+
+// 강제 쓰기 + 빨간색 강조 (덮어쓰기가 의도된 경우에만 사용)
+//   spec 정리 덮어쓰기 모드처럼 의도적으로 기존 값을 바꿀 때 사용
+function writeForce(cell, value, highlightEnabled) {
+  if (!cell) return false;
+  cell.value = value;
+  if (highlightEnabled) applyRedFont(cell);
+  return true;
+}
+
+// ─────────────────────────────────────────────
+// File loading (ExcelJS)
+// ─────────────────────────────────────────────
+async function readWorkbook(arrayBuffer) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(arrayBuffer);
+  return wb;
+}
+
+function setupFileDrop(dropId, inputId, onLoad) {
+  const drop = document.getElementById(dropId);
+  const input = document.getElementById(inputId);
+  // label이 자동으로 input을 클릭하므로 별도 click 리스너 불필요
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) {
+      input.files = e.dataTransfer.files;
+      onLoad(e.dataTransfer.files[0]);
+    }
+  });
+  input.addEventListener('change', e => {
+    if (e.target.files[0]) {
+      onLoad(e.target.files[0]);
+      e.target.value = '';
+    }
+  });
+}
+
+setupFileDrop('file1Drop', 'file1', async (file) => {
+  const drop = document.getElementById('file1Drop');
+  const nameEl = document.getElementById('file1Name');
+  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+  try {
+    log(`▶ 첨부1 로딩 시작: ${file.name} (${sizeMB} MB)`, 'info');
+    nameEl.textContent = `⏳ 로딩 중... ${file.name} (${sizeMB} MB)`;
+    drop.classList.remove('has-file');
+    drop.classList.add('loading');
+
+    if (file.size > 30 * 1024 * 1024) {
+      log(`  ⚠ 파일 크기가 큽니다 (${sizeMB} MB). 처리에 1~3분이 걸릴 수 있습니다`, 'warn');
+    }
+    await new Promise(r => setTimeout(r, 50)); // UI 업데이트 보장
+
+    const t0 = performance.now();
+    const buf = await file.arrayBuffer();
+    log(`  · 파일 읽기 완료 (${((performance.now() - t0)/1000).toFixed(1)}초)`, 'info');
+    await new Promise(r => setTimeout(r, 50));
+
+    const t1 = performance.now();
+    state.file1Buffer = buf;
+    const wb = await readWorkbook(buf);
+    const parseTime = ((performance.now() - t1)/1000).toFixed(1);
+    log(`  · 엑셀 파싱 완료 (${parseTime}초)`, 'info');
+
+    state.wb1Sheets = wb.worksheets.map(ws => ws.name);
+    state.file1Basename = stripExtension(file.name);
+    drop.classList.remove('loading');
+    drop.classList.add('has-file');
+    nameEl.innerHTML = `<span class="status-icon-ok">✓</span> <strong>업로드 완료</strong> · ${escapeHtml(file.name)} (${sizeMB} MB · 시트 ${state.wb1Sheets.length}개)`;
+    populateSheetSelect('sheet1', state.wb1Sheets);
+    const def = state.wb1Sheets.find(n => n.includes('위례')) || state.wb1Sheets[0];
+    document.getElementById('sheet1').value = def;
+    // 새 첨부1이 올라왔으므로 결과 파일명을 강제로 갱신 (사용자 수정 무시)
+    const outNameInput = document.getElementById('outputName');
+    if (outNameInput) {
+      outNameInput.value = buildOutputFilename();
+      outNameInput.dataset.userEdited = 'false';
+    }
+    log(`✓ 첨부1 업로드 완료: 시트 ${state.wb1Sheets.length}개 인식`, 'success');
+    updateRunBtn();
+  } catch (err) {
+    drop.classList.remove('loading');
+    drop.classList.remove('has-file');
+    nameEl.innerHTML = `<span class="status-icon-fail">✗</span> 업로드 실패: ${escapeHtml(file.name)}`;
+    log(`✗ 첨부1 읽기 실패: ${err.message}`, 'error');
+    log(`  파일이 너무 크거나 손상되었을 수 있습니다. 아래의 해결 방법을 시도해 보세요:`, 'error');
+    log(`  1) 엑셀에서 파일을 열어 불필요한 시트/행 삭제 후 저장`, 'error');
+    log(`  2) 다른 이름으로 저장하여 파일 정리 (.xlsx)`, 'error');
+    log(`  3) 브라우저 다른 탭/창을 닫아 메모리 확보`, 'error');
+    console.error(err);
+  }
+});
+
+setupFileDrop('file2Drop', 'file2', async (file) => {
+  const drop = document.getElementById('file2Drop');
+  const nameEl = document.getElementById('file2Name');
+  const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+  try {
+    log(`▶ 첨부2 로딩 시작: ${file.name} (${sizeMB} MB)`, 'info');
+    nameEl.textContent = `⏳ 로딩 중... ${file.name} (${sizeMB} MB)`;
+    drop.classList.remove('has-file');
+    drop.classList.add('loading');
+
+    if (file.size > 30 * 1024 * 1024) {
+      log(`  ⚠ 파일 크기가 큽니다 (${sizeMB} MB). 처리에 1~3분이 걸릴 수 있습니다`, 'warn');
+    }
+    await new Promise(r => setTimeout(r, 50));
+
+    const buf = await file.arrayBuffer();
+    state.file2Buffer = buf;
+    const wb = await readWorkbook(buf);
+    state.wb2Sheets = wb.worksheets.map(ws => ws.name);
+    drop.classList.remove('loading');
+    drop.classList.add('has-file');
+    nameEl.innerHTML = `<span class="status-icon-ok">✓</span> <strong>업로드 완료</strong> · ${escapeHtml(file.name)} (${sizeMB} MB · 시트 ${state.wb2Sheets.length}개)`;
+    log(`✓ 첨부2 업로드 완료: 시트 ${state.wb2Sheets.length}개 인식`, 'success');
+    refreshAllMappingDropdowns();
+    updateRunBtn();
+  } catch (err) {
+    drop.classList.remove('loading');
+    drop.classList.remove('has-file');
+    nameEl.innerHTML = `<span class="status-icon-fail">✗</span> 업로드 실패: ${escapeHtml(file.name)}`;
+    log(`✗ 첨부2 읽기 실패: ${err.message}`, 'error');
+    console.error(err);
+  }
+});
+
+function populateSheetSelect(id, sheetNames) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = sheetNames.map(n =>
+    `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`
+  ).join('');
+  sel.disabled = false;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ─────────────────────────────────────────────
+// Mapping rows (for 첨부2)
+// ─────────────────────────────────────────────
+function createMappingRow(initial = {}) {
+  const div = document.createElement('div');
+  div.className = 'mapping-card';
+  // 원하는 시트명을 dataset에 보관 (드롭다운이 채워질 때 적용)
+  if (initial.sheet) {
+    div.dataset.desiredSheet = initial.sheet;
+  }
+  div.innerHTML = `
+    <div class="row cols-6">
+      <div class="field">
+        <label>시트</label>
+        <select class="map-sheet"><option>첨부2 업로드 필요</option></select>
+      </div>
+      <div class="field">
+        <label>MX 코드 열</label>
+        <input type="text" class="map-mx col-letter" value="${initial.mxCol || 'A'}" maxlength="3" />
+      </div>
+      <div class="field">
+        <label>제조사 열 <span style="color:#94a3b8;font-weight:400">(없으면 비워두세요)</span></label>
+        <input type="text" class="map-maker col-letter" value="${initial.makerCol || ''}" maxlength="3" />
+      </div>
+      <div class="field">
+        <label>제조사 강제값</label>
+        <input type="text" class="map-maker-override" value="${initial.makerOverride ? escapeHtml(initial.makerOverride) : ''}" placeholder="비우면 컬럼값 사용" />
+      </div>
+      <div class="field">
+        <label>모델/PN 열</label>
+        <input type="text" class="map-pn col-letter" value="${initial.pnCol || ''}" maxlength="3" />
+      </div>
+      <button class="remove-btn" title="삭제">✕</button>
+    </div>
+    <div class="rev-row">
+      <span class="rev-label">↳ Revision P/N 열</span>
+      <input type="text" class="map-pn-rev col-letter" value="${initial.pnRevisionCol || ''}" maxlength="3" placeholder="예: I" />
+      <span class="rev-hint">값이 있으면 우선 사용, 없으면 모델/PN 열 값을 사용합니다</span>
+    </div>
+  `;
+  div.querySelector('.remove-btn').addEventListener('click', () => div.remove());
+
+  // 시트 변경 시: ① desiredSheet 갱신 ② Revision 행 가시성 토글 ③ 컬럼 기본값 자동 채우기
+  const sheetSel = div.querySelector('.map-sheet');
+  sheetSel.addEventListener('change', () => {
+    div.dataset.desiredSheet = sheetSel.value;
+    applyDefaultsForSheet(div, true); // 사용자 변경: 모든 필드 갱신
+    updateRevRowVisibility(div);
+  });
+
+  document.getElementById('mappings').appendChild(div);
+  refreshMappingDropdown(div, initial.sheet);
+  updateRevRowVisibility(div); // 초기 가시성 결정
+  return div;
+}
+
+// 시트명 기반으로 컬럼 기본값을 매핑 카드에 적용
+//   forceOverwrite=true: 사용자가 시트를 변경했을 때 (모든 필드 덮어씀)
+//   forceOverwrite=false: 초기 로드 시 (initial 값이 있으면 보존)
+function applyDefaultsForSheet(rowEl, forceOverwrite = false) {
+  const sheetName = rowEl.querySelector('.map-sheet').value || '';
+  const defaults = getDefaultColumnsForSheet(sheetName);
+  if (!defaults) return;
+
+  const fields = [
+    { selector: '.map-mx',            value: defaults.mxCol },
+    { selector: '.map-maker',         value: defaults.makerCol },
+    { selector: '.map-maker-override',value: defaults.makerOverride },
+    { selector: '.map-pn',            value: defaults.pnCol },
+    { selector: '.map-pn-rev',        value: defaults.pnRevisionCol },
+  ];
+
+  for (const f of fields) {
+    const el = rowEl.querySelector(f.selector);
+    if (!el) continue;
+    if (forceOverwrite) {
+      el.value = f.value || '';
+    } else {
+      // 비어있는 경우에만 채움
+      if (!el.value) el.value = f.value || '';
+    }
+  }
+}
+
+// Revision 행 가시성: 시트명이 Siemens Parts 패턴이면 표시
+function updateRevRowVisibility(rowEl) {
+  const sheetName = rowEl.querySelector('.map-sheet').value || '';
+  const revRow = rowEl.querySelector('.rev-row');
+  const isSiemensParts = /Siemens\s*Parts/i.test(sheetName);
+  if (isSiemensParts) {
+    revRow.classList.add('show');
+  } else {
+    revRow.classList.remove('show');
+    // 숨겨질 때는 입력값도 함께 비워서 의도치 않은 사용 방지
+    rowEl.querySelector('.map-pn-rev').value = '';
+  }
+}
+
+// 시트명 정규화: 공백·점 제거하고 소문자로
+function normalizeSheetName(s) {
+  return String(s || '').toLowerCase().replace(/[\s.]/g, '');
+}
+
+// 후보 시트명에 가장 가까운 실제 시트명 찾기
+//   1) 정확 일치
+//   2) 정규화 후 일치
+//   3) 부분 포함(정규화 기준)
+function findBestSheetMatch(desiredName, sheetList) {
+  if (!desiredName || sheetList.length === 0) return null;
+  // 1) 정확
+  if (sheetList.includes(desiredName)) return desiredName;
+  // 2) 정규화 일치
+  const desiredNorm = normalizeSheetName(desiredName);
+  for (const s of sheetList) {
+    if (normalizeSheetName(s) === desiredNorm) return s;
+  }
+  // 3) 부분 포함 (양방향)
+  for (const s of sheetList) {
+    const sNorm = normalizeSheetName(s);
+    if (sNorm.includes(desiredNorm) || desiredNorm.includes(sNorm)) return s;
+  }
+  return null;
+}
+
+function refreshMappingDropdown(rowEl, preferredName) {
+  const sel = rowEl.querySelector('.map-sheet');
+  if (state.wb2Sheets.length === 0) {
+    sel.innerHTML = '<option>첨부2 업로드 필요</option>';
+    sel.disabled = true;
+    updateRevRowVisibility(rowEl);
+    return;
+  }
+  sel.innerHTML = state.wb2Sheets.map(n =>
+    `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`
+  ).join('');
+  sel.disabled = false;
+
+  // 우선순위: ① 명시적으로 전달된 preferredName ② dataset.desiredSheet
+  const desiredName = preferredName || rowEl.dataset.desiredSheet;
+  const matched = findBestSheetMatch(desiredName, state.wb2Sheets);
+  if (matched) {
+    sel.value = matched;
+    rowEl.dataset.desiredSheet = matched; // 매칭된 실제 시트명으로 갱신
+    // 시트가 결정되었으니 컬럼 기본값도 적용 (비어있는 필드만)
+    applyDefaultsForSheet(rowEl, false);
+  }
+  updateRevRowVisibility(rowEl);
+}
+
+function refreshAllMappingDropdowns() {
+  document.querySelectorAll('#mappings .mapping-card').forEach(row => {
+    // dataset.desiredSheet가 있으면 그것 우선, 없으면 현재 select 값
+    const desired = row.dataset.desiredSheet || row.querySelector('.map-sheet').value;
+    refreshMappingDropdown(row, desired);
+  });
+}
+
+document.getElementById('addMappingBtn').addEventListener('click', () => {
+  createMappingRow();
+});
+
+DEFAULT_MAPPINGS.forEach(m => createMappingRow(m));
+
+// ─────────────────────────────────────────────
+// Save path picker
+// ─────────────────────────────────────────────
+document.getElementById('pickPathBtn').addEventListener('click', async () => {
+  if (!('showDirectoryPicker' in window)) {
+    alert('현재 브라우저는 폴더 선택 기능을 지원하지 않습니다.\n(Chrome/Edge 사용 권장)');
+    return;
+  }
+  try {
+    const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+    state.saveDirHandle = handle;
+    document.getElementById('savePathDisplay').value = handle.name + ' 폴더';
+    const tgt = document.getElementById('saveTarget');
+    tgt.textContent = `선택된 폴더: ${handle.name} (수행 시 이 폴더에 저장됩니다)`;
+    tgt.classList.add('set');
+  } catch (err) {
+    if (err.name !== 'AbortError') alert('폴더 선택 실패: ' + err.message);
+  }
+});
+
+function updateRunBtn() {
+  document.getElementById('runBtn').disabled = !state.file1Buffer;
+}
+
+// ─────────────────────────────────────────────
+// Spec removal
+// ─────────────────────────────────────────────
+const SPEC_PATTERNS = [
+  // ═══ [최우선] 괄호 안의 모든 내용 통째로 제거 ═══
+  // 일반적으로 자재명의 괄호 내용은 spec/규격이므로 제거
+  // 한글 텍스트 + 숫자 + 단위 등 어떤 조합이든 모두 처리
+  /\([^)]*\)/g,         // (15~110), (19x21mm), (DC24V) 등
+  /\[[^\]]*\]/g,        // [SUS316], [220V] 등
+  /\{[^}]*\}/g,         // {타입A} 등
+  /<[^>]*>/g,           // <DN50> 등 꺾쇠 괄호
+
+  // ═══ 따옴표 (분수·단순) ═══
+  /\d+\s*\/\s*\d+\s*["“”′″‘’'']/g,  // 3/8", 1/2"
+  /\d+(?:\.\d+)?\s*["“”′″‘’'']/g,    // 1", 2.5"
+  /\d+\s*\/\s*\d+\s*inch/gi,
+  /\b\d+(?:\.\d+)?\s*inch\b/gi,
+  /\b\d+(?:\.\d+)?\s*인치/g,         // 10인치, 1/2인치 (한글 단위)
+
+  // ═══ 길이 단위 ═══
+  /\b\d+(?:\.\d+)?\s*mm\b/gi,
+  /\b\d+(?:\.\d+)?\s*cm\b/gi,
+  /\b\d+(?:\.\d+)?\s*km\b/gi,
+  /\b\d+(?:\.\d+)?\s*(?:μm|um|micron)\b/gi,
+  /\b\d+(?:\.\d+)?\s*(?:ft|yd)\b/gi,
+  /\b\d+(?:\.\d+)?\s*[㎜㎝㎞]/g,
+  /\b\d+(?:\.\d+)?\s*[mM]\b/g,        // 10m (미터)
+
+  // ═══ 무게/용량 ═══
+  /\b\d+(?:\.\d+)?\s*(?:kg|kgs|mg|ton|tons|lb|lbs|oz)\b/gi,
+  /\b\d+(?:\.\d+)?\s*g\b(?!ear|rade|alvan|auge)/gi,  // 85g (단어 g***은 제외)
+  /\b\d+(?:\.\d+)?\s*(?:l|ml|cc|gal|gallon)\b/gi,    // 500ml, 1L
+  /\b\d+(?:\.\d+)?\s*(?:리터|밀리리터|그램|킬로|미리)/g,
+
+  // ═══ 전기/주파수 ═══
+  /\b\d+(?:\.\d+)?\s*(?:V|kV|mV|μV|VAC|VDC|DC|AC)\b/gi,
+  /\b\d+(?:\.\d+)?\s*(?:A|mA|μA|kA)\b/gi,
+  /\b\d+(?:\.\d+)?\s*(?:W|kW|MW|VA|kVA)\b/gi,
+  /\b\d+(?:\.\d+)?\s*(?:Hz|kHz|MHz|GHz|HZ)\b/gi,
+  /\b\d+(?:\.\d+)?\s*(?:Ω|ohm|Ohm)\b/gi,
+
+  // ═══ 단면적 (전선) ═══
+  /\b\d+(?:\.\d+)?\s*(?:sq|SQ|sqmm|mm2|mm²|㎟)\b/gi,
+
+  // ═══ 압력 ═══
+  /\b\d+(?:\.\d+)?\s*(?:bar|psi|kPa|MPa|Pa|atm|kgf|kgcm)\b/gi,
+
+  // ═══ 온도 ═══
+  /\b\d+(?:\.\d+)?\s*(?:℃|°C|°F|℉|degC|degF|도|°)/gi,
+
+  // ═══ 각도 (90°, 90도, 90*) ═══
+  /\b\d+(?:\.\d+)?\s*[°*도]/g,        // 90°, 90도, 90*
+
+  // ═══ 회전수 ═══
+  /\b\d+(?:\.\d+)?\s*rpm\b/gi,
+
+  // ═══ 채널/극/상/선/구 ═══
+  /\b\d+\s*(?:CH|ch)\b/gi,
+  /\b\d+\s*(?:P|극|상|선|구|핀|pin|PIN)\b/gi,
+
+  // ═══ T(두께), 길이 등 짧은 단위 표기 ═══
+  /\b\d+(?:\.\d+)?\s*[Tt](?![a-zA-Z])/g,   // 5T, 10T (Type 같은 단어 제외)
+
+  // ═══ 한국어 규격 ═══
+  /\b\d+\s*각\b/g,                          // 6각, 12각, 8각
+  /\bDR\s*\d+각/gi,
+  /\b\d+\s*겹\b/g,                          // 2겹
+  /\b\d+\s*단\b/g,                          // 3단
+  /\b\d+\s*가닥\b/g,                        // 5가닥
+  /\b\d+\s*개입\b/g,                        // 100개입
+  /\b\d+\s*매\b/g,                          // 50매
+  /\b\d+\s*EA\b/gi,                         // 100EA
+
+  // ═══ M나사 (M6, M10, M10x20) ═══
+  /\bM\d+(?:[x×*]\d+)?\b/g,
+
+  // ═══ E/P, I/P, A/F 등 약어 ═══
+  /\b[A-Z]\/[A-Z]\b/g,
+
+  // ═══ Ø, φ, ⌀ 직경 ═══
+  /[Øφ⌀⏀]\s*\d+(?:\.\d+)?(?:\s*(?:mm|cm|inch))?/gi,
+
+  // ═══ 숫자 범위 (15~110, 5-10, 15 ~ 110) ═══
+  /\b\d+(?:\.\d+)?\s*[~∼〜]\s*\d+(?:\.\d+)?(?:\s*(?:mm|cm|m|kg|g|V|A|W|Hz|bar|psi|℃|°C|°F))?/gi,
+  /\b\d+(?:\.\d+)?\s*[-]\s*\d+(?:\.\d+)?\s*(?:mm|cm|m|kg|g|V|A|W|Hz|bar|psi|℃|°C|°F)\b/gi,
+
+  // ═══ 치수 표기 (10x20, 10×20×30, 19x21mm) ═══
+  /\b\d+(?:\.\d+)?\s*[x×*]\s*\d+(?:\.\d+)?(?:\s*[x×*]\s*\d+(?:\.\d+)?)?(?:\s*(?:mm|cm|m))?\b/gi,
+
+  // ═══ 분수 단독 ═══
+  /\b\d+\s*\/\s*\d+\b/g,
+
+  // ═══ 배관/플랜지 규격 ═══
+  /\bSCH\s*\d+/gi,
+  /\bANSI\s*\d+/gi,
+  /\bDN\s*\d+/gi,
+  /\bPN\s*\d+/gi,
+  /\bRAL\s*\d+/gi,
+  /\bIP\s*\d+/gi,           // IP65, IP67 (방수 등급)
+  /\bRC\s*\d+/gi,           // RC 등급
+
+  // ═══ 재질 코드 (SUS316, SS400, SCM440, S45C, STS304 등) ═══
+  /\b(?:SUS|SS|SCM|STS|SUH|SUM|SC|STK|STKM|STKR|SPCC|SPHC|SPP|SGP|STPG|STS|STBA)\d+[A-Z]*\b/g,
+  /\bS\d+C\b/g,              // S45C, S55C
+  /\bSWS\d+/gi,
+  /\bSWC[CH]\d*/gi,
+  /\bSCMnH?\b/gi,
+  // 알루미늄/구리 합금
+  /\bAL?\s*\d{4}\b/g,        // AL5052, A2017
+  /\bC\d{4}\b/g,             // C1100, C3604
+  // 일반 재질명
+  /\b(?:STAINLESS|CARBON|BRASS|COPPER|ALUMINUM|ALUMINIUM|TITANIUM|BRONZE)\b/gi,
+
+  // ═══ 색상 (영문) ═══
+  /\b(?:RED|BLUE|GREEN|YELLOW|BLACK|WHITE|GRAY|GREY|ORANGE|PURPLE|BROWN|PINK|SILVER|GOLD|TRANSPARENT|CLEAR)\b/gi,
+
+  // ═══ 방향/타입 짧은 약어 ═══
+  /\b(?:LH|RH|LR|UD|FB)\b/g,    // 좌우/방향
+
+  // ═══ 단독 숫자 (단위 없음) - 가장 마지막에 처리 ═══
+  // 자재명 끝에 붙은 단독 숫자 (예: "볼트 10", "너트 100")
+  /\s+\d+(?:\.\d+)?\s*$/g,
+];
+
+// 사용자 입력 문자열을 RegExp 배열로 파싱
+//   isRegex=true: 입력을 그대로 정규식으로 사용
+//   isRegex=false: 텍스트로 인식하여 escape 후 단어 경계 자동 추가
+function parseCustomRemovalPatterns(rawInput, isRegex) {
+  if (!rawInput || typeof rawInput !== 'string') return [];
+  // 콤마 또는 줄바꿈으로 분할, 빈 항목 제외
+  const items = rawInput.split(/[,\n\r]+/).map(s => s.trim()).filter(Boolean);
+  const patterns = [];
+
+  for (const item of items) {
+    try {
+      if (isRegex) {
+        // 정규식 모드: 사용자 입력 그대로 사용 (gi 플래그 적용)
+        patterns.push(new RegExp(item, 'gi'));
+      } else {
+        // 텍스트 모드: 정규식 특수문자 이스케이프 후 단어 경계 적용
+        // 영문/숫자로 시작/끝나면 \b로 단어 경계, 그렇지 않으면 그대로
+        const escaped = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const startsWord = /^[A-Za-z0-9가-힣]/.test(item);
+        const endsWord = /[A-Za-z0-9가-힣]$/.test(item);
+        const startBoundary = startsWord ? '(?:^|[^A-Za-z0-9가-힣])' : '';
+        const endBoundary = endsWord ? '(?=[^A-Za-z0-9가-힣]|$)' : '';
+        patterns.push(new RegExp(startBoundary + escaped + endBoundary, 'gi'));
+      }
+    } catch (e) {
+      console.warn(`사용자 제거 패턴 무시 ('${item}'): ${e.message}`);
+    }
+  }
+  return patterns;
+}
+
+// 두 문자열이 "사용자 시각으로 동일한지" 비교
+//   - 앞뒤 공백 무시
+//   - 내부 연속 공백을 하나로 통일하여 비교
+//   - 대소문자는 구분 (자재명에서는 대소문자가 의미를 가질 수 있음)
+function isVisuallyEqual(a, b) {
+  const normA = String(a || '').replace(/\s+/g, ' ').trim();
+  const normB = String(b || '').replace(/\s+/g, ' ').trim();
+  return normA === normB;
+}
+
+function cleanSpec(name, customPatterns = []) {
+  if (typeof name !== 'string') return name;
+  let s = name;
+  // 1차: 기본 SPEC_PATTERNS 적용
+  for (const re of SPEC_PATTERNS) s = s.replace(re, ' ');
+  // 2차: 사용자 정의 패턴 적용
+  for (const re of customPatterns) {
+    try {
+      s = s.replace(re, ' ');
+    } catch (e) {
+      // 패턴 오류 시 건너뜀
+    }
+  }
+  // 공백/구분자 정리
+  s = s.replace(/\s*,\s*/g, ', ')
+       .replace(/\s+/g, ' ')
+       .replace(/(,\s*)+/g, ', ')
+       .replace(/^[\s,\-]+|[\s,\-]+$/g, '');
+  return s;
+}
+
+// ─────────────────────────────────────────────
+// Maker keyword extraction from spec text
+// ─────────────────────────────────────────────
+// 자주 등장하는 제조사 키워드 (필요 시 추가/수정)
+// 매칭 규칙: 대소문자 무시, 단어 경계 인식, 더 긴 이름 우선
+const MAKER_KEYWORDS = [
+  // 밸브/액추에이터
+  'Swagelok', 'AUMA', 'Rotork', 'Limitorque', 'Bettis', 'Bray', 'Kitz', 'Velan',
+  'Crane', 'Fisher', 'Masoneilan', 'Samson', 'Neles', 'Metso', 'Emerson',
+  // 계측/센서
+  'Rosemount', 'Yokogawa', 'Endress+Hauser', 'Endress', 'E+H', 'Honeywell',
+  'WIKA', 'Wise', 'WISE', 'Ashcroft', 'Ametek', 'Krohne', 'VEGA', 'Pepperl+Fuchs',
+  // 전기/제어
+  'Allen-Bradley', 'Allen Bradley', 'Rockwell', 'Siemens', 'SIEMENS',
+  'Schneider', 'ABB', 'Mitsubishi', 'Omron', 'Phoenix Contact', 'Pilz',
+  'Eaton', 'Moeller', 'GE', 'Hitachi', 'LS', 'LSIS',
+  // 펌프/모터
+  'Grundfos', 'KSB', 'Sulzer', 'Flowserve', 'WILO', 'Goulds', 'Ebara',
+  'WEG', 'TECO', 'Hyosung',
+  // 화학/세정/소모품
+  'Hisco', 'HISCO', 'Nabakem', 'NABAKEM', '3M', 'Loctite', 'Henkel', 'Dow',
+  // 베어링/체결류
+  'SKF', 'NSK', 'NTN', 'FAG', 'Timken', 'INA',
+  // 공압/유압
+  'SMC', 'Festo', 'Parker', 'Norgren', 'CKD', 'Bosch Rexroth', 'Rexroth',
+  // 기타
+  'Pentair', 'Danfoss', 'Burkert', 'GEMÜ', 'GEMU', 'Spirax Sarco', 'Armstrong',
+];
+
+// 키워드를 길이 내림차순으로 정렬 (긴 이름 먼저 매칭하여 부분 일치 방지)
+//   예: "Allen-Bradley" → "Allen Bradley" → "Allen" 순서
+const SORTED_MAKER_KEYWORDS = [...MAKER_KEYWORDS].sort((a, b) => b.length - a.length);
+
+// 정규식 특수문자 이스케이프
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// 사양 텍스트에서 제조사 키워드 찾기
+function extractMakerFromSpec(spec) {
+  if (typeof spec !== 'string' || !spec.trim()) return null;
+
+  for (const keyword of SORTED_MAKER_KEYWORDS) {
+    // 단어 경계 + 대소문자 무시
+    // 한글이나 특수문자에 인접해도 매칭되도록 \b 대신 lookaround 사용
+    const pattern = new RegExp(
+      `(?:^|[^A-Za-z0-9가-힣])(${escapeRegex(keyword)})(?:[^A-Za-z0-9가-힣]|$)`,
+      'i'
+    );
+    const match = spec.match(pattern);
+    if (match) {
+      // 원본 키워드 표기로 반환 (대소문자 유지)
+      return keyword;
+    }
+  }
+  return null;
+}
+
+// 동적 제조사 목록을 사용하여 사양 텍스트에서 제조사 매칭
+// makerList: 첨부1의 J열에 등장한 모든 제조사 (Set 또는 배열)
+function findMakerInSpecByList(spec, sortedMakerList) {
+  if (typeof spec !== 'string' || !spec.trim()) return null;
+  if (!sortedMakerList || sortedMakerList.length === 0) return null;
+
+  for (const maker of sortedMakerList) {
+    if (!maker || maker.length < 2) continue; // 1글자는 오탐 위험으로 제외
+    const pattern = new RegExp(
+      `(?:^|[^A-Za-z0-9가-힣])(${escapeRegex(maker)})(?:[^A-Za-z0-9가-힣]|$)`,
+      'i'
+    );
+    if (pattern.test(spec)) {
+      return maker; // 원본 표기 그대로 반환
+    }
+  }
+  return null;
+}
+
+// 사양 텍스트에서 명시적 제조사 라벨 추출
+//   예: [MAKER: SWAGELOK], 제조사: AUMA, MFG: WIKA, Manufacturer: ROTORK
+// 알 수 없는 신규 제조사도 라벨만 있으면 추출 가능
+function extractMakerByLabel(spec) {
+  if (typeof spec !== 'string' || !spec.trim()) return null;
+
+  // 다양한 라벨 패턴 (대소문자 무시)
+  // 한글 라벨: 제조사, 제조회사, 메이커
+  // 영문 라벨: MAKER, MFG, MFR, Manufacturer, Vendor, Supplier, Brand
+  const labelPattern = /(?:제조사|제조\s*회사|메이커|MAKER|MFG|MFR\.?|Manufacturer|Vendor|Supplier|Brand)\s*[:：]\s*/i;
+  const labelMatch = spec.match(labelPattern);
+  if (!labelMatch) return null;
+
+  // 라벨 뒤의 텍스트 추출
+  const valueStart = labelMatch.index + labelMatch[0].length;
+  const tail = spec.substring(valueStart);
+
+  // 종료 위치: ']', '[', 줄바꿈, 다음 라벨 마커, 또는 ',' / ';' / '|'
+  let endIdx = tail.length;
+  const stopRegex = /[\]\[\r\n,;|]|(?:제조사|제조\s*회사|메이커|MAKER|MFG|MFR\.?|Manufacturer|Vendor|Supplier|Brand|MAKER\s*P\s*\/?\s*N|MODEL|TYPE|SPEC|SIZE|ETC|REMARK|NOTE)\s*[:：]/i;
+  const stopMatch = tail.match(stopRegex);
+  if (stopMatch) endIdx = stopMatch.index;
+
+  let value = tail.substring(0, endIdx).trim();
+  // 앞뒤의 잔여 구두점 / 대괄호 / 공백 제거
+  value = value.replace(/^[\[\s,;:\-]+|[\]\s,;\-]+$/g, '');
+
+  // 너무 짧거나(2자 미만) 너무 긴(40자 초과) 결과는 제외 (오탐 방지)
+  if (!value || value.length < 2 || value.length > 40) return null;
+
+  return value;
+}
+
+// ─────────────────────────────────────────────
+// MAKER P/N extraction
+// ─────────────────────────────────────────────
+function extractMakerPN(spec) {
+  if (typeof spec !== 'string') return null;
+
+  // 1단계: 'MAKER P/N:' 위치 찾기
+  //   - 대소문자 무시, 공백 변형 허용, 슬래시는 선택사항(P/N 또는 PN)
+  const startMatch = spec.match(/MAKER\s*P\s*\/?\s*N\s*:/i);
+  if (!startMatch) return null;
+
+  // 2단계: ':' 이후의 텍스트 추출
+  const valueStart = startMatch.index + startMatch[0].length;
+  const tail = spec.substring(valueStart);
+
+  // 3단계: 종료 위치 찾기 - 가장 먼저 등장하는 종료 신호 위치
+  //   가능한 종료 신호:
+  //     a) ']'  - 닫는 대괄호
+  //     b) '['  - 다음 필드의 시작 대괄호 (예: ABC][ETC:...)
+  //     c) '\r', '\n' - 줄바꿈
+  //     d) ', ETC:', '; SPEC:', '| TYPE:' 등 인라인 필드 마커
+  //        (콤마/세미콜론/파이프 + 공백 + 대문자 단어 + 콜론)
+
+  let endIdx = tail.length;
+
+  const stopRegex = /[\]\[\r\n]|[,;|]\s*[A-Z][A-Za-z\/\s.]{0,20}\s*:/;
+  const stopMatch = tail.match(stopRegex);
+  if (stopMatch) endIdx = stopMatch.index;
+
+  // 4단계: 값 추출 및 정리
+  let value = tail.substring(0, endIdx).trim();
+  // 앞뒤의 잔여 구두점/공백/대괄호 제거
+  value = value.replace(/^[\[\s,;:\-]+|[\]\s,;\-]+$/g, '');
+
+  return value || null;
+}
+
+// ─────────────────────────────────────────────
+// Build reference map from 첨부2
+// ─────────────────────────────────────────────
+function buildReferenceMap(wb, mappings) {
+  const map = new Map();
+  for (const m of mappings) {
+    const ws = wb.getWorksheet(m.sheet);
+    if (!ws) {
+      log(`  ⚠ 시트 '${m.sheet}'를 찾을 수 없어 건너뜁니다`, 'warn');
+      continue;
+    }
+    const mxNum = colToNum(m.mxCol);
+    const makerNum = m.makerCol ? colToNum(m.makerCol) : 0;
+    const pnNum = m.pnCol ? colToNum(m.pnCol) : 0;
+    const pnRevNum = m.pnRevisionCol ? colToNum(m.pnRevisionCol) : 0;
+    if (!mxNum) {
+      log(`  ⚠ 시트 '${m.sheet}': MX 컬럼 '${m.mxCol}' 잘못됨`, 'warn');
+      continue;
+    }
+
+    // 제조사 강제값
+    const makerForce = (m.makerOverride && String(m.makerOverride).trim()) || '';
+
+    const maxRow = getMaxRow(ws);
+    let count = 0;
+    let revUsed = 0; // revision 우선 사용된 행 카운트
+    for (let r = 2; r <= maxRow; r++) {
+      const mxVal = String(getCellText(ws.getCell(r, mxNum))).trim();
+      if (!mxVal.startsWith('MX')) continue;
+      if (map.has(mxVal)) continue;
+
+      const maker = makerForce
+        ? makerForce
+        : (makerNum ? stripLabel(String(getCellText(ws.getCell(r, makerNum))).trim()) : '');
+
+      // P/N 결정: revision 컬럼이 지정되어 있고 값이 있으면 revision, 아니면 기본 PN
+      let pn = '';
+      if (pnRevNum) {
+        const revVal = stripLabel(String(getCellText(ws.getCell(r, pnRevNum))).trim());
+        if (revVal) {
+          pn = revVal;
+          revUsed++;
+        } else if (pnNum) {
+          pn = stripLabel(String(getCellText(ws.getCell(r, pnNum))).trim());
+        }
+      } else if (pnNum) {
+        pn = stripLabel(String(getCellText(ws.getCell(r, pnNum))).trim());
+      }
+
+      map.set(mxVal, { maker, model: pn, pn });
+      count++;
+    }
+    const tags = [];
+    if (makerForce) tags.push(`제조사: ${makerForce} 강제`);
+    if (pnRevNum)   tags.push(`Revision 우선 ${revUsed}건`);
+    const tag = tags.length ? ` (${tags.join(', ')})` : '';
+    log(`  ✓ '${m.sheet}': ${count}건 추출${tag}`, 'info');
+  }
+  return map;
+}
+
+// ─────────────────────────────────────────────
+// Save workbook (ExcelJS)
+// ─────────────────────────────────────────────
+async function saveWorkbook(wb, filename, preparedFileHandle = null) {
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  });
+
+  // 1순위: 사전 등록된 폴더 핸들에 저장
+  if (state.saveDirHandle) {
+    try {
+      const fileHandle = await state.saveDirHandle.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return { method: 'folder', path: state.saveDirHandle.name + '/' + filename };
+    } catch (err) {
+      log(`  ⚠ 폴더 저장 실패, 다운로드로 전환: ${err.message}`, 'warn');
+    }
+  }
+
+  // 2순위: 수행 시작 시 미리 받아둔 파일 핸들에 저장 (user gesture 안전)
+  if (preparedFileHandle) {
+    try {
+      const writable = await preparedFileHandle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return { method: 'picker', path: preparedFileHandle.name };
+    } catch (err) {
+      log(`  ⚠ 파일 저장 실패, 다운로드로 전환: ${err.message}`, 'warn');
+    }
+  }
+
+  // 3순위: 일반 다운로드 (브라우저 기본 다운로드 폴더)
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return { method: 'download', path: filename };
+}
+
+// ─────────────────────────────────────────────
+// Main process
+// ─────────────────────────────────────────────
+document.getElementById('runBtn').addEventListener('click', async () => {
+  clearLog();
+  log('▶ 처리 시작', 'info');
+  document.getElementById('runBtn').disabled = true;
+
+  // 결과 파일명: 사용자가 직접 수정하지 않았으면 시각을 최신으로 갱신
+  refreshOutputFilename();
+
+  // ── user gesture가 살아있는 동안 저장 위치를 먼저 확정 ──
+  //    showSaveFilePicker는 비동기 await 이후에 호출하면 보안 정책에 막히므로,
+  //    클릭 직후 파일 핸들 또는 폴더 핸들을 미리 받아둠
+  let preparedFileHandle = null;  // showSaveFilePicker로 받은 파일 핸들
+  if (!state.saveDirHandle && 'showSaveFilePicker' in window) {
+    try {
+      const filenameInput = document.getElementById('outputName').value.trim() || '자재마스터_수정본.xlsx';
+      preparedFileHandle = await window.showSaveFilePicker({
+        suggestedName: filenameInput,
+        types: [{
+          description: 'Excel 파일',
+          accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+        }]
+      });
+      log(`  · 저장 위치 확정: ${preparedFileHandle.name}`, 'info');
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        log('✗ 사용자가 저장 위치 선택을 취소했습니다. 처리를 중단합니다.', 'warn');
+        document.getElementById('runBtn').disabled = false;
+        return;
+      }
+      log(`  ⚠ 저장 대화상자 실패, 처리 후 일반 다운로드로 전환됩니다: ${err.message}`, 'warn');
+    }
+  }
+
+  try {
+    if (!state.file1Buffer) { log('✗ 첨부1을 업로드하세요', 'error'); return; }
+
+    const optClean = document.getElementById('opt_clean').checked;
+    const cleanMode = document.querySelector('input[name="clean_mode"]:checked')?.value || 'append';
+    const optMx = document.getElementById('opt_mx').checked;
+    const optPnExtract = document.getElementById('opt_pn_extract').checked;
+    const optMakerFallback = document.getElementById('opt_maker_fallback').checked;
+    const optSpecToPn = document.getElementById('opt_spec_to_pn').checked;
+    const optAttrFill = document.getElementById('opt_attr_fill').checked;
+    const optHighlight = document.getElementById('opt_highlight').checked;
+
+    const sheetName = document.getElementById('sheet1').value;
+    const headerRow = parseInt(document.getElementById('header1').value) || 1;
+    const colMxNum    = colToNum(document.getElementById('col_mx').value);
+    const colNameNum  = colToNum(document.getElementById('col_name').value);
+    const colSpecNum  = colToNum(document.getElementById('col_spec').value);
+    const colMakerNum = colToNum(document.getElementById('col_maker').value);
+    const colModelNum = colToNum(document.getElementById('col_model').value);
+    const colPnNum    = colToNum(document.getElementById('col_pn').value);
+
+    if (!colMxNum || !colNameNum || !colMakerNum || !colModelNum || !colPnNum) {
+      log('✗ 컬럼 입력값을 확인하세요 (A~Z 알파벳)', 'error');
+      return;
+    }
+
+    // 사용자 정의 제거 키워드 수집
+    let customRemovalPatterns = [];
+    if (optClean) {
+      const customInput = document.getElementById('custom_removal_input').value;
+      const isRegex = document.getElementById('custom_removal_regex').checked;
+      customRemovalPatterns = parseCustomRemovalPatterns(customInput, isRegex);
+      if (customRemovalPatterns.length > 0) {
+        log(`  · 사용자 정의 제거 패턴 ${customRemovalPatterns.length}개 적용 (${isRegex ? '정규식 모드' : '텍스트 모드'})`, 'info');
+      }
+    }
+
+    // 매번 fresh load → 원본 서식 100% 유지
+    log('  · 원본 파일 로드 중 (서식 포함)...', 'info');
+    const wbOut = await readWorkbook(state.file1Buffer);
+    const ws = wbOut.getWorksheet(sheetName);
+    if (!ws) { log(`✗ 시트 '${sheetName}'를 찾을 수 없습니다`, 'error'); return; }
+
+    const maxRow = getMaxRow(ws);
+    const totalRows = maxRow - headerRow;
+
+    // 정리 결과 위치 결정
+    //   cleanMode = 'append'    : 시트 맨 끝에 새 컬럼 (B열 원본 보존)
+    //   cleanMode = 'overwrite' : B열 덮어쓰기 + 시트 맨 끝에 원본 백업
+    let writeColNum = 0;   // 정리된 자재명을 쓸 컬럼
+    let backupColNum = 0;  // 원본을 백업할 컬럼 (덮어쓰기 모드 전용)
+
+    if (optClean) {
+      if (cleanMode === 'overwrite') {
+        // B열 덮어쓰기 + 원본은 시트 맨 끝에 백업
+        writeColNum = colNameNum;
+        backupColNum = ws.columnCount + 1;
+        setCellValueWithStyle(ws, headerRow, backupColNum, '자재명(원본백업)', colNameNum);
+        const srcCol = ws.getColumn(colNameNum);
+        const bakCol = ws.getColumn(backupColNum);
+        if (srcCol && srcCol.width) bakCol.width = srcCol.width;
+        log(`  · 자재명 정리 모드: B열 덮어쓰기 (원본은 ${columnLetter(backupColNum)}열에 백업)`, 'info');
+      } else {
+        // 시트 맨 끝에 새 컬럼 (기본)
+        writeColNum = ws.columnCount + 1;
+        setCellValueWithStyle(ws, headerRow, writeColNum, '자재명(정리)', colNameNum);
+        const srcCol = ws.getColumn(colNameNum);
+        const newCol = ws.getColumn(writeColNum);
+        if (srcCol && srcCol.width) newCol.width = srcCol.width;
+        log(`  · 자재명 정리 모드: ${columnLetter(writeColNum)}열에 새 컬럼 추가 (B열 원본 보존)`, 'info');
+      }
+    }
+
+    // 참조맵 빌드
+    let refMap = null;
+    if (optMx) {
+      if (!state.file2Buffer) {
+        log('✗ MX 매칭이 활성화되었지만 첨부2가 업로드되지 않았습니다', 'error');
+        return;
+      }
+      log('[1/3] 첨부2에서 MX 코드 매핑 추출 중...', 'info');
+      const wbRef = await readWorkbook(state.file2Buffer);
+      const mappings = [];
+      document.querySelectorAll('#mappings .mapping-card').forEach(row => {
+        mappings.push({
+          sheet: row.querySelector('.map-sheet').value,
+          mxCol: row.querySelector('.map-mx').value,
+          makerCol: row.querySelector('.map-maker').value,
+          pnCol: row.querySelector('.map-pn').value,
+          pnRevisionCol: row.querySelector('.map-pn-rev').value,
+          makerOverride: row.querySelector('.map-maker-override').value,
+        });
+      });
+      refMap = buildReferenceMap(wbRef, mappings);
+      log(`  → 총 ${refMap.size}건의 MX 코드 매핑 완료`, 'success');
+    }
+
+    // 자재명 처리
+    log('[2/3] 첨부1 시트 처리 중...', 'info');
+    let cleanedCnt = 0, mxFilledCnt = 0, pnExtractCnt = 0;
+    let makerFromLabelCnt = 0, makerFromDynListCnt = 0, makerFromSpecCnt = 0, makerFromCacheCnt = 0;
+    let specToPnCnt = 0; // L열 사양 fallback 카운트
+
+    // ── 제조사 fallback용 데이터 구축 (Pre-pass) ──
+    const modelToMaker = new Map();          // 모델/PN → 제조사
+    let sortedDynamicMakerList = [];         // J열 + 첨부2 refMap에서 모은 제조사 (긴 이름 우선)
+
+    if (optMakerFallback) {
+      // 1) 첨부2 refMap에서 모델→제조사 매핑 + 제조사 목록 수집
+      const dynamicMakerSet = new Set();
+      if (refMap) {
+        for (const [, info] of refMap) {
+          if (info.maker) {
+            dynamicMakerSet.add(info.maker.trim());
+            if (info.pn) {
+              const key = String(info.pn).trim().toUpperCase();
+              if (key && !modelToMaker.has(key)) modelToMaker.set(key, info.maker);
+            }
+            if (info.model) {
+              const key = String(info.model).trim().toUpperCase();
+              if (key && !modelToMaker.has(key)) modelToMaker.set(key, info.maker);
+            }
+          }
+        }
+      }
+      // 2) 첨부1의 기존 J열 데이터 + 모델→제조사 매핑 수집
+      for (let r = headerRow + 1; r <= maxRow; r++) {
+        const existingMaker = String(getCellText(ws.getCell(r, colMakerNum))).trim();
+        if (!existingMaker) continue;
+        dynamicMakerSet.add(existingMaker);
+        const k = String(getCellText(ws.getCell(r, colModelNum))).trim().toUpperCase();
+        const l = String(getCellText(ws.getCell(r, colPnNum))).trim().toUpperCase();
+        if (k && !modelToMaker.has(k)) modelToMaker.set(k, existingMaker);
+        if (l && !modelToMaker.has(l)) modelToMaker.set(l, existingMaker);
+      }
+
+      // 3) 첨부1 M열 사양에서 명시적 라벨로 제조사 사전 학습
+      //    예: "[MAKER: ABC]" 형식에서 ABC를 추출하여 동적 목록에 추가
+      let labelLearnedCnt = 0;
+      if (colSpecNum) {
+        for (let r = headerRow + 1; r <= maxRow; r++) {
+          const specVal = getCellText(ws.getCell(r, colSpecNum));
+          const labeled = extractMakerByLabel(specVal);
+          if (labeled && !dynamicMakerSet.has(labeled)) {
+            dynamicMakerSet.add(labeled);
+            labelLearnedCnt++;
+          }
+        }
+      }
+
+      // 4) 동적 제조사 목록을 길이 내림차순으로 정렬 (긴 이름 우선 매칭)
+      sortedDynamicMakerList = [...dynamicMakerSet]
+        .filter(m => m && m.length >= 2)
+        .sort((a, b) => b.length - a.length);
+
+      log(`  · 제조사 fallback 준비: 동적 제조사 ${sortedDynamicMakerList.length}종 (사양 라벨에서 신규 학습 ${labelLearnedCnt}종), 모델→제조사 캐시 ${modelToMaker.size}건`, 'info');
+    }
+
+    for (let r = headerRow + 1; r <= maxRow; r++) {
+      // (a) Spec 제거 → 새 컬럼에 정리된 자재명
+      if (optClean) {
+        const original = getCellText(ws.getCell(r, colNameNum));
+        if (typeof original === 'string' && original.trim()) {
+          const cleaned = cleanSpec(original, customRemovalPatterns);
+          // 정리 결과가 원본과 "사용자 시각으로" 다른지 검사
+          //   - 공백 정규화(연속 공백 → 하나, 앞뒤 공백 제거) 후 비교
+          //   - 이렇게 해야 "RELAY AUX" 같이 공백만 정리된 케이스를 변경 없음으로 인식
+          const isActuallyChanged = !isVisuallyEqual(cleaned, original);
+
+          if (cleanMode === 'overwrite') {
+            // 백업 컬럼에 원본 보관 (스타일은 B열에서 복사, 빨간색 없음)
+            setCellValueWithStyle(ws, r, backupColNum, original, colNameNum);
+
+            // B열에 정리값을 덮어쓰지만, 실제로 값이 바뀐 경우에만 빨간색
+            if (isActuallyChanged) {
+              writeForce(ws.getCell(r, writeColNum), cleaned, optHighlight);
+            }
+            // 값이 사실상 동일 → 굳이 쓰지 않음 (기존 B열 값/폰트 그대로)
+          } else {
+            // 새 컬럼 모드: 시트 맨 끝 새 컬럼에 정리값 + 스타일 복사
+            // 새 컬럼은 도구가 새로 만든 컬럼이지만, 사용자 의도와 일치시키기 위해
+            // "원본과 사실상 동일한 값"은 빨간색 없이, 실제 정리된 것만 빨간색
+            setCellValueWithStyleAndRed(
+              ws, r, writeColNum, cleaned, colNameNum,
+              optHighlight && isActuallyChanged
+            );
+          }
+
+          if (isActuallyChanged) cleanedCnt++;
+        }
+      }
+
+      // (b) MX 매칭으로 J/K/L 채우기 (빈 셀에만 안전하게)
+      if (optMx && refMap) {
+        const mx = String(getCellText(ws.getCell(r, colMxNum))).trim();
+        if (mx.startsWith('MX') && refMap.has(mx)) {
+          const info = refMap.get(mx);
+          const cleanMaker = stripLabel(info.maker || '');
+          const cleanModel = stripLabel(info.model || '');
+          const cleanPn    = stripLabel(info.pn || '');
+          let wrote = false;
+          if (cleanMaker && writeIfEmpty(ws.getCell(r, colMakerNum), cleanMaker, optHighlight)) wrote = true;
+          if (cleanModel && writeIfEmpty(ws.getCell(r, colModelNum), cleanModel, optHighlight)) wrote = true;
+          if (cleanPn    && writeIfEmpty(ws.getCell(r, colPnNum),    cleanPn,    optHighlight)) wrote = true;
+          if (wrote) mxFilledCnt++;
+        }
+      }
+
+      // (c) 사양 컬럼에서 [MAKER P/N:...] 추출
+      if (optPnExtract && colSpecNum) {
+        const specVal = getCellText(ws.getCell(r, colSpecNum));
+        const extracted = stripLabel(extractMakerPN(specVal) || '');
+        if (extracted) {
+          const wroteK = writeIfEmpty(ws.getCell(r, colModelNum), extracted, optHighlight);
+          const wroteL = writeIfEmpty(ws.getCell(r, colPnNum),    extracted, optHighlight);
+          if (wroteK || wroteL) pnExtractCnt++;
+        }
+      }
+
+      // (d) 제조사 fallback - J열이 여전히 비어있을 때만
+      if (optMakerFallback && isEmpty(getCellText(ws.getCell(r, colMakerNum)))) {
+        let foundMaker = null;
+        const specVal = colSpecNum ? getCellText(ws.getCell(r, colSpecNum)) : '';
+
+        // d-1) 사양에서 명시적 라벨 추출 ("MAKER:", "제조사:", "MFG:" 등)
+        if (specVal) {
+          foundMaker = stripLabel(extractMakerByLabel(specVal) || '');
+          if (foundMaker && writeIfEmpty(ws.getCell(r, colMakerNum), foundMaker, optHighlight)) {
+            makerFromLabelCnt++;
+          }
+        }
+
+        // d-2) 동적 제조사 목록으로 사양 매칭
+        if (!foundMaker && specVal && sortedDynamicMakerList.length > 0) {
+          foundMaker = stripLabel(findMakerInSpecByList(specVal, sortedDynamicMakerList) || '');
+          if (foundMaker && writeIfEmpty(ws.getCell(r, colMakerNum), foundMaker, optHighlight)) {
+            makerFromDynListCnt++;
+          }
+        }
+
+        // d-3) 동적 매칭 실패 시 하드코딩 키워드 사용
+        if (!foundMaker && specVal) {
+          foundMaker = stripLabel(extractMakerFromSpec(specVal) || '');
+          if (foundMaker && writeIfEmpty(ws.getCell(r, colMakerNum), foundMaker, optHighlight)) {
+            makerFromSpecCnt++;
+          }
+        }
+
+        // d-4) 그래도 없으면 모델명/PN으로 캐시 조회
+        if (!foundMaker && modelToMaker.size > 0) {
+          const modelVal = String(getCellText(ws.getCell(r, colModelNum))).trim().toUpperCase();
+          const pnVal = String(getCellText(ws.getCell(r, colPnNum))).trim().toUpperCase();
+          const cachedMaker = stripLabel(
+            (modelVal && modelToMaker.get(modelVal)) ||
+            (pnVal && modelToMaker.get(pnVal)) || ''
+          );
+          if (cachedMaker && writeIfEmpty(ws.getCell(r, colMakerNum), cachedMaker, optHighlight)) {
+            makerFromCacheCnt++;
+          }
+        }
+      }
+
+      // (e) L열(MAKER P/N) fallback - L열이 비어있고 사양에 값이 있을 때
+      //     MX 매칭 실패한 경우의 안전망
+      if (optSpecToPn && colSpecNum) {
+        const specVal = getCellText(ws.getCell(r, colSpecNum));
+        if (typeof specVal === 'string' && specVal.trim()) {
+          let cleaned = extractMakerPN(specVal) || '';
+          if (!cleaned) {
+            cleaned = stripLabel(specVal.trim());
+          }
+          if (cleaned && writeIfEmpty(ws.getCell(r, colPnNum), cleaned, optHighlight)) {
+            specToPnCnt++;
+          }
+        }
+      }
+
+      if ((r - headerRow) % 200 === 0) {
+        log(`  ... ${r - headerRow}/${totalRows} 행 처리`, 'info');
+        // 긴 처리 중 UI 응답성 유지
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    }
+
+    // ── (f) 개별속성 자동 채우기 (O~AH열, 별도 패스) ──
+    let attrFilledRows = 0;
+    let attrFilledCells = 0;
+    if (optAttrFill) {
+      log('  · 개별속성 자동 채우기 시작 (O~AH열)', 'info');
+      const ATTR_START_COL = 15; // O열
+      const ATTR_END_COL = 34;   // AH열 (15 + 19)
+      const ATTR_COUNT = ATTR_END_COL - ATTR_START_COL + 1; // 20개
+
+      // Pre-pass: 정리된 자재명 → 개별속성 배열 매핑 구축
+      //   자재명은 spec 정리된 형태로 비교 (정확도 향상)
+      //   개별속성1이 채워진 행만 소스로 사용
+      const attrByMaterial = new Map();
+      for (let r = headerRow + 1; r <= maxRow; r++) {
+        const firstAttr = getCellText(ws.getCell(r, ATTR_START_COL));
+        if (isEmpty(firstAttr)) continue; // 개별속성1이 비어있으면 소스 아님
+
+        // 자재명 키 결정: 정리 모드에 따라 다름
+        let nameKey = '';
+        if (optClean && cleanMode === 'overwrite') {
+          // 덮어쓰기 모드: B열 자체가 이미 정리된 값
+          nameKey = String(getCellText(ws.getCell(r, colNameNum))).trim();
+        } else if (optClean) {
+          // 새 컬럼 모드: writeColNum의 정리값 사용 (있으면), 없으면 원본
+          const cleanedName = String(getCellText(ws.getCell(r, writeColNum))).trim();
+          nameKey = cleanedName || String(getCellText(ws.getCell(r, colNameNum))).trim();
+        } else {
+          // spec 정리 안 한 경우: 원본 자재명을 즉석에서 정리하여 비교
+          const orig = String(getCellText(ws.getCell(r, colNameNum))).trim();
+          nameKey = cleanSpec(orig, customRemovalPatterns);
+        }
+        if (!nameKey) continue;
+        const normKey = nameKey.toUpperCase();
+
+        // 같은 자재명에 여러 소스가 있으면 첫 번째 것만 사용 (안정성)
+        if (attrByMaterial.has(normKey)) continue;
+
+        // 개별속성 1~20 값을 배열로 수집
+        const attrs = [];
+        for (let i = 0; i < ATTR_COUNT; i++) {
+          attrs.push(getCellText(ws.getCell(r, ATTR_START_COL + i)));
+        }
+        attrByMaterial.set(normKey, attrs);
+      }
+      log(`  · 개별속성 소스 자재명 ${attrByMaterial.size}종 인덱싱`, 'info');
+
+      // Main pass: 개별속성1이 비어있는 행을 대상으로 복사
+      for (let r = headerRow + 1; r <= maxRow; r++) {
+        const firstAttr = getCellText(ws.getCell(r, ATTR_START_COL));
+        if (!isEmpty(firstAttr)) continue; // 이미 채워진 행은 건너뜀
+
+        // 비어있는 행의 자재명 키 결정 (위와 동일 로직)
+        let nameKey = '';
+        if (optClean && cleanMode === 'overwrite') {
+          nameKey = String(getCellText(ws.getCell(r, colNameNum))).trim();
+        } else if (optClean) {
+          const cleanedName = String(getCellText(ws.getCell(r, writeColNum))).trim();
+          nameKey = cleanedName || String(getCellText(ws.getCell(r, colNameNum))).trim();
+        } else {
+          const orig = String(getCellText(ws.getCell(r, colNameNum))).trim();
+          nameKey = cleanSpec(orig, customRemovalPatterns);
+        }
+        if (!nameKey) continue;
+        const normKey = nameKey.toUpperCase();
+
+        const sourceAttrs = attrByMaterial.get(normKey);
+        if (!sourceAttrs) continue;
+
+        // 개별속성 1~20을 모두 복사 (소스에 값이 있는 항목만, 대상이 빈 셀일 때만)
+        // 일반적으로 개별속성1이 비어있으면 2~20도 비어있지만, 안전을 위해 셀별로 확인
+        let rowFilled = false;
+        for (let i = 0; i < ATTR_COUNT; i++) {
+          const val = sourceAttrs[i];
+          if (isEmpty(val)) continue;
+          if (writeIfEmpty(ws.getCell(r, ATTR_START_COL + i), val, optHighlight)) {
+            attrFilledCells++;
+            rowFilled = true;
+          }
+        }
+        if (rowFilled) attrFilledRows++;
+
+        if ((r - headerRow) % 200 === 0) {
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+      log(`  · 개별속성 채우기 완료: ${attrFilledRows}행, 총 ${attrFilledCells}개 셀`, 'success');
+    }
+
+    let summary = `  → 처리 완료: spec 정리 ${cleanedCnt}건, MX 매칭 ${mxFilledCnt}건, P/N 추출 ${pnExtractCnt}건`;
+    if (optMakerFallback) {
+      summary += `, 제조사 라벨추출 ${makerFromLabelCnt}건, 제조사 동적매칭 ${makerFromDynListCnt}건, 제조사 사양추출 ${makerFromSpecCnt}건, 제조사 캐시매칭 ${makerFromCacheCnt}건`;
+    }
+    if (optSpecToPn) {
+      summary += `, L열 사양복사 ${specToPnCnt}건`;
+    }
+    if (optAttrFill) {
+      summary += `, 개별속성 채움 ${attrFilledRows}행(${attrFilledCells}셀)`;
+    }
+    log(summary, 'success');
+
+    // 디버그: 빨간색 적용 통계를 콘솔에 출력
+    if (window._redColStats && Object.keys(window._redColStats).length > 0) {
+      console.log('=== 빨간색 적용 컬럼별 통계 ===');
+      console.table(window._redColStats);
+      console.log('=== 빨간색 적용 셀 샘플 (처음 100개) ===');
+      console.table(window._redCells);
+
+      // 화면 로그에도 컬럼별 요약 표시
+      const statsStr = Object.entries(window._redColStats)
+        .sort((a, b) => b[1] - a[1])
+        .map(([col, cnt]) => `${col}열:${cnt}`)
+        .join(', ');
+      log(`  · 빨간색 적용 통계: ${statsStr}`, 'info');
+      log(`  · 상세 셀 위치는 F12 콘솔의 표 확인`, 'info');
+    }
+    window._redCells = [];
+    window._redColStats = {};
+
+    // 저장
+    log('[3/3] 결과 파일 저장 중 (서식 보존)...', 'info');
+    const filename = document.getElementById('outputName').value.trim() || '자재마스터_수정본.xlsx';
+    const result = await saveWorkbook(wbOut, filename, preparedFileHandle);
+    if (result.method === 'cancelled') {
+      log('✗ 저장이 취소되었습니다', 'warn');
+    } else {
+      log(`✅ 저장 완료 (${result.method}): ${result.path}`, 'success');
+    }
+  } catch (err) {
+    log(`✗ 오류 발생: ${err.message}`, 'error');
+    console.error(err);
+  } finally {
+    document.getElementById('runBtn').disabled = false;
+  }
+});
+
+// 결과 파일명 입력란: 사용자가 직접 수정하면 자동 갱신 중단
+(() => {
+  const input = document.getElementById('outputName');
+  if (input) {
+    // 페이지 로드 시 기본값 설정 (첨부1 업로드 전이라도 시각 정보 표시)
+    input.value = buildOutputFilename();
+    input.dataset.userEdited = 'false';
+    input.addEventListener('input', () => {
+      input.dataset.userEdited = 'true';
+    });
+  }
+})();
+
+// 초기 메시지
+log('도구가 준비되었습니다. 첨부1과 첨부2 파일을 업로드하세요.', 'info');
+log('※ 이 버전은 ExcelJS 엔진을 사용하여 셀 서식(폰트·색상·테두리·열 너비 등)을 보존합니다.', 'info');
+</script>
+</body>
+</html>
