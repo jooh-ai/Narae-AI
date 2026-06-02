@@ -181,7 +181,12 @@ def parse_spec(spec):
 # 메인
 # ─────────────────────────────────────────────
 def main():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # 이 .py 파일이 있는 폴더. Jupyter/대화형 창에서는 __file__ 이 없으므로
+    # 현재 작업 디렉터리(cwd)로 대체한다.
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        base_dir = os.getcwd()
     in_path = INPUT_FILE if os.path.isabs(INPUT_FILE) else os.path.join(base_dir, INPUT_FILE)
 
     if not os.path.exists(in_path):
