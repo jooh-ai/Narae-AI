@@ -4,9 +4,16 @@
 ================================================
 
 M열(사양)의  [속성명:값][속성명:값] ...  데이터를 같은 행의
-O~AH열 개별속성 칸에 '속성명: 값' 형태로 분배합니다.
-어느 속성과도 매칭되지 않는 데이터는 ETC 속성 칸에 모읍니다.
-M열이 비어있는 행은 L열(MAKER P/N) 값을 MAKER P/N 칸에 보완합니다.
+O~AH열 개별속성 칸에 분배합니다. 최종 결과는 각 칸에 '값만' 남고
+(속성명 라벨은 제거), 어느 데이터도 들어가지 않은 개별속성 칸은
+빈칸이 됩니다. 개별속성 열 위치는 그대로 유지됩니다.
+어느 속성과도 매칭되지 않는 데이터는 ETC 칸에 모읍니다.
+M열에 [속성명:값] 항목이 없는 행(빈 셀 또는 '_' 같은 값)은
+L열(MAKER P/N) 값을 MAKER P/N 칸에 보완합니다.
+
+주의: 이 도구는 개별속성 칸의 라벨을 값으로 바꾸거나 비우므로,
+반드시 '라벨이 들어있는 원본 마스터'에 대해 실행해야 합니다.
+(이미 처리된 결과 파일에 다시 실행하면 매칭이 되지 않습니다.)
 
 셀 서식(폰트·색상·테두리·열 너비 등)은 openpyxl이 그대로 보존하며,
 새로 기입한 셀은 빨간 글자색으로 강조할 수 있습니다.
@@ -221,12 +228,13 @@ def main():
     total_rows = max_row - HEADER_ROW
     print(f"  · 데이터 {total_rows}행, 개별속성 {ATTR_START_COL}~{ATTR_END_COL}열")
 
-    rows_with_spec = 0   # 사양(=[라벨:값] 항목)이 있던 행
-    matched_cells = 0    # 속성 칸에 기입한 횟수
-    etc_rows = 0         # ETC 칸에 미매칭 데이터를 기입한 행
-    pn_fallback_rows = 0 # 사양이 없어 L열로 보완한 행
+    rows_with_spec = 0    # 사양(=[라벨:값] 항목)이 있던 행
+    value_cells = 0       # 데이터(값)를 기입한 칸
+    cleared_cells = 0     # 라벨만 있고 데이터가 없어 비운 칸
+    etc_rows = 0          # ETC 칸에 미매칭 데이터를 기입한 행
+    pn_fallback_rows = 0  # 사양이 없어 L열로 보완한 행
     fallback_no_label = 0 # L 보완 대상이나 MAKER P/N 라벨을 못 찾은 행
-    no_etc_warn = 0      # 미매칭인데 ETC 칸을 못 찾은 행
+    no_etc_warn = 0       # 미매칭인데 ETC 칸을 못 찾은 행
     sample_unmatched = []
     sample_no_label = []
 
@@ -234,9 +242,10 @@ def main():
         spec_val = cell_text(ws.cell(row=r, column=spec_col))
 
         # 이 행의 개별속성 라벨 → 열 맵 + ETC 열 식별
-        label_to_col = {}        # norm → (col, label)
+        #   (라벨은 값으로 덮어쓰거나 지우기 전에 먼저 읽어 둔다)
+        label_to_col = {}    # norm → col
         etc_col = 0
-        etc_label = "ETC"
+        attr_cols = []       # 이 행에서 라벨이 있던 개별속성 열들
         for c in range(attr_start, attr_end + 1):
             txt = cell_text(ws.cell(row=r, column=c))
             if is_empty(txt):
@@ -244,76 +253,75 @@ def main():
             norm = norm_label(txt)
             if not norm:
                 continue
-            lbl = label_part(txt)
+            attr_cols.append(c)
             if norm not in label_to_col:
-                label_to_col[norm] = (c, lbl)
+                label_to_col[norm] = c
             if "ETC" in norm:
                 etc_col = c
-                etc_label = lbl or "ETC"
 
-        # 사양 파싱
+        # 이 행에서 각 개별속성 열에 채울 '값'을 결정 (col → value)
+        col_value = {}
         entries, unlabeled = parse_spec(spec_val)
 
-        # (A) 사양에 [라벨:값] 항목이 하나도 없는 경우:
-        #     빈 셀이거나 '_' 같은 무의미한 값이 들어있는 행으로 간주하고,
-        #     L열(MAKER P/N) 값을 개별속성 MAKER P/N 칸에 보완한다.
         if not entries:
-            if not PN_FALLBACK:
-                continue
-            pn_val = cell_text(ws.cell(row=r, column=pn_col)).strip()
-            if not pn_val:
-                continue
-            target = label_to_col.get(MAKER_PN_NORM)
-            if target:
-                write_cell(ws.cell(row=r, column=target[0]),
-                           f"{target[1]}:{pn_val}", HIGHLIGHT_RED)
-                matched_cells += 1
-                pn_fallback_rows += 1
+            # (A) 사양에 [라벨:값] 항목이 없음(빈 셀 또는 '_' 같은 무의미 값)
+            #     → L열(MAKER P/N) 값을 개별속성 MAKER P/N 칸에 보완
+            if PN_FALLBACK:
+                pn_val = cell_text(ws.cell(row=r, column=pn_col)).strip()
+                if pn_val:
+                    target = label_to_col.get(MAKER_PN_NORM)
+                    if target:
+                        col_value[target] = pn_val
+                        pn_fallback_rows += 1
+                    else:
+                        fallback_no_label += 1
+                        if len(sample_no_label) < 10:
+                            sample_no_label.append(f"{r}행 (L={pn_val})")
+        else:
+            # (B) 사양 분배
+            rows_with_spec += 1
+            unmatched = []
+            for e in entries:
+                norm = norm_label(e["label"])
+                if "ETC" in norm:
+                    if e["value"]:
+                        unmatched.append(e["value"])
+                    continue
+                target = label_to_col.get(norm)
+                if target is not None and target != etc_col:
+                    if e["value"]:
+                        col_value[target] = e["value"]
+                else:
+                    unmatched.append(e["raw"])
+            for u in unlabeled:
+                unmatched.append(u)
+            # 미매칭 데이터는 ETC 칸으로
+            if unmatched:
+                if etc_col:
+                    col_value[etc_col] = ", ".join(unmatched)
+                    etc_rows += 1
+                else:
+                    no_etc_warn += 1
+                    if len(sample_unmatched) < 10:
+                        sample_unmatched.append(f"{SPEC_COL}{r}: {' | '.join(unmatched)}")
+
+        # (C) 개별속성 칸 정리 (열 위치는 그대로 유지):
+        #     - 결정된 값이 있으면 '값만' 기입 (속성명 라벨 제거)
+        #     - 값이 없으면(라벨만 있던 칸) 빈칸으로
+        for c in attr_cols:
+            if c in col_value:
+                write_cell(ws.cell(row=r, column=c), col_value[c], HIGHLIGHT_RED)
+                value_cells += 1
             else:
-                fallback_no_label += 1
-                if len(sample_no_label) < 10:
-                    sample_no_label.append(f"{r}행 (L={pn_val})")
-            continue
-
-        rows_with_spec += 1
-
-        # (B) 사양 분배
-        unmatched = []
-
-        for e in entries:
-            norm = norm_label(e["label"])
-            if "ETC" in norm:
-                if e["value"]:
-                    unmatched.append(e["value"])
-                continue
-            target = label_to_col.get(norm)
-            if target and target[0] != etc_col:
-                if e["value"]:
-                    write_cell(ws.cell(row=r, column=target[0]),
-                               f"{target[1]}:{e['value']}", HIGHLIGHT_RED)
-                    matched_cells += 1
-            else:
-                unmatched.append(e["raw"])
-
-        for u in unlabeled:
-            unmatched.append(u)
-
-        # (C) 미매칭 데이터를 ETC 칸에 기입
-        if unmatched:
-            if etc_col:
-                write_cell(ws.cell(row=r, column=etc_col),
-                           f"{etc_label}:{', '.join(unmatched)}", HIGHLIGHT_RED)
-                etc_rows += 1
-            else:
-                no_etc_warn += 1
-                if len(sample_unmatched) < 10:
-                    sample_unmatched.append(f"{SPEC_COL}{r}: {' | '.join(unmatched)}")
+                cell = ws.cell(row=r, column=c)
+                cell.value = None
+                cleared_cells += 1
 
         if (r - HEADER_ROW) % 500 == 0:
             print(f"  ... {r - HEADER_ROW}/{total_rows} 행 처리")
 
-    print(f"  → 처리 완료: 사양 보유 {rows_with_spec}행, 속성 기입 {matched_cells}칸, "
-          f"ETC 모음 {etc_rows}행, L열 보완 {pn_fallback_rows}행")
+    print(f"  → 처리 완료: 사양 보유 {rows_with_spec}행, 값 기입 {value_cells}칸, "
+          f"빈칸 정리 {cleared_cells}칸, ETC 모음 {etc_rows}행, L열 보완 {pn_fallback_rows}행")
     if fallback_no_label:
         print(f"  ⚠ L열 보완 대상이나 MAKER P/N 속성 칸을 못 찾은 행 {fallback_no_label}건")
         for s in sample_no_label:
