@@ -241,10 +241,10 @@
   </label>
 
   <label class="toggle-row">
-    <input type="checkbox" id="opt_pn_fallback" checked />
+    <input type="checkbox" id="opt_pn_fallback" />
     <div class="toggle-text">
-      <strong>사양이 비어있으면 L열(MAKER P/N) 값으로 보완</strong>
-      <span>M열 사양이 비어있는 행은, L열의 MAKER P/N 값을 읽어 O~AH의 <code>MAKER P/N</code> 속성 칸에만 기입합니다.</span>
+      <strong>사양이 없는 행을 L열(MAKER P/N) 값으로 보완 <span style="color:#94a3b8;font-weight:400">(기본 꺼짐)</span></strong>
+      <span>끄면(기본) M열에 사양이 없는 행은 전혀 건드리지 않고 그대로 둡니다(이미 채워둔 값 보존). 켜면 그 행의 L열 MAKER P/N 값을 읽어 O~AH의 <code>MAKER P/N</code> 칸에만 보완 기입합니다.</span>
     </div>
   </label>
 </div>
@@ -750,19 +750,19 @@ document.getElementById('runBtn').addEventListener('click', async () => {
         if (norm.includes('ETC')) etcCol = c;
       }
 
-      // ── 이 행에서 각 개별속성 열에 채울 '값'을 결정 (col → value) ──
-      const colValue = new Map();
       const { entries, unlabeled } = parseSpec(specVal);
 
       if (entries.length === 0) {
-        // (A) 사양에 [라벨:값] 항목이 없음(빈 셀 또는 '_' 같은 무의미 값)
-        //     → L열(MAKER P/N) 값을 개별속성 MAKER P/N 칸에 보완
+        // ── (A) 사양에 [라벨:값] 항목이 없는 행(빈 셀 또는 '_' 같은 무의미 값) ──
+        //     개별속성 칸을 건드리지 않고 그대로 둔다(이미 채워둔 값 보존).
+        //     보완 옵션이 켜져 있을 때만, L열 MAKER P/N 값을 MAKER P/N 칸에 보완.
         if (optPnFallback) {
           const pnVal = String(getCellText(ws.getCell(r, colPnNum))).trim();
           if (pnVal) {
             const target = labelToCol.get(MAKER_PN_NORM);
             if (target !== undefined) {
-              colValue.set(target, pnVal);
+              writeForce(ws.getCell(r, target), pnVal, optHighlight);
+              valueCells++;
               pnFallbackRows++;
             } else {
               fallbackNoLabel++;
@@ -771,8 +771,9 @@ document.getElementById('runBtn').addEventListener('click', async () => {
           }
         }
       } else {
-        // (B) 사양 분배
+        // ── (B) 사양 분배: 각 개별속성 열에 채울 '값'을 결정 (col → value) ──
         rowsWithSpec++;
+        const colValue = new Map();
         const unmatched = [];
         for (const e of entries) {
           const norm = normLabel(e.label);
@@ -800,18 +801,18 @@ document.getElementById('runBtn').addEventListener('click', async () => {
             }
           }
         }
-      }
 
-      // ── (C) 개별속성 칸 정리 (열 위치는 그대로 유지) ──
-      //     - 결정된 값이 있으면 '값만' 기입 (속성명 라벨 제거)
-      //     - 값이 없으면(라벨만 있던 칸) 빈칸으로
-      for (const c of attrCols) {
-        if (colValue.has(c)) {
-          writeForce(ws.getCell(r, c), colValue.get(c), optHighlight);
-          valueCells++;
-        } else {
-          ws.getCell(r, c).value = null;
-          clearedCells++;
+        // ── (C) 개별속성 칸 정리 (사양이 있는 행에만 적용, 열 위치는 그대로 유지) ──
+        //     - 결정된 값이 있으면 '값만' 기입 (속성명 라벨 제거)
+        //     - 값이 없으면(라벨만 있던 칸) 빈칸으로
+        for (const c of attrCols) {
+          if (colValue.has(c)) {
+            writeForce(ws.getCell(r, c), colValue.get(c), optHighlight);
+            valueCells++;
+          } else {
+            ws.getCell(r, c).value = null;
+            clearedCells++;
+          }
         }
       }
 

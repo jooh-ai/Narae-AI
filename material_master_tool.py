@@ -9,7 +9,9 @@ O~AH열 개별속성 칸에 분배합니다. 최종 결과는 각 칸에 '값만
 빈칸이 됩니다. 개별속성 열 위치는 그대로 유지됩니다.
 어느 속성과도 매칭되지 않는 데이터는 ETC 칸에 모읍니다.
 M열에 [속성명:값] 항목이 없는 행(빈 셀 또는 '_' 같은 값)은
-L열(MAKER P/N) 값을 MAKER P/N 칸에 보완합니다.
+개별속성 칸을 건드리지 않고 그대로 둡니다(이미 채워둔 값 보존).
+(설정에서 PN_FALLBACK=True 로 켜면, 그 행에 한해 L열 MAKER P/N
+값을 MAKER P/N 칸에 보완 기입합니다.)
 
 주의: 이 도구는 개별속성 칸의 라벨을 값으로 바꾸거나 비우므로,
 반드시 '라벨이 들어있는 원본 마스터'에 대해 실행해야 합니다.
@@ -63,8 +65,9 @@ ATTR_END_COL    = "AH"   # 개별속성 끝열
 # 새로 기입한 셀을 빨간 글자색으로 강조할지 여부
 HIGHLIGHT_RED   = True
 
-# M열 사양이 비어있는 행을 L열(MAKER P/N) 값으로 보완할지 여부
-PN_FALLBACK     = True
+# M열 사양이 없는 행을 L열(MAKER P/N) 값으로 보완할지 여부.
+# False(기본)면 그런 행은 전혀 건드리지 않고 그대로 둔다(이미 채워둔 값 보존).
+PN_FALLBACK     = False
 
 # 결과 파일명. 빈 문자열("")이면 "입력파일명_YYMMDD_HHMM.xlsx" 로 자동 생성
 OUTPUT_FILE     = ""
@@ -259,53 +262,56 @@ def main():
             if "ETC" in norm:
                 etc_col = c
 
-        # 이 행에서 각 개별속성 열에 채울 '값'을 결정 (col → value)
-        col_value = {}
+        # 사양 파싱
         entries, unlabeled = parse_spec(spec_val)
 
+        # (A) 사양에 [라벨:값] 항목이 없는 행(빈 셀 또는 '_' 같은 무의미 값):
+        #     개별속성 칸을 건드리지 않고 그대로 둔다(이미 채워둔 값 보존).
+        #     PN_FALLBACK 이 켜져 있을 때만, L열 MAKER P/N 값을 MAKER P/N 칸에 보완한다.
         if not entries:
-            # (A) 사양에 [라벨:값] 항목이 없음(빈 셀 또는 '_' 같은 무의미 값)
-            #     → L열(MAKER P/N) 값을 개별속성 MAKER P/N 칸에 보완
             if PN_FALLBACK:
                 pn_val = cell_text(ws.cell(row=r, column=pn_col)).strip()
                 if pn_val:
                     target = label_to_col.get(MAKER_PN_NORM)
                     if target:
-                        col_value[target] = pn_val
+                        write_cell(ws.cell(row=r, column=target), pn_val, HIGHLIGHT_RED)
+                        value_cells += 1
                         pn_fallback_rows += 1
                     else:
                         fallback_no_label += 1
                         if len(sample_no_label) < 10:
                             sample_no_label.append(f"{r}행 (L={pn_val})")
-        else:
-            # (B) 사양 분배
-            rows_with_spec += 1
-            unmatched = []
-            for e in entries:
-                norm = norm_label(e["label"])
-                if "ETC" in norm:
-                    if e["value"]:
-                        unmatched.append(e["value"])
-                    continue
-                target = label_to_col.get(norm)
-                if target is not None and target != etc_col:
-                    if e["value"]:
-                        col_value[target] = e["value"]
-                else:
-                    unmatched.append(e["raw"])
-            for u in unlabeled:
-                unmatched.append(u)
-            # 미매칭 데이터는 ETC 칸으로
-            if unmatched:
-                if etc_col:
-                    col_value[etc_col] = ", ".join(unmatched)
-                    etc_rows += 1
-                else:
-                    no_etc_warn += 1
-                    if len(sample_unmatched) < 10:
-                        sample_unmatched.append(f"{SPEC_COL}{r}: {' | '.join(unmatched)}")
+            continue
 
-        # (C) 개별속성 칸 정리 (열 위치는 그대로 유지):
+        # (B) 사양 분배: 각 개별속성 열에 채울 '값'을 결정 (col → value)
+        rows_with_spec += 1
+        col_value = {}
+        unmatched = []
+        for e in entries:
+            norm = norm_label(e["label"])
+            if "ETC" in norm:
+                if e["value"]:
+                    unmatched.append(e["value"])
+                continue
+            target = label_to_col.get(norm)
+            if target is not None and target != etc_col:
+                if e["value"]:
+                    col_value[target] = e["value"]
+            else:
+                unmatched.append(e["raw"])
+        for u in unlabeled:
+            unmatched.append(u)
+        # 미매칭 데이터는 ETC 칸으로
+        if unmatched:
+            if etc_col:
+                col_value[etc_col] = ", ".join(unmatched)
+                etc_rows += 1
+            else:
+                no_etc_warn += 1
+                if len(sample_unmatched) < 10:
+                    sample_unmatched.append(f"{SPEC_COL}{r}: {' | '.join(unmatched)}")
+
+        # (C) 개별속성 칸 정리 (사양이 있는 행에만 적용, 열 위치는 그대로 유지):
         #     - 결정된 값이 있으면 '값만' 기입 (속성명 라벨 제거)
         #     - 값이 없으면(라벨만 있던 칸) 빈칸으로
         for c in attr_cols:
@@ -313,8 +319,7 @@ def main():
                 write_cell(ws.cell(row=r, column=c), col_value[c], HIGHLIGHT_RED)
                 value_cells += 1
             else:
-                cell = ws.cell(row=r, column=c)
-                cell.value = None
+                ws.cell(row=r, column=c).value = None
                 cleared_cells += 1
 
         if (r - HEADER_ROW) % 500 == 0:
