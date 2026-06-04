@@ -9,11 +9,11 @@ O~AH열 개별속성 칸에 분배합니다. 최종 결과는 각 칸에 '값만
 빈칸이 됩니다. 개별속성 열 위치는 그대로 유지됩니다.
 어느 속성과도 매칭되지 않는 데이터는 ETC 칸에 모읍니다.
 M열에 [속성명:값] 항목이 없는 행(빈 셀 또는 '_' 같은 값)은
-MAKER P/N 외에는 데이터가 없으므로, 사양이 있는 행들에서 학습한
-'기본 속성명 라벨'만 남아있는 칸을 비우고, 라벨이 아닌 실제 데이터
-(MAKER P/N 값 등)와 L열 값과 동일한 칸은 그대로 유지합니다.
-(설정에서 PN_FALLBACK=True 로 켜면, MAKER P/N 라벨만 있고 값이 없는
- 칸을 L열 MAKER P/N 값으로 채워 유지합니다.)
+MAKER P/N 외에는 데이터가 없으므로, MAKER P/N 칸만 '값'으로 남기고
+그 행의 나머지 개별속성 칸은 (어떤 라벨이든) 모두 빈칸으로 정리합니다.
+MAKER P/N 칸은 'MAKER P/N:12345' 라벨 형태이거나 L열 값과 동일한 칸으로
+식별하며, 식별하지 못하면 데이터 손실을 막기 위해 그 행은 건드리지
+않고 경고만 남깁니다.
 
 주의: 이 도구는 개별속성 칸의 라벨을 값으로 바꾸거나 비우므로,
 반드시 '라벨이 들어있는 원본 마스터'에 대해 실행해야 합니다.
@@ -235,29 +235,82 @@ def main():
 
     rows_with_spec = 0       # 사양(=[라벨:값] 항목)이 있던 행
     value_cells = 0          # 데이터(값)를 기입한 칸
-    cleared_cells = 0        # 라벨만 있고 데이터가 없어 비운 칸
+    cleared_cells = 0        # 라벨/빈 데이터를 비운 칸
     etc_rows = 0             # ETC 칸에 미매칭 데이터를 기입한 행
     pn_fallback_rows = 0     # 사양 없는 행에서 L열 값으로 MAKER P/N을 보완한 칸
     no_etc_warn = 0          # 미매칭인데 ETC 칸을 못 찾은 행
-    specless_cleaned = 0     # 사양 없는 행: 기본 라벨을 비운 행
-    specless_untouched = 0   # 사양 없는 행: 비울 기본 라벨이 없던 행
+    specless_cleaned = 0     # 사양 없는 행: MAKER P/N만 남기고 정리한 행
+    specless_skipped = 0     # 사양 없는 행: MAKER P/N을 식별 못해 건드리지 않은 행
     sample_unmatched = []
-    sample_untouched = []
-    known_labels = set()     # 사양 있는 행에서 학습한 '기본 속성명 라벨' norm 집합
-    specless_rows = []       # 사양이 없는 행 번호 (2차 처리용)
+    sample_skipped = []
 
-    # ── 1차: 사양이 있는 행을 분배하면서 '기본 속성명 라벨' 어휘를 학습한다 ──
-    #    (사양 없는 행은 모아두고, 어휘가 완성된 뒤 2차에서 처리)
     for r in range(HEADER_ROW + 1, max_row + 1):
         spec_val = cell_text(ws.cell(row=r, column=spec_col))
         entries, unlabeled = parse_spec(spec_val)
 
+        # ── (A) 사양에 [라벨:값] 항목이 없는 행(빈 셀 또는 '_' 같은 무의미 값) ──
+        #     이런 행은 MAKER P/N 외에는 데이터가 없으므로, MAKER P/N 칸만 '값'으로
+        #     남기고 그 행의 나머지 칸은 (어떤 라벨이든) 모두 비운다.
+        #     MAKER P/N 칸 식별: ① 'MAKER P/N:값' 라벨 형태  ② L열 값과 동일한 칸
         if not entries:
-            specless_rows.append(r)
+            pn_l_raw = cell_text(ws.cell(row=r, column=pn_col)).strip()
+            pn_l = norm_value(pn_l_raw)
+            nonempty = []           # [(col, text)]
+            keep_col = None         # MAKER P/N 데이터가 들어있는 칸
+            keep_val = None         # 그 칸에 남길 값 (None이면 비움)
+            keep_is_fallback = False
+            for c in range(attr_start, attr_end + 1):
+                v = cell_text(ws.cell(row=r, column=c))
+                if is_empty(v):
+                    continue
+                s = str(v)
+                nonempty.append((c, s))
+                if keep_col is not None:
+                    continue
+                ci = next((i for i, ch in enumerate(s) if ch in ":："), -1)
+                val = s[ci + 1:].strip() if ci >= 0 else ""  # ':' 뒤의 값
+                if norm_label(s) == MAKER_PN_NORM:
+                    # 'MAKER P/N:12345' → '12345'.  라벨만 있으면 L열 값(보완) 또는 비움
+                    keep_col = c
+                    if val:
+                        keep_val = val
+                    elif PN_FALLBACK and pn_l_raw:
+                        keep_val = pn_l_raw
+                        keep_is_fallback = True
+                    else:
+                        keep_val = None
+                elif pn_l and norm_value(s) == pn_l:
+                    # 라벨 없는 MAKER P/N 값(L열 값과 동일한 칸)
+                    keep_col = c
+                    keep_val = val if val else s.strip()
+
+            if keep_col is None:
+                # MAKER P/N을 식별하지 못함 → 데이터 손실 방지를 위해 건드리지 않음
+                if nonempty:
+                    specless_skipped += 1
+                    if len(sample_skipped) < 10:
+                        sample_skipped.append(f"{r}행")
+                continue
+
+            # MAKER P/N 칸은 값만 남기고(없으면 비움), 나머지 칸은 모두 비운다
+            for c, s in nonempty:
+                if c == keep_col:
+                    if keep_val is None:
+                        ws.cell(row=r, column=c).value = None
+                        cleared_cells += 1
+                    elif s.strip() != keep_val:
+                        write_cell(ws.cell(row=r, column=c), keep_val, HIGHLIGHT_RED)
+                        value_cells += 1
+                        if keep_is_fallback:
+                            pn_fallback_rows += 1
+                else:
+                    ws.cell(row=r, column=c).value = None
+                    cleared_cells += 1
+            specless_cleaned += 1
             continue
 
-        # 사양 행: 개별속성 라벨 → 열 맵 + ETC 열 식별
-        #   (라벨은 값으로 덮어쓰거나 지우기 전에 먼저 읽어 둔다)
+        # ── 사양이 있는 행: 개별속성 라벨 → 열 맵 + ETC 열 식별 ──
+        #     (라벨은 값으로 덮어쓰거나 지우기 전에 먼저 읽어 둔다)
         label_to_col = {}    # norm → col
         etc_col = 0
         attr_cols = []       # 이 행에서 라벨이 있던 개별속성 열들
@@ -273,9 +326,6 @@ def main():
                 label_to_col[norm] = c
             if "ETC" in norm:
                 etc_col = c
-
-        # 사양 행의 개별속성 라벨을 '기본 라벨 어휘'로 학습
-        known_labels.update(label_to_col.keys())
 
         # (B) 사양 분배: 각 개별속성 열에 채울 '값'을 결정 (col → value)
         rows_with_spec += 1
@@ -319,57 +369,12 @@ def main():
         if (r - HEADER_ROW) % 500 == 0:
             print(f"  ... {r - HEADER_ROW}/{total_rows} 행 처리")
 
-    # ── 2차: 사양 없는 행 정리 ──
-    #     이런 행은 MAKER P/N 외에는 데이터가 없으므로:
-    #       - '라벨:값' 형태로 값이 들어있는 칸(예: 'MAKER P/N:12345')은 '값만' 남긴다
-    #       - 값이 없는 '순수 기본 라벨' 칸(예: 'SIZE', 'USE')은 비운다
-    #       - 라벨이 아닌 실제 데이터는 그대로 유지한다
-    for r in specless_rows:
-        pn_l_raw = cell_text(ws.cell(row=r, column=pn_col)).strip()
-        had_nonempty = False
-        row_changed = False
-        for c in range(attr_start, attr_end + 1):
-            v = cell_text(ws.cell(row=r, column=c))
-            if is_empty(v):
-                continue
-            had_nonempty = True
-            s = str(v)
-            ci = next((i for i, ch in enumerate(s) if ch in ":："), -1)
-            val = s[ci + 1:].strip() if ci >= 0 else ""  # ':' 뒤의 값
-            nl = norm_label(v)                            # ':' 앞 라벨의 norm
-            if nl in known_labels:
-                if val:
-                    # 'MAKER P/N:12345' 처럼 값이 있으면 → 지우지 말고 '값만' 남긴다
-                    if s.strip() != val:
-                        write_cell(ws.cell(row=r, column=c), val, HIGHLIGHT_RED)
-                        value_cells += 1
-                        row_changed = True
-                elif PN_FALLBACK and nl == MAKER_PN_NORM and pn_l_raw:
-                    # MAKER P/N 라벨만 있고 값이 없음 → L열 값으로 보완 기입
-                    write_cell(ws.cell(row=r, column=c), pn_l_raw, HIGHLIGHT_RED)
-                    value_cells += 1
-                    pn_fallback_rows += 1
-                    row_changed = True
-                else:
-                    # 값 없는 순수 기본 라벨 → 비움
-                    ws.cell(row=r, column=c).value = None
-                    cleared_cells += 1
-                    row_changed = True
-            # else: 학습되지 않은 값 = 실제 데이터(MAKER P/N 값 등) → 유지
-        if row_changed:
-            specless_cleaned += 1
-        elif had_nonempty:
-            specless_untouched += 1
-            if len(sample_untouched) < 10:
-                sample_untouched.append(f"{r}행")
-
     print(f"  → 처리 완료: 사양 보유 {rows_with_spec}행, 사양 없는 행 정리 {specless_cleaned}행, "
           f"값 기입 {value_cells}칸, 빈칸 정리 {cleared_cells}칸, ETC 모음 {etc_rows}행, L열 보완 {pn_fallback_rows}칸")
-    print(f"  · 학습된 기본 속성명 라벨 {len(known_labels)}종")
-    if specless_untouched:
-        print(f"  ⚠ 사양 없는 행 중 비울 기본 라벨을 못 찾은 행 {specless_untouched}건 "
-              f"(이미 정리됐거나, 그 행의 라벨이 사양 행 라벨과 다를 수 있음)")
-        for s in sample_untouched:
+    if specless_skipped:
+        print(f"  ⚠ 사양 없는 행 중 MAKER P/N 값(=L열 값 또는 'MAKER P/N:' 라벨)을 못 찾아 "
+              f"건드리지 않은 행 {specless_skipped}건")
+        for s in sample_skipped:
             print(f"      · {s}")
     if no_etc_warn:
         print(f"  ⚠ ETC 속성 칸을 못 찾아 미매칭 데이터를 기입 못한 행 {no_etc_warn}건")
