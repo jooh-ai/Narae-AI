@@ -243,8 +243,8 @@
   <label class="toggle-row">
     <input type="checkbox" id="opt_pn_fallback" />
     <div class="toggle-text">
-      <strong>사양이 없는 행을 L열(MAKER P/N) 값으로 보완 <span style="color:#94a3b8;font-weight:400">(기본 꺼짐)</span></strong>
-      <span>끄면(기본) M열에 사양이 없는 행은 전혀 건드리지 않고 그대로 둡니다(이미 채워둔 값 보존). 켜면 그 행의 L열 MAKER P/N 값을 읽어 O~AH의 <code>MAKER P/N</code> 칸에만 보완 기입합니다.</span>
+      <strong>사양 없는 행: MAKER P/N 라벨칸을 L열 값으로 보완 <span style="color:#94a3b8;font-weight:400">(기본 꺼짐)</span></strong>
+      <span>사양이 없는 행은 기본적으로 이미 채워진 MAKER P/N 값은 유지하고 나머지 라벨칸만 비웁니다. 이 옵션을 켜면, MAKER P/N 칸에 값이 없고 라벨만 있을 때 L열 MAKER P/N 값으로 채워 넣습니다.</span>
     </div>
   </label>
 </div>
@@ -726,16 +726,63 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     let valueCells = 0;        // 데이터(값)를 기입한 칸
     let clearedCells = 0;      // 라벨만 있고 데이터가 없어 비운 칸
     let etcRows = 0;           // ETC 칸에 미매칭 데이터를 기입한 행
-    let pnFallbackRows = 0;    // 사양이 없어 L열로 보완한 행
-    let fallbackNoLabel = 0;   // L 보완 대상이나 MAKER P/N 라벨을 못 찾은 행
+    let pnFallbackRows = 0;    // 사양 없는 행에서 L열 값으로 MAKER P/N을 보완한 칸
     let noEtcWarn = 0;         // 미매칭인데 ETC 칸을 못 찾은 행
+    let speclessCleaned = 0;   // 사양 없는 행: MAKER P/N만 남기고 정리한 행
+    let speclessSkipped = 0;   // 사양 없는 행: MAKER P/N을 식별 못해 건드리지 않은 행
     const sampleUnmatched = []; // 로그 샘플
-    const sampleNoLabel = [];
+    const sampleSkipped = [];
 
     for (let r = headerRow + 1; r <= maxRow; r++) {
       const specVal = getCellText(ws.getCell(r, colSpecNum));
+      const { entries, unlabeled } = parseSpec(specVal);
 
-      // ── 이 행의 개별속성 라벨 → 열번호 맵 구성 + ETC 열 식별 ──
+      // ── (A) 사양에 [라벨:값] 항목이 없는 행(빈 셀 또는 '_' 같은 무의미 값) ──
+      //     이런 행은 MAKER P/N 외에는 데이터가 없으므로,
+      //     MAKER P/N 값(= L열 값과 동일한 칸)만 남기고 나머지 칸은 모두 비운다.
+      if (entries.length === 0) {
+        const pnLRaw = String(getCellText(ws.getCell(r, colPnNum))).trim();
+        const pnL = normValue(pnLRaw);
+        const nonempty = [];
+        let keepCol = null;        // MAKER P/N 값이 들어있는 칸
+        let makerLabelCol = null;  // 'MAKER P/N' 라벨만 남아있는 칸
+        for (let c = attrStartNum; c <= attrEndNum; c++) {
+          const v = getCellText(ws.getCell(r, c));
+          if (isEmpty(v)) continue;
+          nonempty.push(c);
+          if (pnL && keepCol === null && normValue(v) === pnL) keepCol = c;
+          if (makerLabelCol === null && normLabel(v) === MAKER_PN_NORM) makerLabelCol = c;
+        }
+
+        // MAKER P/N 칸에 값이 없고 라벨만 있는 경우 + 보완 옵션 → L열 값으로 채워 유지
+        if (keepCol === null && optPnFallback && pnLRaw && makerLabelCol !== null) {
+          writeForce(ws.getCell(r, makerLabelCol), pnLRaw, optHighlight);
+          valueCells++;
+          pnFallbackRows++;
+          keepCol = makerLabelCol;
+        }
+
+        if (keepCol === null) {
+          // MAKER P/N 값을 식별하지 못함 → 데이터 손실 방지를 위해 건드리지 않음
+          if (nonempty.length) {
+            speclessSkipped++;
+            if (sampleSkipped.length < 10) sampleSkipped.push(`${r}행`);
+          }
+        } else {
+          // MAKER P/N 칸만 남기고 나머지 비어있지 않은 칸은 모두 비운다
+          for (const c of nonempty) {
+            if (c === keepCol) continue;
+            ws.getCell(r, c).value = null;
+            clearedCells++;
+          }
+          speclessCleaned++;
+        }
+
+        if ((r - headerRow) % 200 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+        continue;
+      }
+
+      // ── 사양이 있는 행: 개별속성 라벨 → 열번호 맵 구성 + ETC 열 식별 ──
       //    (라벨은 값으로 덮어쓰거나 지우기 전에 먼저 읽어 둔다)
       const labelToCol = new Map(); // normLabel → col
       const attrCols = [];          // 이 행에서 라벨이 있던 개별속성 열들
@@ -750,69 +797,47 @@ document.getElementById('runBtn').addEventListener('click', async () => {
         if (norm.includes('ETC')) etcCol = c;
       }
 
-      const { entries, unlabeled } = parseSpec(specVal);
+      // ── (B) 사양 분배: 각 개별속성 열에 채울 '값'을 결정 (col → value) ──
+      rowsWithSpec++;
+      const colValue = new Map();
+      const unmatched = [];
+      for (const e of entries) {
+        const norm = normLabel(e.label);
+        if (norm.includes('ETC')) {
+          if (e.value) unmatched.push(e.value);
+          continue;
+        }
+        const target = labelToCol.get(norm);
+        if (target !== undefined && target !== etcCol) {
+          if (e.value) colValue.set(target, e.value);
+        } else {
+          unmatched.push(e.raw);
+        }
+      }
+      for (const u of unlabeled) unmatched.push(u);
+      // 미매칭 데이터는 ETC 칸으로
+      if (unmatched.length) {
+        if (etcCol) {
+          colValue.set(etcCol, unmatched.join(', '));
+          etcRows++;
+        } else {
+          noEtcWarn++;
+          if (sampleUnmatched.length < 10) {
+            sampleUnmatched.push(`${columnLetter(colSpecNum)}${r}: ${unmatched.join(' | ')}`);
+          }
+        }
+      }
 
-      if (entries.length === 0) {
-        // ── (A) 사양에 [라벨:값] 항목이 없는 행(빈 셀 또는 '_' 같은 무의미 값) ──
-        //     개별속성 칸을 건드리지 않고 그대로 둔다(이미 채워둔 값 보존).
-        //     보완 옵션이 켜져 있을 때만, L열 MAKER P/N 값을 MAKER P/N 칸에 보완.
-        if (optPnFallback) {
-          const pnVal = String(getCellText(ws.getCell(r, colPnNum))).trim();
-          if (pnVal) {
-            const target = labelToCol.get(MAKER_PN_NORM);
-            if (target !== undefined) {
-              writeForce(ws.getCell(r, target), pnVal, optHighlight);
-              valueCells++;
-              pnFallbackRows++;
-            } else {
-              fallbackNoLabel++;
-              if (sampleNoLabel.length < 10) sampleNoLabel.push(`${r}행 (L=${pnVal})`);
-            }
-          }
-        }
-      } else {
-        // ── (B) 사양 분배: 각 개별속성 열에 채울 '값'을 결정 (col → value) ──
-        rowsWithSpec++;
-        const colValue = new Map();
-        const unmatched = [];
-        for (const e of entries) {
-          const norm = normLabel(e.label);
-          if (norm.includes('ETC')) {
-            if (e.value) unmatched.push(e.value);
-            continue;
-          }
-          const target = labelToCol.get(norm);
-          if (target !== undefined && target !== etcCol) {
-            if (e.value) colValue.set(target, e.value);
-          } else {
-            unmatched.push(e.raw);
-          }
-        }
-        for (const u of unlabeled) unmatched.push(u);
-        // 미매칭 데이터는 ETC 칸으로
-        if (unmatched.length) {
-          if (etcCol) {
-            colValue.set(etcCol, unmatched.join(', '));
-            etcRows++;
-          } else {
-            noEtcWarn++;
-            if (sampleUnmatched.length < 10) {
-              sampleUnmatched.push(`${columnLetter(colSpecNum)}${r}: ${unmatched.join(' | ')}`);
-            }
-          }
-        }
-
-        // ── (C) 개별속성 칸 정리 (사양이 있는 행에만 적용, 열 위치는 그대로 유지) ──
-        //     - 결정된 값이 있으면 '값만' 기입 (속성명 라벨 제거)
-        //     - 값이 없으면(라벨만 있던 칸) 빈칸으로
-        for (const c of attrCols) {
-          if (colValue.has(c)) {
-            writeForce(ws.getCell(r, c), colValue.get(c), optHighlight);
-            valueCells++;
-          } else {
-            ws.getCell(r, c).value = null;
-            clearedCells++;
-          }
+      // ── (C) 개별속성 칸 정리 (사양이 있는 행, 열 위치는 그대로 유지) ──
+      //     - 결정된 값이 있으면 '값만' 기입 (속성명 라벨 제거)
+      //     - 값이 없으면(라벨만 있던 칸) 빈칸으로
+      for (const c of attrCols) {
+        if (colValue.has(c)) {
+          writeForce(ws.getCell(r, c), colValue.get(c), optHighlight);
+          valueCells++;
+        } else {
+          ws.getCell(r, c).value = null;
+          clearedCells++;
         }
       }
 
@@ -822,10 +847,10 @@ document.getElementById('runBtn').addEventListener('click', async () => {
       }
     }
 
-    log(`  → 처리 완료: 사양 보유 ${rowsWithSpec}행, 값 기입 ${valueCells}칸, 빈칸 정리 ${clearedCells}칸, ETC 모음 ${etcRows}행, L열 보완 ${pnFallbackRows}행`, 'success');
-    if (fallbackNoLabel > 0) {
-      log(`  ⚠ L열 보완 대상이나 MAKER P/N 속성 칸을 찾지 못한 행 ${fallbackNoLabel}건`, 'warn');
-      for (const s of sampleNoLabel) log(`      · ${s}`, 'warn');
+    log(`  → 처리 완료: 사양 보유 ${rowsWithSpec}행, 사양 없는 행 정리 ${speclessCleaned}행, 값 기입 ${valueCells}칸, 빈칸 정리 ${clearedCells}칸, ETC 모음 ${etcRows}행, L열 보완 ${pnFallbackRows}칸`, 'success');
+    if (speclessSkipped > 0) {
+      log(`  ⚠ 사양 없는 행 중 MAKER P/N 값(=L열)을 못 찾아 건드리지 않은 행 ${speclessSkipped}건`, 'warn');
+      for (const s of sampleSkipped) log(`      · ${s}`, 'warn');
     }
     if (noEtcWarn > 0) {
       log(`  ⚠ ETC 속성 칸을 찾지 못해 미매칭 데이터를 기입하지 못한 행 ${noEtcWarn}건`, 'warn');

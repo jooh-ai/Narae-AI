@@ -9,9 +9,12 @@ O~AH열 개별속성 칸에 분배합니다. 최종 결과는 각 칸에 '값만
 빈칸이 됩니다. 개별속성 열 위치는 그대로 유지됩니다.
 어느 속성과도 매칭되지 않는 데이터는 ETC 칸에 모읍니다.
 M열에 [속성명:값] 항목이 없는 행(빈 셀 또는 '_' 같은 값)은
-개별속성 칸을 건드리지 않고 그대로 둡니다(이미 채워둔 값 보존).
-(설정에서 PN_FALLBACK=True 로 켜면, 그 행에 한해 L열 MAKER P/N
-값을 MAKER P/N 칸에 보완 기입합니다.)
+MAKER P/N 외에는 데이터가 없으므로, MAKER P/N 값(= L열 값과 동일한 칸)만
+남기고 그 행의 나머지 개별속성 칸은 모두 빈칸으로 정리합니다.
+(만약 MAKER P/N 값을 식별하지 못하면 데이터 손실을 막기 위해 그 행은
+ 건드리지 않고 경고만 남깁니다.)
+(설정에서 PN_FALLBACK=True 로 켜면, MAKER P/N 라벨만 있고 값이 없는
+ 칸을 L열 MAKER P/N 값으로 채워 유지합니다.)
 
 주의: 이 도구는 개별속성 칸의 라벨을 값으로 바꾸거나 비우므로,
 반드시 '라벨이 들어있는 원본 마스터'에 대해 실행해야 합니다.
@@ -231,21 +234,66 @@ def main():
     total_rows = max_row - HEADER_ROW
     print(f"  · 데이터 {total_rows}행, 개별속성 {ATTR_START_COL}~{ATTR_END_COL}열")
 
-    rows_with_spec = 0    # 사양(=[라벨:값] 항목)이 있던 행
-    value_cells = 0       # 데이터(값)를 기입한 칸
-    cleared_cells = 0     # 라벨만 있고 데이터가 없어 비운 칸
-    etc_rows = 0          # ETC 칸에 미매칭 데이터를 기입한 행
-    pn_fallback_rows = 0  # 사양이 없어 L열로 보완한 행
-    fallback_no_label = 0 # L 보완 대상이나 MAKER P/N 라벨을 못 찾은 행
-    no_etc_warn = 0       # 미매칭인데 ETC 칸을 못 찾은 행
+    rows_with_spec = 0     # 사양(=[라벨:값] 항목)이 있던 행
+    value_cells = 0        # 데이터(값)를 기입한 칸
+    cleared_cells = 0      # 라벨만 있고 데이터가 없어 비운 칸
+    etc_rows = 0           # ETC 칸에 미매칭 데이터를 기입한 행
+    pn_fallback_rows = 0   # 사양 없는 행에서 L열 값으로 MAKER P/N을 보완한 칸
+    no_etc_warn = 0        # 미매칭인데 ETC 칸을 못 찾은 행
+    specless_cleaned = 0   # 사양 없는 행: MAKER P/N만 남기고 정리한 행
+    specless_skipped = 0   # 사양 없는 행: MAKER P/N을 식별 못해 건드리지 않은 행
     sample_unmatched = []
-    sample_no_label = []
+    sample_skipped = []
 
     for r in range(HEADER_ROW + 1, max_row + 1):
         spec_val = cell_text(ws.cell(row=r, column=spec_col))
+        entries, unlabeled = parse_spec(spec_val)
 
-        # 이 행의 개별속성 라벨 → 열 맵 + ETC 열 식별
-        #   (라벨은 값으로 덮어쓰거나 지우기 전에 먼저 읽어 둔다)
+        # ── (A) 사양에 [라벨:값] 항목이 없는 행(빈 셀 또는 '_' 같은 무의미 값) ──
+        #     이런 행은 MAKER P/N 외에는 데이터가 없으므로,
+        #     MAKER P/N 값(= L열 값과 동일한 칸)만 남기고 나머지 칸은 모두 비운다.
+        if not entries:
+            pn_l_raw = cell_text(ws.cell(row=r, column=pn_col)).strip()
+            pn_l = norm_value(pn_l_raw)
+            nonempty = []
+            keep_col = None        # MAKER P/N 값이 들어있는 칸
+            maker_label_col = None # 'MAKER P/N' 라벨만 남아있는 칸
+            for c in range(attr_start, attr_end + 1):
+                v = cell_text(ws.cell(row=r, column=c))
+                if is_empty(v):
+                    continue
+                nonempty.append(c)
+                if pn_l and keep_col is None and norm_value(v) == pn_l:
+                    keep_col = c
+                if maker_label_col is None and norm_label(v) == MAKER_PN_NORM:
+                    maker_label_col = c
+
+            # MAKER P/N 칸에 값이 없고 라벨만 있는 경우 + 보완 옵션 → L열 값으로 채워 유지
+            if keep_col is None and PN_FALLBACK and pn_l_raw and maker_label_col is not None:
+                write_cell(ws.cell(row=r, column=maker_label_col), pn_l_raw, HIGHLIGHT_RED)
+                value_cells += 1
+                pn_fallback_rows += 1
+                keep_col = maker_label_col
+
+            if keep_col is None:
+                # MAKER P/N 값을 식별하지 못함 → 데이터 손실 방지를 위해 건드리지 않음
+                if nonempty:
+                    specless_skipped += 1
+                    if len(sample_skipped) < 10:
+                        sample_skipped.append(f"{r}행")
+                continue
+
+            # MAKER P/N 칸만 남기고 나머지 비어있지 않은 칸은 모두 비운다
+            for c in nonempty:
+                if c == keep_col:
+                    continue
+                ws.cell(row=r, column=c).value = None
+                cleared_cells += 1
+            specless_cleaned += 1
+            continue
+
+        # ── 사양이 있는 행: 개별속성 라벨 → 열 맵 + ETC 열 식별 ──
+        #     (라벨은 값으로 덮어쓰거나 지우기 전에 먼저 읽어 둔다)
         label_to_col = {}    # norm → col
         etc_col = 0
         attr_cols = []       # 이 행에서 라벨이 있던 개별속성 열들
@@ -261,27 +309,6 @@ def main():
                 label_to_col[norm] = c
             if "ETC" in norm:
                 etc_col = c
-
-        # 사양 파싱
-        entries, unlabeled = parse_spec(spec_val)
-
-        # (A) 사양에 [라벨:값] 항목이 없는 행(빈 셀 또는 '_' 같은 무의미 값):
-        #     개별속성 칸을 건드리지 않고 그대로 둔다(이미 채워둔 값 보존).
-        #     PN_FALLBACK 이 켜져 있을 때만, L열 MAKER P/N 값을 MAKER P/N 칸에 보완한다.
-        if not entries:
-            if PN_FALLBACK:
-                pn_val = cell_text(ws.cell(row=r, column=pn_col)).strip()
-                if pn_val:
-                    target = label_to_col.get(MAKER_PN_NORM)
-                    if target:
-                        write_cell(ws.cell(row=r, column=target), pn_val, HIGHLIGHT_RED)
-                        value_cells += 1
-                        pn_fallback_rows += 1
-                    else:
-                        fallback_no_label += 1
-                        if len(sample_no_label) < 10:
-                            sample_no_label.append(f"{r}행 (L={pn_val})")
-            continue
 
         # (B) 사양 분배: 각 개별속성 열에 채울 '값'을 결정 (col → value)
         rows_with_spec += 1
@@ -311,7 +338,7 @@ def main():
                 if len(sample_unmatched) < 10:
                     sample_unmatched.append(f"{SPEC_COL}{r}: {' | '.join(unmatched)}")
 
-        # (C) 개별속성 칸 정리 (사양이 있는 행에만 적용, 열 위치는 그대로 유지):
+        # (C) 개별속성 칸 정리 (사양이 있는 행, 열 위치는 그대로 유지):
         #     - 결정된 값이 있으면 '값만' 기입 (속성명 라벨 제거)
         #     - 값이 없으면(라벨만 있던 칸) 빈칸으로
         for c in attr_cols:
@@ -325,11 +352,11 @@ def main():
         if (r - HEADER_ROW) % 500 == 0:
             print(f"  ... {r - HEADER_ROW}/{total_rows} 행 처리")
 
-    print(f"  → 처리 완료: 사양 보유 {rows_with_spec}행, 값 기입 {value_cells}칸, "
-          f"빈칸 정리 {cleared_cells}칸, ETC 모음 {etc_rows}행, L열 보완 {pn_fallback_rows}행")
-    if fallback_no_label:
-        print(f"  ⚠ L열 보완 대상이나 MAKER P/N 속성 칸을 못 찾은 행 {fallback_no_label}건")
-        for s in sample_no_label:
+    print(f"  → 처리 완료: 사양 보유 {rows_with_spec}행, 사양 없는 행 정리 {specless_cleaned}행, "
+          f"값 기입 {value_cells}칸, 빈칸 정리 {cleared_cells}칸, ETC 모음 {etc_rows}행, L열 보완 {pn_fallback_rows}칸")
+    if specless_skipped:
+        print(f"  ⚠ 사양 없는 행 중 MAKER P/N 값(=L열)을 못 찾아 건드리지 않은 행 {specless_skipped}건")
+        for s in sample_skipped:
             print(f"      · {s}")
     if no_etc_warn:
         print(f"  ⚠ ETC 속성 칸을 못 찾아 미매칭 데이터를 기입 못한 행 {no_etc_warn}건")
