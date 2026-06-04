@@ -814,35 +814,46 @@ document.getElementById('runBtn').addEventListener('click', async () => {
     }
 
     // ── 2차: 사양 없는 행 정리 ──
-    //     이런 행은 MAKER P/N 외에는 데이터가 없으므로,
-    //     '기본 속성명 라벨'(1차에서 학습)만 남아있는 칸은 모두 비우고,
-    //     라벨이 아닌 실제 데이터(MAKER P/N 값 등)와 L열 값과 동일한 칸은 유지한다.
+    //     이런 행은 MAKER P/N 외에는 데이터가 없으므로:
+    //       - '라벨:값' 형태로 값이 있는 칸(예: 'MAKER P/N:12345')은 '값만' 남긴다
+    //       - 값이 없는 '순수 기본 라벨' 칸(예: 'SIZE', 'USE')은 비운다
+    //       - 라벨이 아닌 실제 데이터는 그대로 유지한다
     for (const r of speclessRows) {
       const pnLRaw = String(getCellText(ws.getCell(r, colPnNum))).trim();
-      const pnL = normValue(pnLRaw);
       let hadNonempty = false;
-      let rowCleared = false;
+      let rowChanged = false;
       for (let c = attrStartNum; c <= attrEndNum; c++) {
         const v = getCellText(ws.getCell(r, c));
         if (isEmpty(v)) continue;
         hadNonempty = true;
-        // L열 값(MAKER P/N)과 동일한 칸은 항상 유지
-        if (pnL && normValue(v) === pnL) continue;
-        const nl = normLabel(v);
+        const s = String(v);
+        const ci = s.search(/[:：]/);
+        const val = ci >= 0 ? s.slice(ci + 1).trim() : '';  // ':' 뒤의 값
+        const nl = normLabel(v);                            // ':' 앞 라벨의 norm
         if (knownLabels.has(nl)) {
-          if (optPnFallback && nl === MAKER_PN_NORM && pnLRaw) {
+          if (val) {
+            // 'MAKER P/N:12345' 처럼 값이 있으면 → 지우지 말고 '값만' 남긴다
+            if (s.trim() !== val) {
+              writeForce(ws.getCell(r, c), val, optHighlight);
+              valueCells++;
+              rowChanged = true;
+            }
+          } else if (optPnFallback && nl === MAKER_PN_NORM && pnLRaw) {
+            // MAKER P/N 라벨만 있고 값이 없음 → L열 값으로 보완 기입
             writeForce(ws.getCell(r, c), pnLRaw, optHighlight);
             valueCells++;
             pnFallbackRows++;
+            rowChanged = true;
           } else {
+            // 값 없는 순수 기본 라벨 → 비움
             ws.getCell(r, c).value = null;
             clearedCells++;
-            rowCleared = true;
+            rowChanged = true;
           }
         }
         // else: 학습되지 않은 값 = 실제 데이터(MAKER P/N 값 등) → 유지
       }
-      if (rowCleared) {
+      if (rowChanged) {
         speclessCleaned++;
       } else if (hadNonempty) {
         speclessUntouched++;

@@ -320,36 +320,43 @@ def main():
             print(f"  ... {r - HEADER_ROW}/{total_rows} 행 처리")
 
     # ── 2차: 사양 없는 행 정리 ──
-    #     이런 행은 MAKER P/N 외에는 데이터가 없으므로,
-    #     '기본 속성명 라벨'(1차에서 학습)만 남아있는 칸은 모두 비우고,
-    #     라벨이 아닌 실제 데이터(MAKER P/N 값 등)와 L열 값과 동일한 칸은 유지한다.
+    #     이런 행은 MAKER P/N 외에는 데이터가 없으므로:
+    #       - '라벨:값' 형태로 값이 들어있는 칸(예: 'MAKER P/N:12345')은 '값만' 남긴다
+    #       - 값이 없는 '순수 기본 라벨' 칸(예: 'SIZE', 'USE')은 비운다
+    #       - 라벨이 아닌 실제 데이터는 그대로 유지한다
     for r in specless_rows:
         pn_l_raw = cell_text(ws.cell(row=r, column=pn_col)).strip()
-        pn_l = norm_value(pn_l_raw)
         had_nonempty = False
-        row_cleared = False
+        row_changed = False
         for c in range(attr_start, attr_end + 1):
             v = cell_text(ws.cell(row=r, column=c))
             if is_empty(v):
                 continue
             had_nonempty = True
-            # L열 값(MAKER P/N)과 동일한 칸은 항상 유지
-            if pn_l and norm_value(v) == pn_l:
-                continue
-            nl = norm_label(v)
+            s = str(v)
+            ci = next((i for i, ch in enumerate(s) if ch in ":："), -1)
+            val = s[ci + 1:].strip() if ci >= 0 else ""  # ':' 뒤의 값
+            nl = norm_label(v)                            # ':' 앞 라벨의 norm
             if nl in known_labels:
-                # 남아있는 기본 속성명 라벨
-                if PN_FALLBACK and nl == MAKER_PN_NORM and pn_l_raw:
+                if val:
+                    # 'MAKER P/N:12345' 처럼 값이 있으면 → 지우지 말고 '값만' 남긴다
+                    if s.strip() != val:
+                        write_cell(ws.cell(row=r, column=c), val, HIGHLIGHT_RED)
+                        value_cells += 1
+                        row_changed = True
+                elif PN_FALLBACK and nl == MAKER_PN_NORM and pn_l_raw:
                     # MAKER P/N 라벨만 있고 값이 없음 → L열 값으로 보완 기입
                     write_cell(ws.cell(row=r, column=c), pn_l_raw, HIGHLIGHT_RED)
                     value_cells += 1
                     pn_fallback_rows += 1
+                    row_changed = True
                 else:
+                    # 값 없는 순수 기본 라벨 → 비움
                     ws.cell(row=r, column=c).value = None
                     cleared_cells += 1
-                    row_cleared = True
+                    row_changed = True
             # else: 학습되지 않은 값 = 실제 데이터(MAKER P/N 값 등) → 유지
-        if row_cleared:
+        if row_changed:
             specless_cleaned += 1
         elif had_nonempty:
             specless_untouched += 1
