@@ -29,3 +29,6 @@ TOP_K = 4                 # 질문당 가져올 관련 청크 수
 LLM_BACKEND = "stub"
 OLLAMA_HOST = "http://localhost:11434"
 OLLAMA_MODEL = "qwen2.5:7b"
+# 내부망 운영(SageMaker)용 — LLM_BACKEND="sagemaker"일 때 사용
+SAGEMAKER_ENDPOINT = ""        # 예: "regulation-llm-endpoint"
+AWS_REGION = "ap-northeast-2"
