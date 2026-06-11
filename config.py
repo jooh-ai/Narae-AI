@@ -15,6 +15,9 @@ CHUNK_SIZE = 500          # 한 청크의 대략적 글자 수
 CHUNK_OVERLAP = 80        # 청크 간 겹침(문맥 보존)
 
 # --- 임베딩(4단계) ---
+# "tfidf": scikit-learn 기반, 완전 오프라인(외부망 개발용 기본값)
+# "sentence-transformers": 의미 검색용 고품질 모델 (가중치가 로컬 캐시에 있어야 함 → 내부망 운영용)
+EMBEDDING_BACKEND = "tfidf"
 # 한국어를 잘 처리하는 다국어 임베딩 모델 (로컬 다운로드 후 오프라인 동작)
 EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
