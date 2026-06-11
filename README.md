@@ -27,6 +27,7 @@
 6. ✅ LLM 연결 — stub/ollama/sagemaker (`src/rag/llm.py`)
 7. ✅ RAG 결합 + 출처 표시 (`src/rag/chain.py`)
 8. ✅ 챗 인터페이스 CLI (`scripts/chat.py`)
+9. ✅ 웹 UI — 서버-클라이언트 (`src/web/app.py`, `scripts/serve.py`)
 
 ## 설치 & 실행
 ```bash
@@ -35,8 +36,15 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 python -m scripts.build_index    # (최초 1회) 인덱스 빌드
-python -m scripts.chat           # 대화형 챗봇 실행
+
+python -m scripts.chat           # (A) 터미널에서 혼자 쓰기
+python -m scripts.serve          # (B) 웹 서버 — 직원들이 브라우저로 접속
 ```
+
+### 웹 서버 방식 (여러 명이 사용)
+서버 1대에서 `python -m scripts.serve` 실행 → 직원은 브라우저에서
+`http://<서버주소>:8000` 접속. 직원 PC엔 아무것도 설치할 필요가 없다.
+무거운 모델·인덱스는 **서버에만** 있고, 사용자는 화면으로 질문/답변만 주고받는다.
 
 ## 내부망 이전 시 바꿀 것 (config.py)
 외부망 개발 → 내부망 운영 전환은 **코드 수정 없이 설정만** 바꾼다.

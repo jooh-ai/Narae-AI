@@ -13,6 +13,10 @@ numpy==1.26.4
 requests==2.32.3             # Ollama / SageMaker 호출
 pyyaml==6.0.2                # 설정 파일
 
+# === 9단계: 웹 UI (서버-클라이언트) ===
+fastapi==0.115.6             # 웹 API 서버
+uvicorn==0.34.0              # ASGI 서버(실행기)
+
 # === 이후 단계(이미지 OCR)에서 추가 예정 ===
 # pytesseract               # 로컬 OCR (Tesseract 엔진 별도 설치 필요)
 # pdf2image                 # 스캔 PDF → 이미지
