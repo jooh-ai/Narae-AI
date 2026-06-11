@@ -1,0 +1,18 @@
+# === 1~3단계: 문서 파싱 & 청킹 ===
+pypdf==5.1.0                 # PDF 텍스트 추출
+python-docx==1.1.2           # Word(.docx)
+openpyxl==3.1.5              # Excel(.xlsx)
+python-pptx==1.0.2           # PowerPoint(.pptx)
+
+# === 4~5단계: 임베딩 & 벡터 검색 (전부 로컬 실행) ===
+sentence-transformers==3.3.1 # 로컬 임베딩 모델
+faiss-cpu==1.9.0             # 로컬 벡터DB (인터넷 불필요)
+numpy==1.26.4
+
+# === 6~8단계: LLM 연결 & 인터페이스 ===
+requests==2.32.3             # Ollama / SageMaker 호출
+pyyaml==6.0.2                # 설정 파일
+
+# === 이후 단계(이미지 OCR)에서 추가 예정 ===
+# pytesseract               # 로컬 OCR (Tesseract 엔진 별도 설치 필요)
+# pdf2image                 # 스캔 PDF → 이미지
