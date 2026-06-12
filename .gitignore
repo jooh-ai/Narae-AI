@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 인덱스 / 모델 / 데이터 산출물 (재생성 가능 + 민감정보 유출 방지)
+storage/
+*.index
+*.faiss
+.cache/
+
+# 실제 규정 문서는 절대 커밋하지 않음 (더미만 허용)
+data/real_docs/
+
+# 환경 변수
+.env
+
+# OS
+.DS_Store
