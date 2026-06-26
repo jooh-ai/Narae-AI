@@ -86,7 +86,8 @@ class MeasurementStore:
         if w is None:
             w = igv_turnup(cit)
         eng = engine or TheoryEngine()
-        theory = eng.theory_cc(cit, press, deg)
+        # 이론기준값은 테스트 실측 RH 반영 (시드 수기값과 동일 기준 → 보정값 정합)
+        theory = eng.theory_cc(cit, press, deg, rh=rh)
         corr = correction_value(cc_meas, theory, w)
         rec = TestRecord(cit=cit, press=press, cc_meas=cc_meas, w=w, theory=theory,
                          corr=corr, rh=rh, cp_meas=cp_meas, cp_design=cp_design,

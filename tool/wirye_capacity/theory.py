@@ -28,6 +28,19 @@ def load_base_table(path: str | Path | None = None) -> list[dict]:
     return rows
 
 
+def rh_corr(rh: float, cit: float) -> float:
+    """상대습도 보정계수 K_rh (엑셀2 K열, 기준 RH 60%). RH=60에서 1.0.
+
+    이론기준값(보정값 산출용)은 테스트의 실측 RH를 반영해야 시드 수기값과 일치한다
+    (검증: 32건 최대오차 0.18 MW). 입찰 Profile은 미래 습도 미지 → RH=60(=1.0) 사용.
+    (엑셀2의 ~1e-17 온도단독 항은 수치적으로 무시.)
+    """
+    j = rh - C.REF_RH
+    return (1 - 3.899067e-5 * j + 3.99928e-7 * j ** 2
+            - 7.34811e-7 * cit * j + 6.844623e-8 * j ** 2 * cit
+            + 3.040975e-7 * j * cit ** 2 - 2.054733e-9 * cit ** 2 * j ** 2)
+
+
 def igv_turnup(cit: float) -> float:
     """IGV turn-up 출력 증가분 W (MW).
 
@@ -76,15 +89,25 @@ class TheoryEngine:
         return self._interp(self._gt, cit)
 
     def theory_cc(self, cit: float, pressure: float = C.REF_PRESSURE,
-                  deg: float = C.DEFAULT_DEG) -> float:
-        """이론기준값 CC (Gross, IGV turn-up 미반영). 보정값 산출의 기준."""
+                  deg: float = C.DEFAULT_DEG, rh: float | None = None) -> float:
+        """이론기준값 CC (Gross, IGV turn-up 미반영). 보정값 산출의 기준.
+
+        rh 지정 시(테스트 실측 습도) 습도보정 반영 — 시드 수기 이론기준값과 정합.
+        rh=None 또는 60(기준)이면 습도보정 없음(입찰 Profile용).
+        """
         if deg <= 0:
             raise ValueError(f"Degradation 은 0보다 커야 합니다 (입력: {deg})")
-        return self.base_cc(cit) * (C.REF_DEG / deg) / self.p_corr(pressure)
+        val = self.base_cc(cit) * (C.REF_DEG / deg) / self.p_corr(pressure)
+        if rh is not None and rh != C.REF_RH:
+            val /= rh_corr(rh, cit)
+        return val
 
     def theory_cc_with_igv(self, cit: float, pressure: float = C.REF_PRESSURE,
-                           deg: float = C.DEFAULT_DEG, w: float | None = None) -> float:
-        """이론 CC (Gross, IGV turn-up 반영). 현실화값의 기준선."""
+                           deg: float = C.DEFAULT_DEG, w: float | None = None,
+                           rh: float | None = None) -> float:
+        """이론 CC (Gross, IGV turn-up 반영). 현실화값의 기준선.
+
+        Profile 용도이므로 rh 기본 None(=RH 60, 습도보정 없음)."""
         if w is None:
             w = igv_turnup(cit)
-        return self.theory_cc(cit, pressure, deg) + w
+        return self.theory_cc(cit, pressure, deg, rh=rh) + w

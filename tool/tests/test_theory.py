@@ -63,15 +63,19 @@ def test_degradation_direction(eng):
     assert fresh > worn
 
 
-def test_theory_vs_legacy_handcalc_within_tolerance(eng):
-    """엑셀2 수기 이론기준값(I열, 테스트별 설계복수기압 사용)과의 차이.
-    base-table 방식은 표준 설계곡선을 쓰므로 약간의 차이가 있다(Phase 2 정합 대상).
-    여기서는 회귀 방지를 위한 상한만 확인한다."""
-    errs = [
-        eng.theory_cc(r["cit"], r["press"], 1.028) - r["theory"]
-        for r in SEED
-    ]
+def test_rh_corr_unity_at_reference(eng):
+    from wirye_capacity.theory import rh_corr
+    assert rh_corr(60, 15) == pytest.approx(1.0)
+    # rh=60 또는 None 이면 습도보정 없음 (Profile 용도)
+    assert eng.theory_cc(25, 1013, 1.028, rh=60) == pytest.approx(
+        eng.theory_cc(25, 1013, 1.028, rh=None), abs=1e-9)
+
+
+def test_theory_with_rh_reproduces_handcalc(eng):
+    """RH 반영 시 엑셀2 수기 이론기준값(I)을 ±0.5 MW 내로 재현 (M1 정합)."""
+    errs = [eng.theory_cc(r["cit"], r["press"], 1.028, rh=r["rh"]) - r["theory"]
+            for r in SEED]
     mean = sum(errs) / len(errs)
     worst = max(abs(e) for e in errs)
-    assert abs(mean) < 0.5, f"mean err {mean:.3f} MW"
-    assert worst < 3.0, f"worst err {worst:.3f} MW"
+    assert abs(mean) < 0.1, f"mean err {mean:.3f} MW"
+    assert worst < 0.5, f"worst err {worst:.3f} MW"   # 시운전 허용오차 내
