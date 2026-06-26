@@ -7,11 +7,15 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from . import constants as C
 from .pipeline import run_pipeline
 from .rims import MockRimsConnector
 from .store import MeasurementStore
+
+# CLI·GUI 공용 기본 누적 DB (홈 디렉터리)
+DEFAULT_DB = str(Path.home() / "wirye_measurements.db")
 
 
 def _build_connector(args):
@@ -33,14 +37,16 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--forecast", help="엑셀3-1 날씨 파일 경로")
     r.add_argument("--workbook", help="엑셀1(RiMS 시트) 경로 — 실제 취득(Windows)")
     r.add_argument("--mock", action="store_true", help="mock RiMS(시드) 사용")
-    r.add_argument("--db", default="measurements.db", help="누적 DB 경로")
+    r.add_argument("--db", default=DEFAULT_DB, help="누적 DB 경로")
     r.add_argument("--out", help="출력 엑셀3 입찰파일 경로")
     r.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
+    r.add_argument("--bid-day", dest="bid_day", default=None,
+                   help="입찰 적용일(엑셀3-1 일자 라벨). 미지정 시 전체 중위 평균")
     r.add_argument("--curve", action="store_true", help="연속 보정곡선 사용(기본: 구간 평균)")
     r.add_argument("--seed", action="store_true", help="DB가 비었으면 시드 32건 적재")
 
     li = sub.add_parser("list", help="누적 테스트 List-up")
-    li.add_argument("--db", default="measurements.db")
+    li.add_argument("--db", default=DEFAULT_DB)
 
     args = p.parse_args(argv)
 
@@ -50,9 +56,10 @@ def main(argv: list[str] | None = None) -> int:
             store.seed()
         res = run_pipeline(date=args.date, store=store, output_path=args.out,
                            connector=_build_connector(args), forecast_path=args.forecast,
-                           deg=args.deg,
+                           deg=args.deg, bid_day=args.bid_day,
                            correction_method="curve" if args.curve else "bin")
-        print(f"적용 대기압 : {res.applied_pressure:.1f} mbar")
+        src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
+        print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
         if res.new_record is not None:
             print(f"신규 취득   : CIT {res.new_record.cit}°C, "
                   f"보정값 {res.new_record.corr:+.2f} MW")

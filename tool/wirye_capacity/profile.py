@@ -18,8 +18,8 @@ from . import constants as C
 from .correction import applied_correction, realized_net
 from .theory import TheoryEngine, igv_turnup
 
-# 기본 엑셀3 템플릿 (최종 입찰 양식)
-DEFAULT_TEMPLATE = Path(__file__).parent / "templates" / "excel3_profile_template.xlsx"
+# 기본 엑셀3 템플릿 (최종 입찰 양식). PyInstaller 동결 시 _MEIPASS 경로로 해석.
+DEFAULT_TEMPLATE = C.resource("templates", "excel3_profile_template.xlsx")
 
 
 @dataclass
@@ -178,6 +178,13 @@ def fill_excel3_template(output_path: str, *, engine: TheoryEngine, correction_t
                          temps=list(range(-20, 41)), corrector=corrector)
     wb = load_workbook(template_path)            # 수식·서식 보존
     m3 = wb[mode3_sheet]
+    # 양식 정합 검사: Mode3 온도축이 행5=−20 … 행65=40 인지 확인(템플릿/양식 변경 방어)
+    a_first = m3.cell(row=_MODE3_FIRST_ROW, column=1).value
+    a_last = m3.cell(row=_MODE3_FIRST_ROW + 60, column=1).value
+    if (a_first, a_last) != (-20, 40):
+        raise ValueError(
+            f"엑셀3 템플릿 온도축 불일치: {mode3_sheet}!A{_MODE3_FIRST_ROW}={a_first}, "
+            f"A{_MODE3_FIRST_ROW + 60}={a_last} (기대 −20…40). 입찰 양식 변경 여부 확인.")
     for i, row in enumerate(rows):
         rr = _MODE3_FIRST_ROW + i
         m3.cell(row=rr, column=2, value=row.gt_real)   # B = GT Gross (현실화)

@@ -41,6 +41,13 @@ def test_no_extrapolation(curve):
     assert curve(40) == pytest.approx(curve(36.1), abs=1e-9)
 
 
+def test_fixed_zone_point_excluded_from_fit(curve):
+    """M2 회귀: −1.9°C(고정구간) 점은 곡선 적합에서 제외 → 저온 왜곡 방지."""
+    assert min(curve.temps) >= 0          # −1.9°C 제외됨
+    # 0°C 보정값이 −1.9°C(+12.9)에 끌려 과대(>8)되지 않고 0~10 군집(~5~6)에 가까움
+    assert curve(0) < 8.0
+
+
 def test_reasonable_fit(curve):
     assert curve.r_squared() > 0.8        # 국소가중은 데이터에 잘 붙음
 

@@ -6,6 +6,16 @@
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+
+def resource(*parts) -> Path:
+    """패키지 자원 경로 (data/, templates/). PyInstaller 동결 시 _MEIPASS 우선."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    root = (Path(meipass) / "wirye_capacity") if meipass else Path(__file__).resolve().parent
+    return root.joinpath(*parts)
+
 # --- 설계 기준 ---
 CC_ISO = 450.4           # CC Gross @ ISO 15°C/1013mbar (MW)
 REF_PRESSURE = 1013.0    # mbar (ISO 표준 대기압)

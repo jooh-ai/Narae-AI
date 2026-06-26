@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import constants as C
 
-_DATA = Path(__file__).parent / "data"
+_DATA = C.resource("data")
 
 
 def load_base_table(path: str | Path | None = None) -> list[dict]:
@@ -78,6 +78,8 @@ class TheoryEngine:
     def theory_cc(self, cit: float, pressure: float = C.REF_PRESSURE,
                   deg: float = C.DEFAULT_DEG) -> float:
         """이론기준값 CC (Gross, IGV turn-up 미반영). 보정값 산출의 기준."""
+        if deg <= 0:
+            raise ValueError(f"Degradation 은 0보다 커야 합니다 (입력: {deg})")
         return self.base_cc(cit) * (C.REF_DEG / deg) / self.p_corr(pressure)
 
     def theory_cc_with_igv(self, cit: float, pressure: float = C.REF_PRESSURE,

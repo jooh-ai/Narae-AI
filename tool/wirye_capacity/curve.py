@@ -72,15 +72,19 @@ class CorrectionCurve:
         self.method = method
         self.bandwidth = bandwidth
         self.degree = degree
-        pts = sorted((r["cit"], r["corr"]) for r in records)
-        self.temps = [p[0] for p in pts]
-        self.corrs = [p[1] for p in pts]
+        all_pts = sorted((r["cit"], r["corr"]) for r in records)
+        # 특수구간(shaft/fixed) 정책값 보존 — 전체 실측 기준
+        self._bins = aggregate_bins([{"cit": t, "corr": c} for t, c in all_pts])
+        # 곡선 적합은 'avg' 구간 실측만 사용 (shaft/fixed 구간 점 제외 →
+        # −14~0°C 고정 점이 0~4°C 곡선을 부풀리는 왜곡 방지)
+        avg_pts = [(t, c) for t, c in all_pts
+                   if (b := bin_for(t)) is not None and b[2] == "avg"]
+        self.temps = [p[0] for p in avg_pts]
+        self.corrs = [p[1] for p in avg_pts]
         self.tmin = self.temps[0] if self.temps else 0.0
         self.tmax = self.temps[-1] if self.temps else 0.0
-        # 특수구간(shaft/fixed) 정책값 보존
-        self._bins = aggregate_bins([{"cit": t, "corr": c} for t, c in pts])
         self._coef = (_polyfit(self.temps, self.corrs, degree)
-                      if method == "poly" and len(pts) > degree else None)
+                      if method == "poly" and len(avg_pts) > degree else None)
 
     def _smooth(self, t: float) -> float:
         if not self.temps:

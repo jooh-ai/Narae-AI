@@ -16,8 +16,7 @@ from . import constants as C
 from .correction import aggregate_bins, correction_value
 from .theory import TheoryEngine, igv_turnup
 
-_DATA = Path(__file__).parent / "data"
-_SEED = _DATA / "measurements_seed.json"
+_SEED = C.resource("data", "measurements_seed.json")
 
 # DB 컬럼 (id 제외, 삽입 순서)
 _COLS = ["date", "cit", "press", "rh", "cp_meas", "cp_design",

@@ -68,6 +68,9 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.deg_in = QtWidgets.QDoubleSpinBox()
             self.deg_in.setRange(1.0, 1.2); self.deg_in.setSingleStep(0.001)
             self.deg_in.setDecimals(3); self.deg_in.setValue(C.DEFAULT_DEG)
+            self.bidday_in = QtWidgets.QLineEdit()
+            self.bidday_in.setPlaceholderText("입찰 적용일 라벨(선택, 미입력 시 전체 중위 평균)")
+            self.curve_chk = QtWidgets.QCheckBox("연속 보정곡선 사용")
             self.forecast_in = self._file_row("엑셀3-1 (날씨)")
             self.workbook_in = self._file_row("엑셀1 (RiMS) — 실제 취득")
             self.mock_chk = QtWidgets.QCheckBox("mock RiMS 사용(테스트)")
@@ -75,13 +78,16 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
 
             form.addRow("테스트 날짜", self.date_in)
             form.addRow("Degradation", self.deg_in)
+            form.addRow("입찰 적용일", self.bidday_in)
             form.addRow("날씨", self.forecast_in["row"])
             form.addRow("RiMS", self.workbook_in["row"])
             form.addRow("", self.mock_chk)
+            form.addRow("", self.curve_chk)
             form.addRow("출력", self.out_in["row"])
 
-            run_btn = QtWidgets.QPushButton("▶ 실행 (취득 → 누적 → 입찰파일 생성)")
-            run_btn.clicked.connect(self._on_run)
+            self.run_btn = QtWidgets.QPushButton("▶ 실행 (취득 → 누적 → 입찰파일 생성)")
+            self.run_btn.clicked.connect(self._on_run)
+            run_btn = self.run_btn
             self.summary = QtWidgets.QLabel("입력 후 실행하세요.")
             self.summary.setWordWrap(True)
             self.profile_tbl = QtWidgets.QTableWidget(0, 4)
@@ -113,17 +119,35 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             return {"row": holder, "edit": edit}
 
         def _on_run(self):
+            from PySide6 import QtCore, QtGui
+            use_mock = self.mock_chk.isChecked()
+            workbook = self.workbook_in["edit"].text().strip() or None
+            if not use_mock and not workbook:
+                if QtWidgets.QMessageBox.question(
+                        self, "RiMS 미지정",
+                        "RiMS(엑셀1) 또는 mock 이 지정되지 않았습니다.\n"
+                        "신규 취득 없이 현재 누적값으로 Profile만 재생성할까요?"
+                        ) != QtWidgets.QMessageBox.StandardButton.Yes:
+                    return
+            # 긴 RiMS 취득 동안 UI 가 멈춘 것처럼 보이므로 버튼 비활성·대기 커서
+            # (대용량 비동기 취득은 향후 QThread 워커로 분리 권장)
+            self.run_btn.setEnabled(False)
+            QtGui.QGuiApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
             try:
                 res = run_pipeline(
                     date=self.date_in.text().strip(), store=self.store,
                     output_path=self.out_in["edit"].text().strip() or None,
-                    connector=build_connector(self.mock_chk.isChecked(),
-                                              self.workbook_in["edit"].text().strip() or None),
+                    connector=build_connector(use_mock, workbook),
                     engine=self.engine, deg=self.deg_in.value(),
+                    bid_day=self.bidday_in.text().strip() or None,
+                    correction_method="curve" if self.curve_chk.isChecked() else "bin",
                     forecast_path=self.forecast_in["edit"].text().strip() or None)
             except Exception as e:  # noqa: BLE001
                 QtWidgets.QMessageBox.critical(self, "오류", str(e))
                 return
+            finally:
+                QtGui.QGuiApplication.restoreOverrideCursor()
+                self.run_btn.setEnabled(True)
             msg = [f"적용 대기압: {res.applied_pressure:.1f} mbar",
                    f"누적: {res.measurement_count}건"]
             if res.new_record is not None:

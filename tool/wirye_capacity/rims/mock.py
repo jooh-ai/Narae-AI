@@ -8,9 +8,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .. import constants as C
 from .base import AcquiredTest
 
-_SEED = Path(__file__).parent.parent / "data" / "measurements_seed.json"
+_SEED = C.resource("data", "measurements_seed.json")
 
 
 class MockRimsConnector:

@@ -60,3 +60,18 @@ def test_parse_and_applied_pressure(tmp_path):
 
 def test_site_offset_is_minus_8():
     assert C.WEATHER_SITE_OFFSET == -8.0
+
+
+def test_missing_median_header_does_not_crash(tmp_path):
+    """B1 회귀: 'Pressure' 섹션은 있으나 '중위' 헤더가 없어도 크래시하지 않음."""
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active
+    ws["A1"] = "2026-04-15 18:09:12"
+    ws["A5"] = "Pressure"
+    # 시간 헤더만, '중위' 라벨 없음
+    for j, t in enumerate([0, 3, 6, 9]):
+        ws.cell(row=6, column=2 + j, value=t)
+    ws.cell(row=7, column=1, value="수요일")
+    p = str(tmp_path / "no_median.xlsx"); wb.save(p)
+    fc = load_excel3_1(p)            # 예외 없이 반환되어야 함
+    assert fc.pressure_median == {}  # 헤더 없으면 빈 dict

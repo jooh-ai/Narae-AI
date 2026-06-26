@@ -41,14 +41,14 @@ def _find_label(rows, label: str) -> int | None:
 
 
 def _parse_block(rows, start: int):
-    """섹션 시작행 이후의 (중위dict, 최소dict, days, times) 파싱."""
+    """섹션 시작행 이후의 (중위dict, 최소dict, grid, days, times) 파싱."""
     hdr = None
     for i in range(start + 1, len(rows)):
         if any(isinstance(v, str) and v.strip() == "중위" for v in rows[i]):
             hdr = i
             break
     if hdr is None:
-        return {}, {}, [], []
+        return {}, {}, {}, [], []          # 5-tuple (grid 포함) — 헤더 없을 때 안전 반환
     header = rows[hdr]
     med_c = next(j for j, v in enumerate(header) if isinstance(v, str) and v.strip() == "중위")
     min_c = next((j for j, v in enumerate(header)
@@ -97,13 +97,16 @@ def applied_pressure(fc: WeatherForecast, *, day: str | None = None,
                      offset: float = C.WEATHER_SITE_OFFSET, aggregate: str = "mean") -> float:
     """입찰 적용 대기압(mbar) = 중위 대기압 + 위치보정(−8).
 
-    day 지정 시 그 날의 중위, 아니면 전체 중위의 평균(또는 median)."""
+    day 지정 시 그 날의 중위, 아니면 전체 중위의 평균(mean) 또는 중앙값(median)."""
+    import statistics
     if day is not None:
+        if day not in fc.pressure_median:
+            raise ValueError(
+                f"'{day}' 날짜의 중위 대기압이 없습니다 (가용: {fc.days})")
         base = fc.pressure_median[day]
     else:
         vals = [v for v in fc.pressure_median.values() if isinstance(v, (int, float))]
         if not vals:
             raise ValueError("중위 대기압 데이터가 없습니다")
-        base = (sum(vals) / len(vals) if aggregate == "mean"
-                else sorted(vals)[len(vals) // 2])
+        base = statistics.mean(vals) if aggregate == "mean" else statistics.median(vals)
     return base + offset
