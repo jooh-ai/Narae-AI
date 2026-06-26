@@ -25,9 +25,9 @@ tool/                            # 프로젝트 루트
 │  ├─ constants.py               #   물리/사이트 상수 (P_corr, 450.4, W밴드, cap462, 구간)  ✅P1
 │  ├─ theory.py                  #   이론엔진: base×(1.028/Deg)/P_corr (+W)                ✅P1
 │  ├─ correction.py              #   보정값=실측−이론−W, 구간집계, 현실화 Net              ✅P1
-│  ├─ store.py                   #   테스트결과 저장·List-up (SQLite)                      ▢P2
-│  ├─ profile.py                 #   온도 Profile 생성 → 엑셀3 형식 .xlsx                  ▢P3
-│  ├─ rims/                      #   RiMS 취득 커넥터 (base / mock / excel_addin)          ▢P4
+│  ├─ store.py                   #   테스트결과 저장·List-up + record_from_rims            ✅P2/P4
+│  ├─ profile.py                 #   온도 Profile 생성 → 엑셀3 형식 .xlsx                  ✅P3
+│  ├─ rims/                      #   base·mock·자동취득 ✅ / excel_addin = 사내 결선       ◐P4
 │  ├─ weather.py                 #   엑셀3-1 파싱 → 중위 대기압 −8mbar                     ▢P5
 │  ├─ ui/app.py                  #   Windows 데스크톱 GUI (PySide6)                        ▢P5
 │  ├─ curve.py                   #   연속 보정곡선(국소가중/회귀) — 구간→1도별             ▢P6
@@ -95,8 +95,8 @@ P_corr(P)   = 1.208792e-6·(P−1013)² − 9.82435e-4·(P−1013) + 1
 5. **테스트 결과 누적 = RiMS 자동취득** (수기입력 아님). 날짜·시간 입력 → RiMS 자동취득 → 보정값 자동
    계산·저장(`store.record_test`)이 정상 경로. 수기입력은 백필/예외 fallback. **한 번의 취득이 ① 누적 1건
    추가 + ② 그날 입찰 Profile 생성에 모두 사용** (one-pull-two-uses).
-6. **W(IGV) 출처 결정 필요.** RiMS는 16~17(미실시)·17~18(실시) 두 윈도를 끌어올 수 있어 W를 **측정값
-   (17~18 − 16~17)**으로 산출 가능. 엑셀4는 **밴드값(0/2/4/6)** 사용. 측정값 채택 시 보정값 정확도↑ — 채택 여부 확인.
+6. ~~**W(IGV) 출처 결정 필요.**~~ ✅ **확정(2026-06-26): 밴드값(0/2/4/6) 유지.** RiMS 취득은 17~18시
+   윈도만 필요(CC 실측), W는 CIT 온도밴드(`igv_turnup`)로 산정. → 자동취득 경로 단순화.
 
 ## 8. 시운전·검증 (Commissioning)
 

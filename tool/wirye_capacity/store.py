@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import constants as C
 from .correction import aggregate_bins, correction_value
-from .theory import TheoryEngine
+from .theory import TheoryEngine, igv_turnup
 
 _DATA = Path(__file__).parent / "data"
 _SEED = _DATA / "measurements_seed.json"
@@ -73,7 +73,8 @@ class MeasurementStore:
         rec.id = cur.lastrowid
         return rec.id
 
-    def record_test(self, *, cit: float, press: float, cc_meas: float, w: float,
+    def record_test(self, *, cit: float, press: float, cc_meas: float,
+                    w: float | None = None,
                     rh: float | None = None, cp_meas: float | None = None,
                     cp_design: float | None = None, season: str | None = None,
                     date: str | None = None, engine: TheoryEngine | None = None,
@@ -81,7 +82,10 @@ class MeasurementStore:
         """새 테스트 1건 등록 — 이론기준값·보정값을 계산해 저장.
 
         보정값 = CC실측 − 이론기준값(엔진) − W.
+        W 미지정 시 온도밴드값(igv_turnup) 사용 (사용자 확정: 밴드 유지).
         """
+        if w is None:
+            w = igv_turnup(cit)
         eng = engine or TheoryEngine()
         theory = eng.theory_cc(cit, press, deg)
         corr = correction_value(cc_meas, theory, w)
@@ -90,6 +94,23 @@ class MeasurementStore:
                          season=season, date=date)
         self.add(rec)
         return rec
+
+    def record_from_rims(self, connector, date: str, *, start: str = "17:00",
+                         engine: TheoryEngine | None = None, deg: float = C.DEFAULT_DEG,
+                         season: str | None = None) -> TestRecord:
+        """RiMS에서 테스트 1건 자동취득 → 보정값 계산 → 누적 저장.
+
+        ("날짜·시간 → 자동 누적" 경로. connector 는 .acquire(date, start)→AcquiredTest 를
+        가진 객체이면 됨; mock / 실제 Excel-COM 모두 동일 인터페이스.)
+        W 는 밴드값(igv_turnup) 사용.
+        """
+        acq = connector.acquire(date, start)
+        return self.record_test(
+            cit=acq.cit, press=acq.pressure, cc_meas=acq.cc_meas, w=None,
+            rh=getattr(acq, "rh", None), cp_meas=getattr(acq, "cp_meas", None),
+            cp_design=getattr(acq, "cp_design", None),
+            season=season or getattr(acq, "season", None), date=date,
+            engine=engine, deg=deg)
 
     def delete(self, rec_id: int) -> None:
         self.conn.execute("DELETE FROM measurements WHERE id=?", (rec_id,))
