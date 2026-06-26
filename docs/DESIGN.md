@@ -26,14 +26,17 @@ tool/                            # 프로젝트 루트
 │  ├─ theory.py                  #   이론엔진: base×(1.028/Deg)/P_corr (+W)                ✅P1
 │  ├─ correction.py              #   보정값=실측−이론−W, 구간집계, 현실화 Net              ✅P1
 │  ├─ store.py                   #   테스트결과 저장·List-up + record_from_rims            ✅P2/P4
-│  ├─ profile.py                 #   온도 Profile 생성 → 엑셀3 형식 .xlsx                  ✅P3
+│  ├─ profile.py                 #   현실화 산출 + 엑셀3 템플릿 채우기(fill_excel3_template) ✅P3
 │  ├─ rims/                      #   base·mock·자동취득 ✅ / excel_addin = 사내 결선       ◐P4
-│  ├─ weather.py                 #   엑셀3-1 파싱 → 중위 대기압 −8mbar                     ✅P5
-│  ├─ ui/app.py                  #   Windows 데스크톱 GUI (PySide6)                        ▢P5
-│  ├─ curve.py                   #   연속 보정곡선(국소가중/회귀) — 구간→1도별             ▢P6
+│  ├─ weather.py                 #   엑셀3-1 파싱(격자) → 중위 대기압 −8mbar               ✅P5
 │  ├─ verify.py                  #   기준 엑셀 ↔ Tool 단계별 대조 리포트(±0.5MW)           ✅검증
+│  ├─ pipeline.py                #   run_pipeline: 날짜→취득→누적→Profile→엑셀3 (E2E)      ✅E2E
+│  ├─ cli.py / __main__.py       #   CLI: run/list (크로스플랫폼)                          ✅E2E
+│  ├─ ui/app.py                  #   Windows 데스크톱 GUI (PySide6) — 셸, 사내 실행        ◐P5
+│  ├─ curve.py                   #   연속 보정곡선(국소가중/회귀) — 구간→1도별             ▢P6
+│  ├─ templates/                 #   excel3_profile_template.xlsx (최종 입찰 양식)         ✅P3
 │  └─ data/                      #   base_table.json(61행), measurements_seed.json(32건)  ✅P1
-└─ tests/                        #   엑셀/골든 케이스 셀값 대조 자동 회귀                  ✅P1
+└─ tests/                        #   엑셀/골든 케이스 셀값 대조 자동 회귀 (50건)           ✅
 ```
 
 ## 4. 데이터 흐름 (실행 클릭 1회)

@@ -1,0 +1,169 @@
+"""위례 공급가능용량 입찰 산정 — Windows 데스크톱 GUI (PySide6).
+
+사내 PC에서 실행:  python -m wirye_capacity.ui.app
+로직은 pipeline.run_pipeline 에 위임하고, 이 모듈은 입력/표시만 담당하는 얇은 셸이다.
+
+화면:
+  [입력]  테스트 날짜·시각 · Degradation · 엑셀3-1(날씨) · RiMS(실제 엑셀1 / mock) · 출력경로
+  [실행]  → run_pipeline → 엑셀3 입찰파일 생성
+  [결과]  적용 대기압·신규 보정값·누적건수 · 온도별 현실화 Net 표 · 보정값 현황(신호등)
+  [List-up] 누적 테스트 표
+"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+from .. import constants as C
+from ..pipeline import run_pipeline
+from ..store import MeasurementStore
+from ..theory import TheoryEngine
+
+
+def _require_qt():
+    try:
+        from PySide6 import QtWidgets, QtCore  # noqa: F401
+    except ImportError as e:  # pragma: no cover
+        raise SystemExit("PySide6 가 필요합니다 (사내 PC): pip install PySide6") from e
+
+
+def build_connector(use_mock: bool, workbook_path: str | None):
+    if use_mock:
+        from ..rims import MockRimsConnector
+        return MockRimsConnector.from_seed()
+    if workbook_path:
+        from ..rims.excel_addin import ExcelAddinRimsConnector
+        return ExcelAddinRimsConnector(workbook_path)
+    return None
+
+
+def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
+    _require_qt()
+    from PySide6 import QtWidgets
+
+    db_default = str(Path.home() / "wirye_measurements.db")
+
+    class MainWindow(QtWidgets.QMainWindow):
+        def __init__(self):
+            super().__init__()
+            self.setWindowTitle("위례 공급가능용량 입찰 산정")
+            self.resize(900, 640)
+            self.engine = TheoryEngine()
+            self.store = MeasurementStore(db_default)
+            if self.store.count() == 0:
+                self.store.seed()
+
+            tabs = QtWidgets.QTabWidget()
+            tabs.addTab(self._run_tab(), "실행")
+            tabs.addTab(self._list_tab(), "List-up")
+            self.setCentralWidget(tabs)
+            self._refresh_list()
+
+        # ---------- 실행 탭 ----------
+        def _run_tab(self):
+            w = QtWidgets.QWidget()
+            form = QtWidgets.QFormLayout()
+            self.date_in = QtWidgets.QLineEdit()
+            self.date_in.setPlaceholderText("예: 2025-09-12 (테스트 날짜)")
+            self.deg_in = QtWidgets.QDoubleSpinBox()
+            self.deg_in.setRange(1.0, 1.2); self.deg_in.setSingleStep(0.001)
+            self.deg_in.setDecimals(3); self.deg_in.setValue(C.DEFAULT_DEG)
+            self.forecast_in = self._file_row("엑셀3-1 (날씨)")
+            self.workbook_in = self._file_row("엑셀1 (RiMS) — 실제 취득")
+            self.mock_chk = QtWidgets.QCheckBox("mock RiMS 사용(테스트)")
+            self.out_in = self._file_row("출력 엑셀3 입찰파일", save=True)
+
+            form.addRow("테스트 날짜", self.date_in)
+            form.addRow("Degradation", self.deg_in)
+            form.addRow("날씨", self.forecast_in["row"])
+            form.addRow("RiMS", self.workbook_in["row"])
+            form.addRow("", self.mock_chk)
+            form.addRow("출력", self.out_in["row"])
+
+            run_btn = QtWidgets.QPushButton("▶ 실행 (취득 → 누적 → 입찰파일 생성)")
+            run_btn.clicked.connect(self._on_run)
+            self.summary = QtWidgets.QLabel("입력 후 실행하세요.")
+            self.summary.setWordWrap(True)
+            self.profile_tbl = QtWidgets.QTableWidget(0, 4)
+            self.profile_tbl.setHorizontalHeaderLabels(
+                ["온도(°C)", "CC이론", "보정값", "CC현실화 Net"])
+
+            lay = QtWidgets.QVBoxLayout(w)
+            lay.addLayout(form)
+            lay.addWidget(run_btn)
+            lay.addWidget(self.summary)
+            lay.addWidget(self.profile_tbl)
+            return w
+
+        def _file_row(self, label, save=False):
+            edit = QtWidgets.QLineEdit()
+            btn = QtWidgets.QPushButton("...")
+            row = QtWidgets.QHBoxLayout()
+            row.addWidget(edit); row.addWidget(btn)
+            holder = QtWidgets.QWidget(); holder.setLayout(row)
+
+            def pick():
+                if save:
+                    fn, _ = QtWidgets.QFileDialog.getSaveFileName(self, label, "", "Excel (*.xlsx)")
+                else:
+                    fn, _ = QtWidgets.QFileDialog.getOpenFileName(self, label, "", "Excel (*.xlsx)")
+                if fn:
+                    edit.setText(fn)
+            btn.clicked.connect(pick)
+            return {"row": holder, "edit": edit}
+
+        def _on_run(self):
+            try:
+                res = run_pipeline(
+                    date=self.date_in.text().strip(), store=self.store,
+                    output_path=self.out_in["edit"].text().strip() or None,
+                    connector=build_connector(self.mock_chk.isChecked(),
+                                              self.workbook_in["edit"].text().strip() or None),
+                    engine=self.engine, deg=self.deg_in.value(),
+                    forecast_path=self.forecast_in["edit"].text().strip() or None)
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.critical(self, "오류", str(e))
+                return
+            msg = [f"적용 대기압: {res.applied_pressure:.1f} mbar",
+                   f"누적: {res.measurement_count}건"]
+            if res.new_record is not None:
+                msg.append(f"신규 보정값(CIT {res.new_record.cit}°C): "
+                           f"{res.new_record.corr:+.2f} MW")
+            if res.output_path:
+                msg.append(f"저장: {res.output_path}")
+            self.summary.setText("   |   ".join(msg))
+            self._fill_profile(res.profile_rows)
+            self._refresh_list()
+
+        def _fill_profile(self, rows):
+            self.profile_tbl.setRowCount(len(rows))
+            for i, r in enumerate(rows):
+                vals = [r.temp, round(r.cc_theory, 2), round(r.correction, 2),
+                        round(r.cc_real_net, 2)]
+                for j, v in enumerate(vals):
+                    self.profile_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
+
+        # ---------- List-up 탭 ----------
+        def _list_tab(self):
+            self.list_tbl = QtWidgets.QTableWidget(0, 5)
+            self.list_tbl.setHorizontalHeaderLabels(
+                ["날짜", "CIT(°C)", "CC실측", "보정값", "계절"])
+            return self.list_tbl
+
+        def _refresh_list(self):
+            rows = self.store.list_up(order="date")
+            self.list_tbl.setRowCount(len(rows))
+            for i, r in enumerate(rows):
+                vals = [r.get("date") or "-", r["cit"], r["cc_meas"],
+                        round(r["corr"], 2), r.get("season") or ""]
+                for j, v in enumerate(vals):
+                    self.list_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
+
+    app = QtWidgets.QApplication(argv or sys.argv)
+    win = MainWindow()
+    win.show()
+    return app.exec()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()
