@@ -21,6 +21,7 @@ class WeatherForecast:
     times: list[int]
     pressure_median: dict[str, float]
     pressure_min: dict[str, float] = field(default_factory=dict)
+    pressure_grid: dict[str, list[float]] = field(default_factory=dict)   # day → 시간대별 대기압
     temp_median: dict[str, float] = field(default_factory=dict)
 
 
@@ -52,10 +53,13 @@ def _parse_block(rows, start: int):
     med_c = next(j for j, v in enumerate(header) if isinstance(v, str) and v.strip() == "중위")
     min_c = next((j for j, v in enumerate(header)
                   if isinstance(v, str) and v.strip() in ("최소", "취약")), None)
-    times = [int(v) for v in header if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    time_cols = [j for j, v in enumerate(header)
+                 if isinstance(v, (int, float)) and not isinstance(v, bool)]
+    times = [int(header[j]) for j in time_cols]
     days: list[str] = []
     med: dict[str, float] = {}
     mn: dict[str, float] = {}
+    grid: dict[str, list[float]] = {}
     for i in range(hdr + 1, len(rows)):
         label = rows[i][0] if rows[i] else None
         if not isinstance(label, str) or not label.strip():
@@ -68,7 +72,9 @@ def _parse_block(rows, start: int):
             med[label] = float(row[med_c])
         if min_c is not None and min_c < len(row) and isinstance(row[min_c], (int, float)):
             mn[label] = float(row[min_c])
-    return med, mn, days, times
+        grid[label] = [float(row[j]) if j < len(row) and isinstance(row[j], (int, float))
+                       else None for j in time_cols]
+    return med, mn, grid, days, times
 
 
 def load_excel3_1(path: str) -> WeatherForecast:
@@ -77,11 +83,14 @@ def load_excel3_1(path: str) -> WeatherForecast:
     capture = rows[0][0] if rows and rows[0] else None
     p_i = _find_label(rows, "Pressure")
     t_i = _find_label(rows, "Tempereture") or _find_label(rows, "Temperature")
-    p_med, p_min, days, times = _parse_block(rows, p_i) if p_i is not None else ({}, {}, [], [])
+    if p_i is not None:
+        p_med, p_min, p_grid, days, times = _parse_block(rows, p_i)
+    else:
+        p_med, p_min, p_grid, days, times = {}, {}, {}, [], []
     t_med = _parse_block(rows, t_i)[0] if t_i is not None else {}
     return WeatherForecast(capture=str(capture) if capture is not None else None,
-                           days=days, times=times,
-                           pressure_median=p_med, pressure_min=p_min, temp_median=t_med)
+                           days=days, times=times, pressure_median=p_med,
+                           pressure_min=p_min, pressure_grid=p_grid, temp_median=t_med)
 
 
 def applied_pressure(fc: WeatherForecast, *, day: str | None = None,
