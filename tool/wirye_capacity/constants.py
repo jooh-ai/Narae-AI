@@ -20,6 +20,10 @@ P_CORR = (1.208792e-6, -9.82435e-4, 1.0)
 CC_AUX = 10.0            # CC 소내전력 (Gross − 10 = Net)
 GT_AUX = 11.5            # GT 소내전력
 
+# --- GT/ST 분배비 (Mode3 Cor. Rev.1 E108/E109). CC = GT + ST, W(IGV)도 이 비율로 분배 ---
+GT_RATIO = 0.6570
+ST_RATIO = 0.3430
+
 # --- 입찰 상한 (KPX 신고, Mode3) ---
 BID_CAP_NET = 462.0      # 사용자 확정: Net 462 MW
 BID_CAP_GROSS = BID_CAP_NET + CC_AUX  # 472 MW

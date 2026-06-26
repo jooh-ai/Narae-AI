@@ -2,9 +2,10 @@
 
 Phase 1: 핵심 계산 엔진 (이론·보정·현실화).
 Phase 2: 테스트결과 저장·List-up (store).
-RiMS 취득·Profile 출력·GUI는 후속 Phase.
+Phase 3: 온도 Profile 생성 (profile → 엑셀3 형식 .xlsx).
+RiMS 취득·GUI는 후속 Phase.
 """
-from . import constants, correction, store, theory
+from . import constants, correction, profile, store, theory
 
-__all__ = ["constants", "theory", "correction", "store"]
-__version__ = "0.2.0"
+__all__ = ["constants", "theory", "correction", "store", "profile"]
+__version__ = "0.3.0"
