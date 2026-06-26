@@ -28,10 +28,10 @@ tool/                            # 프로젝트 루트
 │  ├─ store.py                   #   테스트결과 저장·List-up + record_from_rims            ✅P2/P4
 │  ├─ profile.py                 #   온도 Profile 생성 → 엑셀3 형식 .xlsx                  ✅P3
 │  ├─ rims/                      #   base·mock·자동취득 ✅ / excel_addin = 사내 결선       ◐P4
-│  ├─ weather.py                 #   엑셀3-1 파싱 → 중위 대기압 −8mbar                     ▢P5
+│  ├─ weather.py                 #   엑셀3-1 파싱 → 중위 대기압 −8mbar                     ✅P5
 │  ├─ ui/app.py                  #   Windows 데스크톱 GUI (PySide6)                        ▢P5
 │  ├─ curve.py                   #   연속 보정곡선(국소가중/회귀) — 구간→1도별             ▢P6
-│  ├─ verify.py                  #   기준 엑셀 ↔ Tool 단계별 대조 리포트(±0.5MW)           ▢검증
+│  ├─ verify.py                  #   기준 엑셀 ↔ Tool 단계별 대조 리포트(±0.5MW)           ✅검증
 │  └─ data/                      #   base_table.json(61행), measurements_seed.json(32건)  ✅P1
 └─ tests/                        #   엑셀/골든 케이스 셀값 대조 자동 회귀                  ✅P1
 ```
