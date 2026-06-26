@@ -1,0 +1,8 @@
+"""위례열병합발전소 공급가능용량 입찰 산정 툴 (Mode3_AOH1000).
+
+Phase 1: 핵심 계산 엔진 (이론·보정·현실화). RiMS 취득·Profile 출력·GUI는 후속 Phase.
+"""
+from . import constants, correction, theory
+
+__all__ = ["constants", "theory", "correction"]
+__version__ = "0.1.0"
