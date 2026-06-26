@@ -37,10 +37,12 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                  deg: float = C.DEFAULT_DEG,
                  forecast: WeatherForecast | None = None, forecast_path: str | None = None,
                  bid_day: str | None = None, template_path: str | Path = DEFAULT_TEMPLATE,
-                 accumulate: bool = True) -> PipelineResult:
+                 accumulate: bool = True, correction_method: str = "bin",
+                 bandwidth: float = 3.5) -> PipelineResult:
     """전 단계 실행. connector 가 있으면 RiMS 자동취득·누적까지 수행.
 
     forecast/forecast_path 로 입찰 대기압(예보 중위 − 8) 결정. 없으면 ISO 1013.
+    correction_method: 'bin'(구간 평균, 기본) 또는 'curve'(연속 보정곡선).
     output_path 가 있으면 엑셀3 양식 입찰 파일 생성.
     """
     eng = engine or TheoryEngine()
@@ -56,16 +58,21 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     if connector is not None and accumulate:
         new_record = store.record_from_rims(connector, date, engine=eng, deg=deg)
 
-    # 3. 보정 테이블 재집계
+    # 3. 보정 테이블 재집계 (+ 곡선 토글)
     table = store.correction_table()
+    corrector = None
+    if correction_method == "curve":
+        from .curve import CorrectionCurve
+        corrector = CorrectionCurve(
+            [{"cit": r.cit, "corr": r.corr} for r in store.all()], bandwidth=bandwidth)
 
     # 4. 현실화 Profile + 엑셀3 출력
-    rows = build_profile(eng, table, pressure=pressure, deg=deg)
+    rows = build_profile(eng, table, pressure=pressure, deg=deg, corrector=corrector)
     out = None
     if output_path:
         out = fill_excel3_template(output_path, engine=eng, correction_table=table,
                                    pressure=pressure, deg=deg, forecast=forecast,
-                                   template_path=template_path)
+                                   template_path=template_path, corrector=corrector)
 
     return PipelineResult(date=date, applied_pressure=pressure, deg=deg,
                           measurement_count=store.count(), new_record=new_record,

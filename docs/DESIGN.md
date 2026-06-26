@@ -33,7 +33,7 @@ tool/                            # 프로젝트 루트
 │  ├─ pipeline.py                #   run_pipeline: 날짜→취득→누적→Profile→엑셀3 (E2E)      ✅E2E
 │  ├─ cli.py / __main__.py       #   CLI: run/list (크로스플랫폼)                          ✅E2E
 │  ├─ ui/app.py                  #   Windows 데스크톱 GUI (PySide6) — 셸, 사내 실행        ◐P5
-│  ├─ curve.py                   #   연속 보정곡선(국소가중/회귀) — 구간→1도별             ▢P6
+│  ├─ curve.py                   #   연속 보정곡선(국소가중/회귀) — 구간→1도별, 토글       ✅P6
 │  ├─ templates/                 #   excel3_profile_template.xlsx (최종 입찰 양식)         ✅P3
 │  └─ data/                      #   base_table.json(61행), measurements_seed.json(32건)  ✅P1
 └─ tests/                        #   엑셀/골든 케이스 셀값 대조 자동 회귀 (50건)           ✅
@@ -69,7 +69,7 @@ tool/                            # 프로젝트 루트
 | 3 | 온도 Profile 생성 | profile → 엑셀3 형식 .xlsx (openpyxl) | 여기 |
 | 4 | RiMS 커넥터 | base/mock(여기) + excel_addin 명세(사내 결선) | 분리 |
 | 5 | GUI + 날씨 업로드 | PySide6 앱, 엑셀3-1 로더 | 여기(빌드)/사내(실행) |
-| 6 | 연속 보정곡선 | curve (구간→1도별), 패키징(.exe), 사내 실연결 검증 | 사내 |
+| 6 | 연속 보정곡선 ✅ / 패키징(.exe)·사내 실연결·시운전 ▢ | curve(토글) ✅, 나머지 사내 | 여기 ✅ / 사내 |
 | **검증** | 시운전(병행운전): 골든 케이스 단계별 대조 ±0.5MW · 상시 회귀 · Tool 내장 검증모드 | verify.py + 케이스 테스트 | 각 Phase 병행 |
 
 > Phase 1~3·5(빌드)는 이 환경에서 구현·테스트, RiMS 실연결(Phase 4 excel_addin)·최종 검증은 사내 PC에서.

@@ -38,10 +38,11 @@ class ProfileRow:
 
 def build_profile(engine: TheoryEngine, correction_table: dict,
                   pressure: float = C.REF_PRESSURE, deg: float = C.DEFAULT_DEG,
-                  temps: list[int] | None = None) -> list[ProfileRow]:
+                  temps: list[int] | None = None, corrector=None) -> list[ProfileRow]:
     """온도별 이론/현실화 Profile(Mode3) 생성.
 
-    correction_table: store.correction_table() / aggregate_bins() 결과.
+    correction_table: store.correction_table() / aggregate_bins() 결과 (구간 방식).
+    corrector: 있으면 보정값을 corrector(CIT)로 산출(연속곡선 등). 없으면 구간 평균.
     """
     if temps is None:
         temps = list(range(-20, 41))
@@ -53,7 +54,7 @@ def build_profile(engine: TheoryEngine, correction_table: dict,
         cc_theory = engine.base_cc(t) * k + w
         gt_theory = engine.base_gt(t) * k + w * C.GT_RATIO
         st_theory = cc_theory - gt_theory
-        corr = applied_correction(t, correction_table)
+        corr = corrector(t) if corrector is not None else applied_correction(t, correction_table)
         cc_real_gross = min(cc_theory + corr, C.BID_CAP_GROSS)
         cc_real_net = realized_net(cc_theory, corr)         # min(gross-aux, 462)
         gt_real = gt_theory                                  # 보정값은 CC에만
@@ -163,17 +164,18 @@ def _fill_weather(wb, forecast) -> None:
 def fill_excel3_template(output_path: str, *, engine: TheoryEngine, correction_table: dict,
                          pressure: float = C.REF_PRESSURE, deg: float = C.DEFAULT_DEG,
                          forecast=None, template_path: str | Path = DEFAULT_TEMPLATE,
-                         mode3_sheet: str = "Mode3") -> str:
+                         mode3_sheet: str = "Mode3", corrector=None) -> str:
     """현실화 Mode3 GT/ST를 엑셀3 템플릿 Mode3!B5:C65 에 채워 최종 입찰 파일 생성.
 
     pressure: 입찰 적용 대기압(보통 weather.applied_pressure = 중위−8). 현실화값에 반영됨.
     forecast: 있으면 온도 Profile 날씨 블록도 채움(M2 적용대기압 갱신).
+    corrector: 있으면 연속곡선 등으로 보정값 산출(없으면 구간 평균).
     반환: output_path. (Excel에서 열면 6모드·온도Profile이 수식으로 재계산됨)
     """
     from openpyxl import load_workbook
 
     rows = build_profile(engine, correction_table, pressure=pressure, deg=deg,
-                         temps=list(range(-20, 41)))
+                         temps=list(range(-20, 41)), corrector=corrector)
     wb = load_workbook(template_path)            # 수식·서식 보존
     m3 = wb[mode3_sheet]
     for i, row in enumerate(rows):
