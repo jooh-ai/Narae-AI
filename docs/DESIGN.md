@@ -20,27 +20,20 @@
 ## 3. 아키텍처
 
 ```
-wirye_capacity_tool/
-├─ wirye_capacity/            # ── 순수 Python 코어 (OS·Excel 무관, 테스트 가능)
-│  ├─ constants.py            #   물리/사이트 상수 (P_corr, 450.4, W밴드, cap, 구간)   ✅Phase1
-│  ├─ data/
-│  │   ├─ base_table.json     #   온도별 base 계수 61행(−20~40°C) = 엑셀2 곡선 동결값   ✅Phase1
-│  │   └─ measurements_seed.json  # 실측 32건 시드(엑셀4 실측데이터)                    ✅Phase1
-│  ├─ theory.py               #   이론엔진: base×(1.028/Deg)/P_corr (+W)                ✅Phase1
-│  ├─ correction.py           #   보정값=실측−이론−W, 구간집계, 현실화 Net              ✅Phase1
-│  ├─ profile.py              #   온도 Profile 생성 → 엑셀3 형식 .xlsx                  ▢Phase3
-│  └─ curve.py                #   연속 보정곡선(국소가중/회귀) — 구간→1도별 전환        ▢Phase6
-├─ rims/                      # ── RiMS 취득 (커넥터 추상화)
-│  ├─ base.py                 #   RimsConnector 인터페이스 (acquire(window)→TagSet)     ▢Phase4
-│  ├─ excel_addin.py          #   실제: Excel COM + fnTagStat (Windows, 사내 결선)      ▢Phase4
-│  └─ mock.py                 #   개발/테스트용 mock (시드 기반)                        ▢Phase4
-├─ store/
-│  └─ repo.py                 #   테스트결과 저장·List-up (SQLite)                      ▢Phase2
-├─ weather/
-│  └─ loader.py               #   엑셀3-1 파싱 → 중위 대기압 −8mbar                     ▢Phase5
-├─ ui/
-│  └─ app.py                  #   Windows 데스크톱 GUI (PySide6)                        ▢Phase5
-└─ tests/                     #   엑셀 셀값 대조 검증                                   ✅Phase1
+tool/                            # 프로젝트 루트
+├─ wirye_capacity/               # ── 단일 Python 패키지 (코어는 OS·Excel 무관)
+│  ├─ constants.py               #   물리/사이트 상수 (P_corr, 450.4, W밴드, cap462, 구간)  ✅P1
+│  ├─ theory.py                  #   이론엔진: base×(1.028/Deg)/P_corr (+W)                ✅P1
+│  ├─ correction.py              #   보정값=실측−이론−W, 구간집계, 현실화 Net              ✅P1
+│  ├─ store.py                   #   테스트결과 저장·List-up (SQLite)                      ▢P2
+│  ├─ profile.py                 #   온도 Profile 생성 → 엑셀3 형식 .xlsx                  ▢P3
+│  ├─ rims/                      #   RiMS 취득 커넥터 (base / mock / excel_addin)          ▢P4
+│  ├─ weather.py                 #   엑셀3-1 파싱 → 중위 대기압 −8mbar                     ▢P5
+│  ├─ ui/app.py                  #   Windows 데스크톱 GUI (PySide6)                        ▢P5
+│  ├─ curve.py                   #   연속 보정곡선(국소가중/회귀) — 구간→1도별             ▢P6
+│  ├─ verify.py                  #   기준 엑셀 ↔ Tool 단계별 대조 리포트(±0.5MW)           ▢검증
+│  └─ data/                      #   base_table.json(61행), measurements_seed.json(32건)  ✅P1
+└─ tests/                        #   엑셀/골든 케이스 셀값 대조 자동 회귀                  ✅P1
 ```
 
 ## 4. 데이터 흐름 (실행 클릭 1회)
@@ -74,8 +67,10 @@ wirye_capacity_tool/
 | 4 | RiMS 커넥터 | base/mock(여기) + excel_addin 명세(사내 결선) | 분리 |
 | 5 | GUI + 날씨 업로드 | PySide6 앱, 엑셀3-1 로더 | 여기(빌드)/사내(실행) |
 | 6 | 연속 보정곡선 | curve (구간→1도별), 패키징(.exe), 사내 실연결 검증 | 사내 |
+| **검증** | 시운전(병행운전): 골든 케이스 단계별 대조 ±0.5MW · 상시 회귀 · Tool 내장 검증모드 | verify.py + 케이스 테스트 | 각 Phase 병행 |
 
 > Phase 1~3·5(빌드)는 이 환경에서 구현·테스트, RiMS 실연결(Phase 4 excel_addin)·최종 검증은 사내 PC에서.
+> 검증은 별도 단계가 아니라 각 Phase와 병행(§8) — 각 체크포인트를 골든 케이스로 자동 회귀화한다.
 
 ## 6. 핵심 수식 (코드 반영 완료)
 
@@ -97,3 +92,24 @@ P_corr(P)   = 1.208792e-6·(P−1013)² − 9.82435e-4·(P−1013) + 1
 2. **W 입력원** — 테스트별 W(IGV)는 실적값(운전/RiMS)을 직접 사용. Profile 생성 시에는 밴드함수 기본값.
 3. **연속곡선 전환 기준** — 구간(bin)→1도별 전환 시점/방식(국소가중 vs 회귀). 데이터 누적 추이 보며 결정.
 4. **엑셀3-1 포맷 고정** — 크롤러 산출 엑셀의 시트/셀 레이아웃을 로더가 의존하므로 포맷 합의 필요.
+
+## 8. 시운전·검증 (Commissioning)
+
+**목적** — 기존 검증된 엑셀 워크플로우를 "정답(기준)"으로 두고, Tool이 허용오차 내에서 재현함을 확인한 뒤 실입찰에 전환(발전소 병행운전과 동일 개념).
+
+**허용오차** — CC 출력 **±0.5 MW** (사용자 확정 2026-06-26, 추후 조정 가능).
+
+**단계별 체크포인트** — 최종값만이 아니라 각 단계에서 대조:
+
+| 체크포인트 | Tool | ↔ 기준(엑셀) |
+|---|---|---|
+| ① 실측 취득 | rims 커넥터 | 엑셀1 8행 |
+| ② 이론기준값 | theory.theory_cc | 엑셀2 O열 |
+| ③ 보정값 | correction | 엑셀4 J열 |
+| ④ 온도 Profile | profile | 엑셀3 온도 Profile(온도별·모드별) |
+
+**골든 케이스** — (입력 + 정답출력) 한 세트. 보정값 계층은 실측 32건으로 이미 확보·자동검증(Phase 1·2). 추가 케이스(① 대기압 변형 Profile, ② Deg 변형 Profile, ③ 신규 테스트 1건)는 사용자 제공 시점에 회귀 테스트로 편입.
+
+**병행운전** — 배포 후 실제 테스트 2~3 사이클 동안 Tool↔수기 엑셀을 나란히 대조, 차이 로그 → 신뢰 확보 후 전환.
+
+**Tool 내장 검증 모드** (`verify.py`) — 기준 엑셀을 업로드하면 같은 입력으로 Tool을 돌려 **단계별 차이 리포트(합격/불합격, ±0.5 MW)** 출력. 일회성 시운전이자 상시 QA 도구.
