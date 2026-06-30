@@ -66,6 +66,38 @@ def aggregate_bins(records: list[dict]) -> dict[tuple[int, int], dict]:
     return out
 
 
+# 보정값 현황 표시용 구간 종류 라벨 (엑셀4 '보정값 현황' 시트)
+_KIND_LABEL = {
+    "shaft_limit": "Shaft Limit(이론 고정)",
+    "fixed": "보수적 고정",
+    "avg": "실측 평균",
+}
+
+
+def status_rows(bin_table: dict[tuple[int, int], dict]) -> list[dict]:
+    """엑셀4 '보정값 현황' 시트를 그대로 보여주기 위한 행 목록(구간 순서).
+
+    각 행: {bin, bin_label, kind, kind_label, count, target, avg, applied, status}
+      - avg/applied 는 float 또는 None(데이터 없음), 렌더러가 포맷.
+    GUI 탭·CLI 출력이 공유하는 단일 표시 소스(로직과 화면 분리).
+    """
+    rows: list[dict] = []
+    for lo, hi, kind in C.BINS:
+        info = bin_table.get((lo, hi), {})
+        rows.append({
+            "bin": (lo, hi),
+            "bin_label": f"{lo}~{hi}°C",
+            "kind": kind,
+            "kind_label": _KIND_LABEL.get(kind, kind),
+            "count": info.get("count", 0),
+            "target": C.BIN_TARGET_COUNT.get((lo, hi)),
+            "avg": info.get("avg"),
+            "applied": info.get("applied"),
+            "status": info.get("status", ""),
+        })
+    return rows
+
+
 def applied_correction(cit: float, bin_table: dict[tuple[int, int], dict]) -> float:
     """주어진 CIT에 적용할 보정값(현재 구간 방식). 구간 밖이면 0."""
     b = bin_for(cit)

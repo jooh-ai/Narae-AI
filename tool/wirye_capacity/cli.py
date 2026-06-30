@@ -18,6 +18,34 @@ from .store import MeasurementStore
 DEFAULT_DB = str(Path.home() / "wirye_measurements.db")
 
 
+def _disp_width(s: str) -> int:
+    """터미널 표시 폭 (한글·CJK = 2칸)."""
+    import unicodedata
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in str(s))
+
+
+def _pad(s, width: int, right: bool = False) -> str:
+    """표시 폭 기준 정렬 패딩 (한글 폭 보정)."""
+    s = str(s)
+    gap = max(0, width - _disp_width(s))
+    return (" " * gap + s) if right else (s + " " * gap)
+
+
+def _print_status(table) -> None:
+    """온도구간별 보정값 현황 출력 (엑셀4 '보정값 현황' 시트)."""
+    from .correction import status_rows
+    print("\n보정값 현황 (엑셀4 '보정값 현황'):")
+    print("  " + _pad("구간", 11) + _pad("종류", 24) + _pad("건수", 8, True)
+          + _pad("실측평균", 11, True) + _pad("적용값", 10, True) + "  상태")
+    for r in status_rows(table):
+        cnt = f"{r['count']}/{r['target']}" if r["target"] else str(r["count"])
+        avg = f"{r['avg']:+.2f}" if r["avg"] is not None else "-"
+        applied = f"{r['applied']:+.2f}" if r["applied"] is not None else "-"
+        print("  " + _pad(r["bin_label"], 11) + _pad(r["kind_label"], 24)
+              + _pad(cnt, 8, True) + _pad(avg, 11, True) + _pad(applied, 10, True)
+              + "  " + r["status"])
+
+
 def _build_connector(args):
     if getattr(args, "mock", False):
         return MockRimsConnector.from_seed()
@@ -86,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"누적 건수   : {res.measurement_count}")
         if res.output_path:
             print(f"입찰 파일   : {res.output_path}")
+        _print_status(res.correction_table)
         store.close()
         return 0
 
@@ -96,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         for rec in rows:
             print(f"  {str(rec.get('date') or '-'):>12} | CIT {rec['cit']:>5}°C | "
                   f"보정 {rec['corr']:+.2f} MW | {rec.get('season') or ''}")
+        _print_status(store.correction_table())
         store.close()
         return 0
 

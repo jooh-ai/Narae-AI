@@ -48,6 +48,26 @@ def test_list_after_run(tmp_path, capsys):
     assert "CIT" in out
 
 
+def test_run_prints_correction_status(tmp_path, capsys):
+    """run 출력에 엑셀4식 '보정값 현황' 표가 함께 표시된다."""
+    db = str(tmp_path / "m.db")
+    main(["run", "--date", "2025-T05", "--mock", "--seed", "--db", db])
+    out = capsys.readouterr().out
+    assert "보정값 현황" in out
+    assert "Shaft Limit" in out          # 구간 종류 표식
+    assert "보수적 고정" in out          # 고정 구간 표식
+
+
+def test_list_prints_correction_status(tmp_path, capsys):
+    db = str(tmp_path / "m.db")
+    main(["run", "--date", "2025-T01", "--mock", "--seed", "--accumulate", "--db", db])
+    capsys.readouterr()
+    main(["list", "--db", db])
+    out = capsys.readouterr().out
+    assert "보정값 현황" in out
+    assert "°C" in out                   # 온도구간 라벨
+
+
 def test_verify_cli_self_pass(tmp_path, capsys):
     """verify: Tool 생성본(tool 양식)을 기준으로 자기대조 → PASS."""
     from wirye_capacity.profile import build_profile, write_xlsx

@@ -7,6 +7,7 @@ import pytest
 from wirye_capacity import constants as C
 from wirye_capacity.correction import (
     aggregate_bins, applied_correction, bin_for, correction_value, realized_net,
+    status_rows,
 )
 
 SEED = json.loads(
@@ -69,3 +70,37 @@ def test_realized_net_and_cap():
     assert realized_net(418.293, -2.39) == pytest.approx(418.293 - 2.39 - 10.0, abs=1e-6)
     # 상한: Net 462 초과 시 cap
     assert realized_net(500.0, 10.0) == C.BID_CAP_NET
+
+
+def test_status_rows_mirror_excel4_status_sheet():
+    """status_rows: 구간 순서·건수·평균·적용값·상태가 보정값 현황과 일치(표시용 단일 소스)."""
+    table = aggregate_bins(SEED)
+    rows = status_rows(table)
+    # 구간 8개가 BINS 순서 그대로
+    assert [r["bin"] for r in rows] == [(lo, hi) for lo, hi, _ in C.BINS]
+    by_bin = {r["bin"]: r for r in rows}
+    # avg 구간: 실측 평균·건수 그대로 노출
+    assert by_bin[(0, 10)]["count"] == 8
+    assert by_bin[(0, 10)]["avg"] == pytest.approx(5.78, abs=0.01)
+    assert by_bin[(0, 10)]["applied"] == pytest.approx(5.78, abs=0.01)
+    assert by_bin[(0, 10)]["target"] == 15            # 신뢰 목표 건수
+    assert "8/15" in by_bin[(0, 10)]["status"]        # 목표 미달(🔴) 표기
+    # 목표 건수 충족 시 🟢 자동반영
+    green = status_rows(aggregate_bins([{"cit": 5, "corr": 5.0} for _ in range(15)]))
+    g = next(r for r in green if r["bin"] == (0, 10))
+    assert "🟢" in g["status"] and "자동반영" in g["status"]
+    # Shaft Limit: 적용 0, 상태 표식
+    assert by_bin[(-20, -14)]["applied"] == 0.0
+    assert "Shaft Limit" in by_bin[(-20, -14)]["status"]
+    # 보수적 고정: 적용 8.78
+    assert by_bin[(-14, 0)]["applied"] == pytest.approx(8.78, abs=1e-9)
+    assert by_bin[(-14, 0)]["kind_label"] == "보수적 고정"
+
+
+def test_status_rows_empty_table_no_crash():
+    """데이터 0건이어도 8구간 모두 나오고 avg=None."""
+    rows = status_rows(aggregate_bins([]))
+    assert len(rows) == len(C.BINS)
+    avg_bin = next(r for r in rows if r["kind"] == "avg")
+    assert avg_bin["count"] == 0 and avg_bin["avg"] is None
+    assert "데이터 없음" in avg_bin["status"]

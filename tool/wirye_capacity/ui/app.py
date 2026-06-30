@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from .. import constants as C
+from ..correction import status_rows
 from ..pipeline import run_pipeline
 from ..store import MeasurementStore
 from ..theory import TheoryEngine
@@ -55,9 +56,11 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
 
             tabs = QtWidgets.QTabWidget()
             tabs.addTab(self._run_tab(), "실행")
+            tabs.addTab(self._status_tab(), "보정값 현황")
             tabs.addTab(self._list_tab(), "List-up")
             self.setCentralWidget(tabs)
             self._refresh_list()
+            self._refresh_status(self.store.correction_table())   # 시작 시 현재 누적 기준
 
         # ---------- 실행 탭 ----------
         def _run_tab(self):
@@ -163,6 +166,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 msg.append(f"저장: {res.output_path}")
             self.summary.setText("   |   ".join(msg))
             self._fill_profile(res.profile_rows)
+            self._refresh_status(res.correction_table)
             self._refresh_list()
 
         def _fill_profile(self, rows):
@@ -172,6 +176,34 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                         round(r.cc_real_net, 2)]
                 for j, v in enumerate(vals):
                     self.profile_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
+
+        # ---------- 보정값 현황 탭 (엑셀4 '보정값 현황' 재현) ----------
+        def _status_tab(self):
+            w = QtWidgets.QWidget()
+            lay = QtWidgets.QVBoxLayout(w)
+            cap = QtWidgets.QLabel(
+                "온도구간별 보정값 현황 (엑셀4 '보정값 현황' 시트와 동일). "
+                "🟢 자동반영 · 🔴 데이터 부족 · △ 보수적 고정 · ─ Shaft Limit")
+            cap.setWordWrap(True)
+            self.status_tbl = QtWidgets.QTableWidget(0, 6)
+            self.status_tbl.setHorizontalHeaderLabels(
+                ["온도구간", "종류", "건수/목표", "실측평균", "적용 보정값", "상태"])
+            self.status_tbl.horizontalHeader().setStretchLastSection(True)
+            lay.addWidget(cap)
+            lay.addWidget(self.status_tbl)
+            return w
+
+        def _refresh_status(self, table):
+            rows = status_rows(table)
+            self.status_tbl.setRowCount(len(rows))
+            for i, r in enumerate(rows):
+                cnt = f"{r['count']}/{r['target']}" if r["target"] else str(r["count"])
+                avg = f"{r['avg']:+.2f}" if r["avg"] is not None else "-"
+                applied = f"{r['applied']:+.2f}" if r["applied"] is not None else "-"
+                vals = [r["bin_label"], r["kind_label"], cnt, avg, applied, r["status"]]
+                for j, v in enumerate(vals):
+                    item = QtWidgets.QTableWidgetItem(str(v))
+                    self.status_tbl.setItem(i, j, item)
 
         # ---------- List-up 탭 ----------
         def _list_tab(self):
