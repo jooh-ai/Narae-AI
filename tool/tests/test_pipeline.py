@@ -32,10 +32,11 @@ def test_end_to_end_creates_bid_file(tmp_path, forecast):
     out = str(tmp_path / "bid.xlsx")
 
     res = run_pipeline(date="2025-09-12", store=store, output_path=out,
-                       connector=conn, forecast=forecast, deg=1.028)
+                       connector=conn, forecast=forecast, deg=1.028, accumulate=True)
 
-    # 누적 1건 증가 (32 → 33)
+    # 누적 1건 증가 (32 → 33), 반영됨
     assert res.measurement_count == 33
+    assert res.reflected is True
     assert res.new_record is not None and res.new_record.cit == 25.5
     # 적용 대기압 = 전체 중위 평균 − 8
     mean_med = sum(forecast.pressure_median.values()) / len(forecast.pressure_median)
@@ -58,10 +59,40 @@ def test_new_test_shifts_correction(tmp_path, forecast):
     conn = MockRimsConnector({
         "2025-09-20": AcquiredTest(date="2025-09-20", cit=26.0, pressure=1013.0,
                                    cc_meas=999.0)})   # 비현실적으로 큰 실측 → 평균 상승
-    res = run_pipeline(date="2025-09-20", store=store, connector=conn, forecast=forecast)
+    res = run_pipeline(date="2025-09-20", store=store, connector=conn, forecast=forecast,
+                       accumulate=True)
     after = res.correction_table[(25, 30)]
     assert after["count"] == 5            # 4 → 5
     assert after["avg"] > before          # 평균 이동
+
+
+def test_preview_does_not_store(forecast):
+    """기본(미반영): 취득·보정값 계산만, 누적은 그대로."""
+    store = MeasurementStore(":memory:"); store.seed()
+    conn = MockRimsConnector({
+        "2025-09-12": AcquiredTest(date="2025-09-12", cit=25.5, pressure=1008.0,
+                                   cc_meas=414.5)})
+    res = run_pipeline(date="2025-09-12", store=store, connector=conn, forecast=forecast)
+    assert res.new_record is not None          # 보정값은 계산됨(표시용)
+    assert res.reflected is False
+    assert res.measurement_count == 32         # 저장 안 됨
+    store.close()
+
+
+def test_duplicate_date_skipped(forecast):
+    """같은 날짜 반영 두 번 → 두 번째는 건너뜀(중복 방지)."""
+    store = MeasurementStore(":memory:"); store.seed()
+    conn = MockRimsConnector({
+        "2025-09-12": AcquiredTest(date="2025-09-12", cit=25.5, pressure=1008.0,
+                                   cc_meas=414.5)})
+    r1 = run_pipeline(date="2025-09-12", store=store, connector=conn,
+                      forecast=forecast, accumulate=True)
+    assert r1.reflected and store.count() == 33
+    r2 = run_pipeline(date="2025-09-12", store=store, connector=conn,
+                      forecast=forecast, accumulate=True)
+    assert r2.duplicate_skipped and not r2.reflected
+    assert store.count() == 33                 # 그대로
+    store.close()
 
 
 def test_no_connector_just_builds_profile(forecast):

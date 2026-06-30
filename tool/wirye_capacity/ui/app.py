@@ -71,6 +71,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.bidday_in = QtWidgets.QLineEdit()
             self.bidday_in.setPlaceholderText("입찰 적용일 라벨(선택, 미입력 시 전체 중위 평균)")
             self.curve_chk = QtWidgets.QCheckBox("연속 보정곡선 사용")
+            self.accum_chk = QtWidgets.QCheckBox("이 테스트를 누적에 반영(저장)")
+            self.accum_chk.setToolTip("체크 안 하면 확인용(보정값만 표시, 누적 미저장)")
             self.forecast_in = self._file_row("엑셀3-1 (날씨)")
             self.workbook_in = self._file_row("엑셀1 (RiMS) — 실제 취득")
             self.mock_chk = QtWidgets.QCheckBox("mock RiMS 사용(테스트)")
@@ -83,6 +85,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             form.addRow("RiMS", self.workbook_in["row"])
             form.addRow("", self.mock_chk)
             form.addRow("", self.curve_chk)
+            form.addRow("", self.accum_chk)
             form.addRow("출력", self.out_in["row"])
 
             self.run_btn = QtWidgets.QPushButton("▶ 실행 (취득 → 누적 → 입찰파일 생성)")
@@ -140,6 +143,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     connector=build_connector(use_mock, workbook),
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
+                    accumulate=self.accum_chk.isChecked(),
                     correction_method="curve" if self.curve_chk.isChecked() else "bin",
                     forecast_path=self.forecast_in["edit"].text().strip() or None)
             except Exception as e:  # noqa: BLE001
@@ -151,8 +155,10 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             msg = [f"적용 대기압: {res.applied_pressure:.1f} mbar",
                    f"누적: {res.measurement_count}건"]
             if res.new_record is not None:
+                st = ("✅반영" if res.reflected else
+                      "⚠중복-건너뜀" if res.duplicate_skipped else "확인용(미반영)")
                 msg.append(f"신규 보정값(CIT {res.new_record.cit}°C): "
-                           f"{res.new_record.corr:+.2f} MW")
+                           f"{res.new_record.corr:+.2f} MW [{st}]")
             if res.output_path:
                 msg.append(f"저장: {res.output_path}")
             self.summary.setText("   |   ".join(msg))

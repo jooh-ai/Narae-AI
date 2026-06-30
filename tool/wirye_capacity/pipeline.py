@@ -30,6 +30,8 @@ class PipelineResult:
     correction_table: dict
     profile_rows: list = field(default_factory=list)
     output_path: str | None = None
+    reflected: bool = False          # 이번 테스트가 누적에 반영(저장)됐는지
+    duplicate_skipped: bool = False  # 같은 날짜가 이미 있어 반영을 건너뛰었는지
 
 
 def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None = None,
@@ -37,10 +39,12 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                  deg: float = C.DEFAULT_DEG,
                  forecast: WeatherForecast | None = None, forecast_path: str | None = None,
                  bid_day: str | None = None, template_path: str | Path = DEFAULT_TEMPLATE,
-                 accumulate: bool = True, correction_method: str = "bin",
+                 accumulate: bool = False, correction_method: str = "bin",
                  bandwidth: float = 3.5) -> PipelineResult:
-    """전 단계 실행. connector 가 있으면 RiMS 자동취득·누적까지 수행.
+    """전 단계 실행. connector 가 있으면 RiMS 자동취득.
 
+    accumulate=False(기본): 취득·보정값 계산만(확인용) — 누적에 저장 안 함.
+    accumulate=True: 그 테스트를 누적에 반영(저장). 같은 날짜가 이미 있으면 건너뜀.
     forecast/forecast_path 로 입찰 대기압(예보 중위 − 8) 결정. 없으면 ISO 1013.
     correction_method: 'bin'(구간 평균, 기본) 또는 'curve'(연속 보정곡선).
     output_path 가 있으면 엑셀3 양식 입찰 파일 생성.
@@ -53,10 +57,18 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     pressure = (applied_pressure(forecast, day=bid_day) if forecast is not None
                 else C.REF_PRESSURE)
 
-    # 2. RiMS 자동취득 → 누적
+    # 2. RiMS 취득 → 보정값 계산(확인용). 반영(저장)은 accumulate=True 일 때만.
     new_record = None
-    if connector is not None and accumulate:
-        new_record = store.record_from_rims(connector, date, engine=eng, deg=deg)
+    reflected = False
+    duplicate_skipped = False
+    if connector is not None:
+        new_record = store.compute_from_rims(connector, date, engine=eng, deg=deg)
+        if accumulate:
+            if store.has_date(date):
+                duplicate_skipped = True            # 같은 날짜 이미 반영됨 → 중복 방지
+            else:
+                store.add(new_record)
+                reflected = True
 
     # 3. 보정 테이블 재집계 (+ 곡선 토글)
     table = store.correction_table()
@@ -76,4 +88,5 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
 
     return PipelineResult(date=date, applied_pressure=pressure, deg=deg,
                           measurement_count=store.count(), new_record=new_record,
-                          correction_table=table, profile_rows=rows, output_path=out)
+                          correction_table=table, profile_rows=rows, output_path=out,
+                          reflected=reflected, duplicate_skipped=duplicate_skipped)

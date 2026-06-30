@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--bid-day", dest="bid_day", default=None,
                    help="입찰 적용일(엑셀3-1 일자 라벨). 미지정 시 전체 중위 평균")
     r.add_argument("--curve", action="store_true", help="연속 보정곡선 사용(기본: 구간 평균)")
+    r.add_argument("--accumulate", action="store_true",
+                   help="이 테스트를 누적에 반영(저장). 기본은 확인용(미반영)")
     r.add_argument("--seed", action="store_true", help="DB가 비었으면 시드 32건 적재")
 
     li = sub.add_parser("list", help="누적 테스트 List-up")
@@ -71,13 +73,16 @@ def main(argv: list[str] | None = None) -> int:
             store.seed()
         res = run_pipeline(date=args.date, store=store, output_path=args.out,
                            connector=_build_connector(args), forecast_path=args.forecast,
-                           deg=args.deg, bid_day=args.bid_day,
+                           deg=args.deg, bid_day=args.bid_day, accumulate=args.accumulate,
                            correction_method="curve" if args.curve else "bin")
         src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
         print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
         if res.new_record is not None:
+            status = ("✅ 누적 반영됨" if res.reflected else
+                      "⚠ 이미 반영된 날짜 — 건너뜀" if res.duplicate_skipped else
+                      "확인용(미반영)")
             print(f"신규 취득   : CIT {res.new_record.cit}°C, "
-                  f"보정값 {res.new_record.corr:+.2f} MW")
+                  f"보정값 {res.new_record.corr:+.2f} MW  [{status}]")
         print(f"누적 건수   : {res.measurement_count}")
         if res.output_path:
             print(f"입찰 파일   : {res.output_path}")
