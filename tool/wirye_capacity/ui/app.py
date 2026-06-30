@@ -78,6 +78,13 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.accum_chk.setToolTip("체크 안 하면 확인용(보정값만 표시, 누적 미저장)")
             self.forecast_in = self._file_row("엑셀3-1 (날씨)")
             self.workbook_in = self._file_row("엑셀1 (RiMS) — 실제 취득")
+            self.workbook_in["edit"].setPlaceholderText(
+                "exe와 같은 폴더에 엑셀1을 두면 자동 감지 — 비워두면 자동 탐색")
+            # 시작 시 exe(또는 현재) 폴더의 엑셀1 자동 감지 → 날짜·시간만 입력하면 됨
+            from ..rims.locate import resolve_workbook
+            _found = resolve_workbook()
+            if _found is not None and _found.exists():
+                self.workbook_in["edit"].setText(str(_found))
             self.mock_chk = QtWidgets.QCheckBox("mock RiMS 사용(테스트)")
             self.out_in = self._file_row("출력 엑셀3 입찰파일", save=True)
 

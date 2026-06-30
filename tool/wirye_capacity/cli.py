@@ -49,9 +49,17 @@ def _print_status(table) -> None:
 def _build_connector(args):
     if getattr(args, "mock", False):
         return MockRimsConnector.from_seed()
-    if getattr(args, "workbook", None):
+    wb = getattr(args, "workbook", None)
+    if not wb:
+        # exe(또는 현재 폴더) 옆에 둔 엑셀1 자동 감지 → 날짜·시간만 입력하면 됨
+        from .rims.locate import resolve_workbook
+        found = resolve_workbook()
+        if found and found.exists():
+            wb = str(found)
+            print(f"엑셀1 자동 감지 : {found.name}  ({found.parent})")
+    if wb:
         from .rims.excel_addin import ExcelAddinRimsConnector
-        return ExcelAddinRimsConnector(args.workbook)
+        return ExcelAddinRimsConnector(wb)
     return None
 
 
@@ -79,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
     li.add_argument("--db", default=DEFAULT_DB)
 
     ck = sub.add_parser("check-rims", help="RiMS 단건 취득값 출력(수동값과 대조용)")
-    ck.add_argument("--workbook", required=True, help="엑셀1(RiMS 시트) 경로")
+    ck.add_argument("--workbook", help="엑셀1(RiMS 시트) 경로. 생략 시 exe/현재 폴더에서 자동 감지")
     ck.add_argument("--date", required=True)
     ck.add_argument("--start", default="17:00")
     ck.add_argument("--sheet", default="RiMS 계산 Sheet")
@@ -131,7 +139,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "check-rims":
         from .rims.excel_addin import ExcelAddinRimsConnector
-        conn = ExcelAddinRimsConnector(args.workbook, sheet=args.sheet)
+        from .rims.locate import resolve_workbook
+        wb = resolve_workbook(args.workbook)
+        if wb is None or not wb.exists():
+            print("엑셀1을 찾지 못했습니다. --workbook 로 경로를 지정하거나 "
+                  "exe/현재 폴더에 엑셀1(.xlsx)을 두세요.")
+            return 1
+        if not args.workbook:
+            print(f"엑셀1 자동 감지 : {wb.name}  ({wb.parent})")
+        conn = ExcelAddinRimsConnector(str(wb), sheet=args.sheet)
         acq = conn.acquire(args.date, args.start)
         print(f"RiMS 취득 ({args.date} {args.start}~):")
         print(f"  CIT        : {acq.cit} °C")
