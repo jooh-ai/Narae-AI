@@ -48,6 +48,21 @@ def main(argv: list[str] | None = None) -> int:
     li = sub.add_parser("list", help="누적 테스트 List-up")
     li.add_argument("--db", default=DEFAULT_DB)
 
+    ck = sub.add_parser("check-rims", help="RiMS 단건 취득값 출력(수동값과 대조용)")
+    ck.add_argument("--workbook", required=True, help="엑셀1(RiMS 시트) 경로")
+    ck.add_argument("--date", required=True)
+    ck.add_argument("--start", default="17:00")
+    ck.add_argument("--sheet", default="RiMS 계산 Sheet")
+
+    vf = sub.add_parser("verify", help="시운전: 기준 엑셀 ↔ Tool Profile 대조(±tol)")
+    vf.add_argument("--ref", required=True, help="기준 엑셀(기존 온도 Profile) 경로")
+    vf.add_argument("--layout", default="excel4", choices=["excel4", "tool"])
+    vf.add_argument("--db", default=DEFAULT_DB)
+    vf.add_argument("--pressure", type=float, default=C.REF_PRESSURE)
+    vf.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
+    vf.add_argument("--curve", action="store_true")
+    vf.add_argument("--tol", type=float, default=0.5)
+
     args = p.parse_args(argv)
 
     if args.cmd == "run":
@@ -78,6 +93,43 @@ def main(argv: list[str] | None = None) -> int:
                   f"보정 {rec['corr']:+.2f} MW | {rec.get('season') or ''}")
         store.close()
         return 0
+
+    if args.cmd == "check-rims":
+        from .rims.excel_addin import ExcelAddinRimsConnector
+        conn = ExcelAddinRimsConnector(args.workbook, sheet=args.sheet)
+        acq = conn.acquire(args.date, args.start)
+        print(f"RiMS 취득 ({args.date} {args.start}~):")
+        print(f"  CIT        : {acq.cit} °C")
+        print(f"  대기압     : {acq.pressure} mbar")
+        print(f"  상대습도   : {acq.rh} %")
+        print(f"  GT/ST      : {acq.gt_meas} / {acq.st_meas} MW")
+        print(f"  CC Gross   : {acq.cc_meas} MW")
+        print("→ 엑셀1을 같은 날짜·시각으로 수동 취득한 8행 값과 일치하는지 대조하세요.")
+        return 0
+
+    if args.cmd == "verify":
+        from .profile import build_profile
+        from .theory import TheoryEngine
+        from .verify import compare_profile, read_reference_xlsx
+        eng = TheoryEngine()
+        store = MeasurementStore(args.db)
+        corrector = None
+        if args.curve:
+            from .curve import CorrectionCurve
+            corrector = CorrectionCurve(
+                [{"cit": r.cit, "corr": r.corr} for r in store.all()])
+        rows = build_profile(eng, store.correction_table(), pressure=args.pressure,
+                             deg=args.deg, corrector=corrector)
+        ref = read_reference_xlsx(args.ref, layout=args.layout)
+        fields = ["cc_theory", "cc_real_gross"] if args.layout == "excel4" else None
+        rep = compare_profile(rows, ref, tol=args.tol,
+                              fields=fields or ["cc_theory", "cc_real_gross", "cc_real_net"])
+        print(rep.summary())
+        for f in rep.failures[:20]:
+            print(f"  ✗ {f['temp']:>3}°C {f['field']:<14} Tool {f['tool']:.2f} "
+                  f"vs 기준 {f['ref']:.2f}  (차이 {f['diff']:+.2f})")
+        store.close()
+        return 0 if rep.passed else 2
 
     return 1
 
