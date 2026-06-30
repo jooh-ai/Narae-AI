@@ -1,8 +1,9 @@
-# Phase 1~3. 코어(theory/correction/store)는 표준 라이브러리만 사용.
+# Core (theory/correction/store/profile) uses only the Python standard library.
+# ASCII-only on purpose: Korean comments break pip on cp949 (Korean Windows).
 pytest>=7.0
-openpyxl>=3.1     # Phase 3: 엑셀3 형식 '온도 Profile' .xlsx 생성 (+ 향후 엑셀3-1 파싱)
+openpyxl>=3.1     # excel3-format temperature Profile .xlsx output (+ excel3-1 parsing)
 
-# 후속 Phase 의존성 (참고):
-#   xlwings      # RiMS fnTagStat 애드인 구동(Excel COM, Windows)  [또는 pywin32]
-#   PySide6      # Windows 데스크톱 GUI
-#   numpy        # 연속 보정곡선(향후)
+# On-site / GUI extras (install separately on the plant PC):
+#   xlwings        # drive RiMS fnTagStat add-in via Excel COM (Windows)  [or pywin32]
+#   PySide6        # Windows desktop GUI
+#   pyinstaller    # build standalone .exe
