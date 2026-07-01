@@ -54,7 +54,7 @@ FULL_TAGS = [
     ("GT Exhaust Pr",  "10MBA10CP011//XQ01", 568.0334),
     ("Basin Temp1",    "10PAB21CT901//ZQ01", 23.7217),
     ("Basin Temp2",    "10PAB31CT901//ZQ01", 30.3026),
-    ("Gcal/h",         "10NDD10FJ001//XQ01", 38.2268),
+    ("Gcal/h",         "10NDD10FJ001//ZQ01", 38.2268),
 ]
 REF_DATE = "2026-05-05"   # FULL_TAGS 기준값이 유효한 날짜
 
