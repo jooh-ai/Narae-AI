@@ -12,8 +12,9 @@
 
 필요:  pip install asyncua
 실행:
-  python scripts/opcua_probe.py
-  python scripts/opcua_probe.py opc.tcp://<서버>:51236/Capstone/UAServer   # localhost 실패 시
+  python scripts/opcua_probe.py --host <서버이름>     # 51236~51242 포트 자동 스윕(권장)
+  python scripts/opcua_probe.py opc.tcp://<서버>:51236/Capstone/UAServer   # 특정 엔드포인트
+  python scripts/opcua_probe.py                        # localhost(로컬 서버 있을 때)
 """
 from __future__ import annotations
 
@@ -22,7 +23,20 @@ import sys
 from datetime import datetime, timedelta
 
 DEFAULT_EP = "opc.tcp://localhost:51235/Capstone/OPCUAServer"
+# 사이트 서버(UASiteConfiguration.xml)에서 확인된 UA 서버 포트 후보 + 경로
+SITE_PORTS = (51236, 51237, 51238, 51239, 51240, 51241, 51242, 51235)
+SITE_PATH = "/Capstone/UAServer"
 CIT_TAG = "WR.PB.10MBA11CT901////ZQ01"     # 엑셀1 AD11 (CIT). addin TimeAvg(17~18) = 20.98
+
+
+def build_candidates(argv: list[str]) -> list[str]:
+    urls = [a for a in argv if a.startswith("opc.tcp://")]
+    if "--host" in argv:
+        host = argv[argv.index("--host") + 1]
+        urls += [f"opc.tcp://{host}:{p}{SITE_PATH}" for p in SITE_PORTS]
+    if not urls:
+        urls = [os.environ.get("WIRYE_OPCUA_EP", DEFAULT_EP)]
+    return urls
 
 
 def probe(endpoint: str) -> bool:
@@ -30,7 +44,7 @@ def probe(endpoint: str) -> bool:
 
     print("=" * 64)
     print("접속 시도:", endpoint)
-    client = Client(endpoint, timeout=15)      # 기본 SecurityPolicy=None + Anonymous
+    client = Client(endpoint, timeout=8)        # 기본 SecurityPolicy=None + Anonymous
     try:
         client.connect()
     except Exception as e:  # noqa: BLE001
@@ -39,6 +53,14 @@ def probe(endpoint: str) -> bool:
 
     try:
         print("  ✅ 접속 성공")
+        # 서버가 실제로 제공하는 엔드포인트/보안/토큰 열람(진단용)
+        try:
+            for ep in client.get_endpoints():
+                pol = ep.SecurityPolicyUri.split("#")[-1]
+                toks = ",".join(t.TokenType.name for t in ep.UserIdentityTokens)
+                print(f"    엔드포인트: {ep.EndpointUrl}  [{pol} / {toks}]")
+        except Exception:
+            pass
         ns = client.get_namespace_array()
         print("  네임스페이스:")
         for i, u in enumerate(ns):
