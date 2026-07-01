@@ -59,28 +59,38 @@ def _ncls(node) -> str:
         return "?"
 
 
-def browse_tree(node, max_depth: int, max_children: int, depth: int = 0) -> None:
-    """주소공간을 얕게 훑어 NodeId | BrowseName | NodeClass 출력(태그 형식 파악용)."""
+def _plain(nid):
+    """ReferenceDescription 의 ExpandedNodeId → 순수 NodeId(로컬 서버용)."""
+    from asyncua import ua
+    return ua.NodeId(nid.Identifier, nid.NamespaceIndex, nid.NodeIdType)
+
+
+def browse_tree(client, node, max_depth: int, max_children: int, depth: int = 0) -> None:
+    """주소공간을 얕게 훑어 NodeId | BrowseName | NodeClass 출력(태그 형식 파악용).
+
+    get_children_descriptions() 한 번으로 자식 메타데이터를 받아 왕복을 줄인다.
+    """
     try:
-        children = node.get_children()
+        descs = node.get_children_descriptions()
     except Exception as e:  # noqa: BLE001
         print("     " + "  " * depth + f"(browse 실패: {e!r})")
         return
-    for ch in children[:max_children]:
-        cls = _ncls(ch)
-        print("     " + "  " * depth + f"{ch.nodeid.to_string()} | {_bn(ch)} | {cls}")
+    for d in descs[:max_children]:
+        cls = d.NodeClass.name
+        nid = _plain(d.NodeId)
+        print("     " + "  " * depth + f"{nid.to_string()} | {d.BrowseName.Name} | {cls}")
         if depth < max_depth and cls in ("Object", "View"):
-            browse_tree(ch, max_depth, max_children, depth + 1)
-    if len(children) > max_children:
-        print("     " + "  " * depth + f"... (+{len(children) - max_children}개 더)")
+            browse_tree(client, client.get_node(nid), max_depth, max_children, depth + 1)
+    if len(descs) > max_children:
+        print("     " + "  " * depth + f"... (+{len(descs) - max_children}개 더)")
 
 
-def find_tag(client, substr: str, start=None, cap: int = 6000, budget_s: float = 30.0):
-    """start(기본 Objects) 하위를 BFS 하며 NodeId/BrowseName 에 substr 포함 노드 탐색.
+def find_tag(client, substr: str, start=None, cap: int = 200000, budget_s: float = 60.0):
+    """start(기본 Objects) 하위를 BFS 하며 BrowseName/NodeId 에 substr 포함 노드 탐색.
 
     태그는 ns=12 숫자 NodeId + BrowseName(사람이 읽는 태그명)로 노출되므로 BrowseName
-    부분일치로 찾는다. 주소공간이 크면 --node 로 특정 서브트리에서 검색하면 빠르다.
-    노드 상한(cap)·시간제한(budget_s)·진행표시로 멈춤을 방지한다.
+    부분일치로 찾는다. get_children_descriptions() 로 노드당 왕복 1회만 발생 → 빠름.
+    컨테이너(Object/View)만 큐에 넣어 leaf 태그 탐색을 가속. 상한·시간제한·진행표시 내장.
     """
     from collections import deque
 
@@ -90,28 +100,29 @@ def find_tag(client, substr: str, start=None, cap: int = 6000, budget_s: float =
     t0 = time.monotonic()
     while dq and seen < cap:
         if time.monotonic() - t0 > budget_s:
-            print(f"  ⏱ 시간제한({budget_s:.0f}s) 도달 — 탐색 {seen} 노드에서 중단. "
-                  f"'--browse' 로 태그 위치를 먼저 확인하세요.")
+            print(f"  ⏱ 시간제한({budget_s:.0f}s) 도달 — 탐색 {seen} 노드에서 중단.")
             return None
         node = dq.popleft()
         seen += 1
-        if seen % 500 == 0:
-            print(f"    … 탐색 중 {seen} 노드")
+        if seen % 2000 == 0:
+            print(f"    … 탐색 {seen} 노드 (대기열 {len(dq)})")
         try:
-            children = node.get_children()
+            descs = node.get_children_descriptions()
         except Exception:
             continue
-        for ch in children:
-            sid = ch.nodeid.to_string()
-            bn = _bn(ch)
-            if key in sid.lower() or key in bn.lower():
-                print(f"  ★ 발견: {sid} | {bn} | {_ncls(ch)}")
+        for d in descs:
+            bn = d.BrowseName.Name or ""
+            nid = _plain(d.NodeId)
+            sid = nid.to_string()
+            if key in bn.lower() or key in sid.lower():
+                print(f"  ★ 발견: {sid} | {bn} | {d.NodeClass.name}")
                 try:
-                    print("      현재값:", ch.read_value())
+                    print("      현재값:", client.get_node(nid).read_value())
                 except Exception as e:  # noqa: BLE001
                     print("      값 읽기 실패:", repr(e))
-                return ch
-            dq.append(ch)
+                return client.get_node(nid)
+            if d.NodeClass.name in ("Object", "View"):
+                dq.append(client.get_node(nid))
     print(f"  '{substr}' 미발견 (탐색 {seen} 노드, 상한 {cap})")
     return None
 
@@ -199,11 +210,11 @@ def probe(endpoint: str, browse: bool = False, find: str | None = None,
             # 찾으면 아래 History 블록으로 흘러감
         elif node_start:
             print(f"  주소 탐색 시작: {node_start}")
-            browse_tree(client.get_node(node_start), max_depth=2, max_children=30)
+            browse_tree(client, client.get_node(node_start), max_depth=2, max_children=30)
             return True
         elif browse:
             print("  Objects 하위 주소 탐색(태그 형식 확인):")
-            browse_tree(client.nodes.objects, max_depth=3, max_children=15)
+            browse_tree(client, client.nodes.objects, max_depth=3, max_children=15)
             return True
         else:
             # CIT 태그 노드 자동 매칭 (문자열 NodeId 변형 시도 — 실패 시 --find 안내)
