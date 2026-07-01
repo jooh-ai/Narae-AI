@@ -134,11 +134,12 @@ def main(argv: list[str] | None = None) -> int:
         src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
         print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
         if res.new_record is not None:
+            r = res.new_record
             status = ("✅ 누적 반영됨" if res.reflected else
                       "⚠ 이미 반영된 날짜 — 건너뜀" if res.duplicate_skipped else
                       "확인용(미반영)")
-            print(f"신규 취득   : CIT {res.new_record.cit}°C, "
-                  f"보정값 {res.new_record.corr:+.2f} MW  [{status}]")
+            print(f"신규 취득   : CIT {r.cit:.2f}°C | CC실측 {r.cc_meas:.2f} | "
+                  f"이론 {r.theory:.2f} | W {r.w:+.0f} | 보정값 {r.corr:+.2f} MW  [{status}]")
         print(f"누적 건수   : {res.measurement_count}")
         if res.output_path:
             print(f"입찰 파일   : {res.output_path}")
