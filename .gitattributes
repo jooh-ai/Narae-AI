@@ -1,0 +1,8 @@
+# 바이너리 파일은 EOL 정규화/텍스트 변환 금지 (다운로드·체크아웃 시 손상 방지)
+*.xlsx binary
+*.xls  binary
+*.xlsm binary
+*.db   binary
+*.png  binary
+*.jpg  binary
+*.pptx binary

@@ -82,6 +82,9 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.accum_chk = QtWidgets.QCheckBox("이 테스트를 누적에 반영(저장)")
             self.accum_chk.setToolTip("체크 안 하면 확인용(보정값만 표시, 누적 미저장)")
             self.forecast_in = self._file_row("엑셀3-1 (날씨)")
+            self.template_in = self._file_row("엑셀3 템플릿 (입찰 양식)")
+            self.template_in["edit"].setPlaceholderText(
+                "실제 엑셀3 파일 경로 — 비우면 번들 템플릿(다운로드 손상 시 여기 지정)")
             self.opcua_in = QtWidgets.QLineEdit()
             self.opcua_in.setPlaceholderText("DataPARC OPC UA 서버 호스트 (예: skes-rimspall1)")
             self.workbook_in = self._file_row("엑셀1 (RiMS) — A: 엑셀 경유")
@@ -94,6 +97,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             form.addRow("Degradation", self.deg_in)
             form.addRow("입찰 적용일", self.bidday_in)
             form.addRow("날씨", self.forecast_in["row"])
+            form.addRow("엑셀3 템플릿", self.template_in["row"])
             form.addRow("RiMS (B:OPC UA)", self.opcua_in)
             form.addRow("RiMS (A:엑셀1)", self.workbook_in["row"])
             form.addRow("", self.mock_chk)
@@ -159,7 +163,9 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     bid_day=self.bidday_in.text().strip() or None,
                     accumulate=self.accum_chk.isChecked(),
                     correction_method="curve" if self.curve_chk.isChecked() else "bin",
-                    forecast_path=self.forecast_in["edit"].text().strip() or None)
+                    forecast_path=self.forecast_in["edit"].text().strip() or None,
+                    template_path=(self.template_in["edit"].text().strip() or C.resource(
+                        "templates", "excel3_profile_template.xlsx")))
             except Exception as e:  # noqa: BLE001
                 QtWidgets.QMessageBox.critical(self, "오류", str(e))
                 return

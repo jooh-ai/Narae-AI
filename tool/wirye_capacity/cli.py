@@ -92,6 +92,7 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--mock", action="store_true", help="mock RiMS(시드) 사용")
     r.add_argument("--db", default=DEFAULT_DB, help="누적 DB 경로")
     r.add_argument("--out", help="출력 엑셀3 입찰파일 경로")
+    r.add_argument("--template", help="엑셀3 템플릿(입찰 양식) 경로. 미지정 시 번들 템플릿 사용")
     r.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
     r.add_argument("--bid-day", dest="bid_day", default=None,
                    help="입찰 적용일(엑셀3-1 일자 라벨). 미지정 시 전체 중위 평균")
@@ -124,10 +125,12 @@ def main(argv: list[str] | None = None) -> int:
         store = MeasurementStore(args.db)
         if args.seed and store.count() == 0:
             store.seed()
+        from .profile import DEFAULT_TEMPLATE
         res = run_pipeline(date=args.date, store=store, output_path=args.out,
                            connector=_build_connector(args), forecast_path=args.forecast,
                            deg=args.deg, bid_day=args.bid_day, accumulate=args.accumulate,
-                           correction_method="curve" if args.curve else "bin")
+                           correction_method="curve" if args.curve else "bin",
+                           template_path=args.template or DEFAULT_TEMPLATE)
         src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
         print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
         if res.new_record is not None:
