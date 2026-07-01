@@ -1,0 +1,547 @@
+"""DataPARC OPC UA 직접 취득 probe — 사내 PC에서 실행.
+
+목적(B 방식 실증): 엑셀/엑셀1 없이 DataPARC OPC UA 서버에 직접 붙어
+태그를 읽을 수 있는지 확인한다.
+
+설정파일에서 확인된 조건:
+  - 엔드포인트: opc.tcp://localhost:51235/Capstone/OPCUAServer (활성)
+  - 보안정책 : #None (무보안) 엔드포인트 제공  → 인증서 불필요
+  - 인증토큰 : Anonymous 허용                  → 계정 불필요
+  (localhost 로 안 되면 사이트 서버 엔드포인트를 인자로 넘기세요.
+   내부 서버 주소는 레포에 저장하지 않으려고 하드코딩하지 않았습니다.)
+
+필요:  pip install asyncua
+실행:
+  python scripts/opcua_probe.py --host <서버이름>              # 접속+태그 자동 매칭 시도
+  python scripts/opcua_probe.py --host <서버이름> --browse     # 주소공간 탐색(태그 형식 확인)
+  python scripts/opcua_probe.py --host <서버이름> --find 10MBA11CT901  # 태그 이름 검색
+  python scripts/opcua_probe.py opc.tcp://<서버>:51236/Capstone/UAServer  # 특정 엔드포인트
+"""
+from __future__ import annotations
+
+import os
+import socket
+import sys
+import time
+from datetime import datetime, timedelta
+from urllib.parse import urlparse
+
+DEFAULT_EP = "opc.tcp://localhost:51235/Capstone/OPCUAServer"
+# 사이트 서버(UASiteConfiguration.xml)에서 확인된 UA 서버 포트 후보 + 경로
+SITE_PORTS = (51236, 51237, 51238, 51239, 51240, 51241, 51242, 51235)
+SITE_PATH = "/Capstone/UAServer"
+CIT_TAG = "WR.PB.10MBA11CT901////ZQ01"     # 엑셀1 AD11 (CIT). addin TimeAvg(17~18) = 20.98
+
+# 전체 태그 검증(--full)용: (라벨, BrowseName 검색키, 2026-05-05 17~18시 애드인 기준값)
+# BrowseName 은 엑셀 태그의 'WR.PB.' 접두 제거 + '////'→'//' 형태(CIT=10MBA11CT901//ZQ01 확인).
+# ★=계산에 실제 사용(CIT/대기압/GT/ST/CC). 나머지는 모니터링·검증용.
+# 상대습도(2.0955)는 값이 비정상 → 우리 계산은 RH 60% 고정(사용 안 함).
+FULL_TAGS = [
+    ("★CIT(°C)",       "10MBA11CT901//ZQ01", 20.9844),
+    ("Comp.Inlet Pr",  "10MBA11CP101//XQ01", 986.0561),
+    ("★대기압(mbar)",  "10CXM00CP001//XQ01", 1005.6397),
+    ("상대습도(%)",    "10MBL11CM001//XQ01", 2.0955),
+    ("★GT Load",       "10CJA00DE100//XQ12", 271.7202),
+    ("★ST Load",       "10CJA00DE100//XQ11", 128.4340),
+    ("★CC Load(Gross)", "10MBY10CE901//XQ01", 400.2644),
+    ("Aux Power",      "10CJA00DE100B//XQ04", 10.5934),
+    ("EBH(hr)",        "10MBY10EP801//XQ10", 71207.1349),
+    ("진공",           "10MAG10FP002//XQ01", 0.0503),
+    ("외기온도(°C)",   "10CXM00CT001//XQ01", 20.7917),
+    ("슬립(ppm)",      "10HSA01CQ004//XQ01", 5.2166),
+    ("Ammonia(kg/h)",  "10QCD02CF001//XQ02", 123.7620),
+    ("NOx",            "10HNE10CQ003M//XQ01", 4.1573),
+    ("GT Exhaust Pr",  "10MBA10CP011//XQ01", 568.0334),
+    ("Basin Temp1",    "10PAB21CT901//ZQ01", 23.7217),
+    ("Basin Temp2",    "10PAB31CT901//ZQ01", 30.3026),
+    ("Gcal/h",         "10NDD10FJ001//ZQ01", 38.2268),
+]
+REF_DATE = "2026-05-05"   # FULL_TAGS 기준값이 유효한 날짜
+
+
+def _tcp_open(url: str, timeout: float = 2.0) -> bool:
+    """OPC UA 핸드셰이크 전에 포트가 살아있는지 빠르게 확인(막힌 포트 매달림 방지)."""
+    p = urlparse(url)
+    if not p.hostname or not p.port:
+        return True                      # 파싱 불가 시 그냥 시도
+    try:
+        with socket.create_connection((p.hostname, p.port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _bn(node) -> str:
+    try:
+        return node.read_browse_name().Name
+    except Exception:
+        return "?"
+
+
+def _ncls(node) -> str:
+    try:
+        return node.read_node_class().name
+    except Exception:
+        return "?"
+
+
+def _plain(nid):
+    """ReferenceDescription 의 ExpandedNodeId → 순수 NodeId(로컬 서버용)."""
+    from asyncua import ua
+    return ua.NodeId(nid.Identifier, nid.NamespaceIndex, nid.NodeIdType)
+
+
+def browse_tree(client, node, max_depth: int, max_children: int, depth: int = 0) -> None:
+    """주소공간을 얕게 훑어 NodeId | BrowseName | NodeClass 출력(태그 형식 파악용).
+
+    get_children_descriptions() 한 번으로 자식 메타데이터를 받아 왕복을 줄인다.
+    """
+    try:
+        descs = node.get_children_descriptions()
+    except Exception as e:  # noqa: BLE001
+        print("     " + "  " * depth + f"(browse 실패: {e!r})")
+        return
+    for d in descs[:max_children]:
+        cls = d.NodeClass.name
+        nid = _plain(d.NodeId)
+        print("     " + "  " * depth + f"{nid.to_string()} | {d.BrowseName.Name} | {cls}")
+        if depth < max_depth and cls in ("Object", "View"):
+            browse_tree(client, client.get_node(nid), max_depth, max_children, depth + 1)
+    if len(descs) > max_children:
+        print("     " + "  " * depth + f"... (+{len(descs) - max_children}개 더)")
+
+
+def find_tag(client, substr: str, start=None, cap: int = 200000, budget_s: float = 60.0):
+    """start(기본 Objects) 하위를 BFS 하며 BrowseName/NodeId 에 substr 포함 노드 탐색.
+
+    태그는 ns=12 숫자 NodeId + BrowseName(사람이 읽는 태그명)로 노출되므로 BrowseName
+    부분일치로 찾는다. get_children_descriptions() 로 노드당 왕복 1회만 발생 → 빠름.
+    컨테이너(Object/View)만 큐에 넣어 leaf 태그 탐색을 가속. 상한·시간제한·진행표시 내장.
+    """
+    from collections import deque
+
+    dq = deque([start if start is not None else client.nodes.objects])
+    seen = 0
+    visited: set[str] = set()          # 순환 참조 방지
+    key = substr.lower()
+    t0 = time.monotonic()
+    while dq and seen < cap:
+        if time.monotonic() - t0 > budget_s:
+            print(f"  ⏱ 시간제한({budget_s:.0f}s) 도달 — 탐색 {seen} 노드에서 중단.")
+            return None
+        node = dq.popleft()
+        seen += 1
+        if seen % 2000 == 0:
+            print(f"    … 탐색 {seen} 노드 (대기열 {len(dq)})")
+        try:
+            descs = node.get_children_descriptions()
+        except Exception:
+            continue
+        for d in descs:
+            bn = d.BrowseName.Name or ""
+            nid = _plain(d.NodeId)
+            sid = nid.to_string()
+            if key in bn.lower() or key in sid.lower():
+                print(f"  ★ 발견: {sid} | {bn} | {d.NodeClass.name}")
+                try:
+                    print("      현재값:", client.get_node(nid).read_value())
+                except Exception as e:  # noqa: BLE001
+                    print("      값 읽기 실패:", repr(e))
+                return client.get_node(nid)
+            if d.NodeClass.name in ("Object", "View") and sid not in visited:
+                visited.add(sid)
+                dq.append(client.get_node(nid))
+    print(f"  '{substr}' 미발견 (탐색 {seen} 노드, 상한 {cap})")
+    return None
+
+
+def show_method(client, nodeid: str) -> None:
+    """Method 노드의 InputArguments/OutputArguments 출력(UAData 가 fnTagStat 인지 확인)."""
+    m = client.get_node(nodeid)
+    print(f"  Method: {nodeid} | {_bn(m)}")
+    try:
+        children = m.get_children()
+    except Exception as e:  # noqa: BLE001
+        print("    자식 조회 실패:", repr(e))
+        return
+    shown = False
+    for ch in children:
+        bn = _bn(ch)
+        if bn in ("InputArguments", "OutputArguments"):
+            shown = True
+            print(f"    {bn}:")
+            try:
+                for a in ch.read_value() or []:
+                    desc = a.Description.Text if getattr(a, "Description", None) else ""
+                    print(f"      - {a.Name}  (DataType={a.DataType}, rank={a.ValueRank})  {desc or ''}")
+            except Exception as e:  # noqa: BLE001
+                print("      읽기 실패:", repr(e))
+    if not shown:
+        print("    (InputArguments/OutputArguments 없음 — 자식 목록:)")
+        for ch in children[:20]:
+            print("     ", ch.nodeid.to_string(), "|", _bn(ch), "|", _ncls(ch))
+
+
+def _timeavg(node, start_dt, end_dt):
+    """[start,end] raw history → (단순평균, 시간가중평균, 점수). 데이터 없으면 (None,None,0)."""
+    hist = node.read_raw_history(start_dt, end_dt)
+    pts = []
+    for dv in hist:
+        t = getattr(dv, "SourceTimestamp", None) or getattr(dv, "ServerTimestamp", None)
+        v = dv.Value.Value if dv.Value is not None else None
+        if t is not None and isinstance(v, (int, float)):
+            pts.append((t, float(v)))
+    pts.sort()
+    if not pts:
+        return None, None, 0
+    simple = sum(v for _, v in pts) / len(pts)
+    tw_num = tw_den = 0.0
+    for i, (t, v) in enumerate(pts):
+        nxt = pts[i + 1][0] if i + 1 < len(pts) else end_dt
+        seg_start = t if t > start_dt else start_dt      # 창 시작 이전은 클램프(경계값 과대가중 방지)
+        seg_end = nxt if nxt < end_dt else end_dt
+        dt = (seg_end - seg_start).total_seconds()
+        if dt > 0:
+            tw_num += v * dt
+            tw_den += dt
+    tw = tw_num / tw_den if tw_den else simple
+    return simple, tw, len(pts)
+
+
+def dump_history(client, nodeid: str, start_dt, end_dt) -> None:
+    """구간 raw history 를 모두 덤프 — 시각·값·품질(StatusCode) 확인(TimeAvg 불일치 진단)."""
+    node = client.get_node(nodeid)
+    hist = node.read_raw_history(start_dt, end_dt)
+    rows = []
+    for dv in hist:
+        t = getattr(dv, "SourceTimestamp", None) or getattr(dv, "ServerTimestamp", None)
+        v = dv.Value.Value if dv.Value is not None else None
+        sc = getattr(dv, "StatusCode", None)
+        q = "Good" if (sc is None or getattr(sc, "value", 0) == 0) else f"0x{getattr(sc,'value',0):08X}"
+        rows.append((t, v, q))
+    rows.sort(key=lambda r: (r[0] is None, r[0]))
+    print(f"  구간 {start_dt} ~ {end_dt} — {len(rows)}점")
+    good = [r for r in rows if r[2] == "Good"]
+    print(f"  품질: Good {len(good)} / 전체 {len(rows)}  (Good 아닌 점이 있으면 fnTagStat 이 제외할 수 있음)")
+    def _show(r):
+        t, v, q = r
+        ts = t.astimezone().strftime("%H:%M:%S") if t is not None else "-"
+        vs = f"{v:.3f}" if isinstance(v, (int, float)) else str(v)
+        print(f"     {ts}  {vs:>10}  {q}")
+    if len(rows) <= 80:
+        for r in rows:
+            _show(r)
+    else:
+        for r in rows[:40]:
+            _show(r)
+        print(f"     … ({len(rows)-80}점 생략) …")
+        for r in rows[-40:]:
+            _show(r)
+    nums = [v for _, v, _ in rows if isinstance(v, (int, float))]
+    if nums:
+        print(f"  min {min(nums):.3f}  max {max(nums):.3f}  단순평균 {sum(nums)/len(nums):.4f}")
+
+
+def server_time_average(client, nodeid: str, start_dt, end_dt):
+    """서버측 TimeAverage 집계(HistoryReadProcessed, i=2343)로 창 전체 1값 조회.
+
+    fnTagStat 'TimeAvg' 와 동일한 서버 알고리즘 → raw 보간 불일치(경계값·공백) 회피.
+    """
+    from asyncua import ua
+
+    node = client.get_node(nodeid)
+    details = ua.ReadProcessedDetails()
+    details.StartTime = start_dt
+    details.EndTime = end_dt
+    details.ProcessingInterval = (end_dt - start_dt).total_seconds() * 1000.0  # 창 전체=1구간
+    details.AggregateType = [ua.NodeId(2343)]                                  # TimeAverage
+    ac = ua.AggregateConfiguration()
+    ac.UseServerCapabilitiesDefaults = True
+    details.AggregateConfiguration = ac
+    result = node.history_read(details)             # sync 래퍼 → HistoryReadResult
+    data = result.HistoryData
+    vals = [dv.Value.Value for dv in data.DataValues
+            if dv.Value is not None and dv.Value.Value is not None]
+    return vals[0] if vals else None
+
+
+def read_average(client, nodeid: str, start_dt, end_dt) -> None:
+    """단일 태그: 서버측 TimeAverage(정답) + 참고용 raw 통계 출력."""
+    print(f"  구간 {start_dt} ~ {end_dt}")
+    try:
+        val = server_time_average(client, nodeid, start_dt, end_dt)
+        print(f"  ★ 서버 TimeAverage = {val}   (fnTagStat 정합)")
+    except Exception as e:  # noqa: BLE001
+        print("  서버 집계 실패:", repr(e))
+    try:
+        simple, tw, n = _timeavg(client.get_node(nodeid), start_dt, end_dt)
+        if n:
+            print(f"  (참고 raw: {n}점, 단순평균 {simple:.4f}, 시간가중 {tw:.4f})")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def resolve_and_read_all(client, start_dt, end_dt) -> None:
+    """FULL_TAGS 를 한 번의 BFS 로 모두 해결한 뒤 각 태그의 TimeAvg 를 읽어 기준값과 대조."""
+    from collections import deque
+
+    remaining = {key.lower(): (label, key, exp) for label, key, exp in FULL_TAGS}
+    resolved: dict[str, tuple] = {}      # key -> (label, NodeId, browsename, exp)
+    dq = deque([client.nodes.objects])
+    visited: set[str] = set()
+    seen = 0
+    t0 = time.monotonic()
+    print(f"  태그 {len(FULL_TAGS)}개 주소 탐색 중…")
+    while dq and remaining and seen < 300000:
+        if time.monotonic() - t0 > 120:
+            print(f"  ⏱ 시간제한 도달 — {len(resolved)}/{len(FULL_TAGS)} 해결, 탐색 {seen} 노드")
+            break
+        node = dq.popleft()
+        seen += 1
+        if seen % 3000 == 0:
+            print(f"    … {seen} 노드 ({len(resolved)}/{len(FULL_TAGS)} 해결)")
+        try:
+            descs = node.get_children_descriptions()
+        except Exception:
+            continue
+        for d in descs:
+            bn = (d.BrowseName.Name or "")
+            low = bn.lower()
+            for key in list(remaining):
+                if key in low:
+                    label, origkey, exp = remaining.pop(key)
+                    nid = _plain(d.NodeId)
+                    resolved[key] = (label, nid, bn, exp)
+                    print(f"    ✓ {label:<16} {nid.to_string()}  ({bn})")
+                    break
+            if d.NodeClass.name in ("Object", "View"):
+                nid = _plain(d.NodeId)
+                sid = nid.to_string()
+                if sid not in visited:
+                    visited.add(sid)
+                    dq.append(client.get_node(nid))
+    for label, origkey, exp in remaining.values():
+        print(f"    ✗ {label:<16} 미발견 (검색키 {origkey})")
+
+    ref_ok = start_dt.strftime("%Y-%m-%d") == REF_DATE
+    print(f"\n  === TimeAvg 대조 (서버 집계, 구간 {start_dt} ~ {end_dt}) ===")
+    hdr = f"  {'측정값':<16}{'TimeAvg':>12}"
+    if ref_ok:
+        hdr += f"{'기준(애드인)':>14}{'차이':>10}"
+    print(hdr)
+    for label, nid, bn, exp in resolved.values():
+        try:
+            val = server_time_average(client, nid, start_dt, end_dt)
+        except Exception as e:  # noqa: BLE001
+            print(f"  {label:<16}  읽기 실패: {e!r}")
+            continue
+        if val is None:
+            print(f"  {label:<16}{'값없음':>12}")
+            continue
+        line = f"  {label:<16}{val:>12.4f}"
+        if ref_ok:
+            line += f"{exp:>14.4f}{val - exp:>+10.4f}"
+        print(line)
+    if ref_ok:
+        print("\n  → 모든 '차이'가 0 근처면, 엑셀 없이 OPC UA 직접 취득이 전 항목에서 검증됨.")
+
+
+def build_candidates(argv: list[str]) -> list[str]:
+    urls = [a for a in argv if a.startswith("opc.tcp://")]
+    if "--host" in argv:
+        host = argv[argv.index("--host") + 1]
+        urls += [f"opc.tcp://{host}:{p}{SITE_PATH}" for p in SITE_PORTS]
+    if not urls:
+        urls = [os.environ.get("WIRYE_OPCUA_EP", DEFAULT_EP)]
+    return urls
+
+
+def probe(endpoint: str, browse: bool = False, find: str | None = None,
+          node_start: str | None = None, method_id: str | None = None,
+          avg=None, full=None, dump=None, tavg=None) -> bool:
+    from asyncua.sync import Client
+
+    print("=" * 64)
+    print("접속 시도:", endpoint)
+    if not _tcp_open(endpoint):
+        print("  · TCP 포트 닫힘/필터됨 — 건너뜀 (2s)")
+        return False
+    client = Client(endpoint, timeout=8)        # 기본 SecurityPolicy=None + Anonymous
+    try:
+        client.connect()
+    except Exception as e:  # noqa: BLE001
+        print("  ❌ 접속 실패:", repr(e))
+        return False
+
+    try:
+        print("  ✅ 접속 성공")
+        # 서버가 실제로 제공하는 엔드포인트/보안/토큰 열람(진단용)
+        try:
+            for ep in client.get_endpoints():
+                pol = ep.SecurityPolicyUri.split("#")[-1]
+                toks = ",".join(t.TokenType.name for t in ep.UserIdentityTokens)
+                print(f"    엔드포인트: {ep.EndpointUrl}  [{pol} / {toks}]")
+        except Exception:
+            pass
+        ns = client.get_namespace_array()
+        print("  네임스페이스:")
+        for i, u in enumerate(ns):
+            print(f"    [{i}] {u}")
+
+        # 서버측 TimeAverage 집계 모드 (fnTagStat 정합)
+        if tavg is not None:
+            node_id, start_dt, end_dt = tavg
+            print(f"  서버 TimeAverage: {node_id}  구간 {start_dt} ~ {end_dt}")
+            try:
+                val = server_time_average(client, node_id, start_dt, end_dt)
+                print(f"  ★ 서버 TimeAverage = {val}")
+                print("  → 이 값이 엑셀1 애드인값과 일치하면 커넥터를 서버집계로 전환.")
+            except Exception as e:  # noqa: BLE001
+                print(f"  서버 집계 실패: {e!r}")
+                print("  (이 오류 메시지를 공유해주세요 — asyncua API 를 맞추겠습니다.)")
+            return True
+        # raw history 덤프 모드 (TimeAvg 불일치 진단)
+        if dump is not None:
+            node_id, start_dt, end_dt = dump
+            print(f"  raw 덤프: {node_id}")
+            dump_history(client, node_id, start_dt, end_dt)
+            return True
+        # 전체 태그 검증 모드 (엑셀1 8행 대조)
+        if full is not None:
+            start_dt, end_dt = full
+            resolve_and_read_all(client, start_dt, end_dt)
+            return True
+        # 단일 태그 시간가중평균 검증 모드 (애드인 대조)
+        if avg is not None:
+            node_id, start_dt, end_dt = avg
+            print(f"  TimeAvg 검증: {node_id}")
+            read_average(client, node_id, start_dt, end_dt)
+            return True
+        # 메서드 인자 확인 모드
+        if method_id:
+            show_method(client, method_id)
+            return True
+        # 태그 검색 모드 (--node 지정 시 그 서브트리만, 아니면 Objects 전체)
+        if find:
+            start = client.get_node(node_start) if node_start else None
+            scope = node_start or "Objects"
+            print(f"  태그 검색: '{find}'  (범위: {scope})")
+            found = find_tag(client, find, start=start)
+            if found is None:
+                return True
+            # 찾으면 아래 History 블록으로 흘러감
+        elif node_start:
+            print(f"  주소 탐색 시작: {node_start}")
+            browse_tree(client, client.get_node(node_start), max_depth=2, max_children=30)
+            return True
+        elif browse:
+            print("  Objects 하위 주소 탐색(태그 형식 확인):")
+            browse_tree(client, client.nodes.objects, max_depth=3, max_children=15)
+            return True
+        else:
+            # CIT 태그 노드 자동 매칭 (문자열 NodeId 변형 시도 — 실패 시 --find 안내)
+            found = None
+            variants = [CIT_TAG, CIT_TAG.split("////")[0]]
+            for v in variants:
+                for nsidx in range(len(ns)):
+                    nid = f"ns={nsidx};s={v}"
+                    try:
+                        node = client.get_node(nid)
+                        val = node.read_value()
+                        print(f"  ★ 태그 현재값 읽기 성공: {nid}  →  {val}")
+                        found = node
+                        break
+                    except Exception:
+                        continue
+                if found is not None:
+                    break
+            if found is None:
+                print("  태그 자동 매칭 실패(태그는 숫자 NodeId) → "
+                      "'--node <계층> --find 10MBA11CT901' 로 서브트리 검색하세요.")
+                return True   # 접속 자체는 성공
+
+        # 2) 과거 데이터 접근 확인 (최근 3시간 raw)
+        try:
+            end = datetime.now()
+            start = end - timedelta(hours=3)
+            hist = found.read_raw_history(start, end)
+            vals = [dv.Value.Value for dv in hist
+                    if dv.Value is not None and dv.Value.Value is not None]
+            if vals:
+                print(f"  ★ History 접근 성공: 최근 3h {len(vals)}점, "
+                      f"단순평균 {sum(vals) / len(vals):.4f}")
+                print("    → 특정 테스트일 17~18시 시간가중평균(TimeAvg) 대조는 다음 단계에서 "
+                      "TZ·집계함수 맞춰 진행.")
+            else:
+                print("  History 응답 OK, 데이터 0점(시간대/보존기간/권한 확인 필요).")
+        except Exception as e:  # noqa: BLE001
+            print("  History 읽기 실패(현재값 취득은 성공):", repr(e))
+        return True
+    finally:
+        client.disconnect()
+
+
+def main() -> None:
+    try:
+        import asyncua  # noqa: F401
+    except ImportError:
+        print("asyncua 미설치 →  pip install asyncua")
+        return
+    argv = sys.argv[1:]
+    browse = "--browse" in argv
+    find = argv[argv.index("--find") + 1] if "--find" in argv else None
+    node_start = argv[argv.index("--node") + 1] if "--node" in argv else None
+    method_id = argv[argv.index("--method") + 1] if "--method" in argv else None
+    def _window(default_date):
+        date = argv[argv.index("--date") + 1] if "--date" in argv else default_date
+        stime = argv[argv.index("--start") + 1] if "--start" in argv else "17:00"
+        etime = argv[argv.index("--end") + 1] if "--end" in argv else "18:00"
+        # 로컬 시간대(KST)로 해석 → asyncua 가 UTC 로 변환 전송
+        s = datetime.strptime(f"{date} {stime}", "%Y-%m-%d %H:%M").astimezone()
+        e = datetime.strptime(f"{date} {etime}", "%Y-%m-%d %H:%M").astimezone()
+        return s, e
+
+    avg = None
+    if "--avg" in argv:
+        if "--date" not in argv:
+            print("--avg 에는 --date YYYY-MM-DD 가 필요합니다.")
+            return
+        s, e = _window(None)
+        avg = (argv[argv.index("--avg") + 1], s, e)
+
+    full = None
+    if "--full" in argv:
+        full = _window(REF_DATE)      # 기본 2026-05-05 17~18시(기준값 있는 창)
+
+    dump = None
+    if "--dump" in argv:
+        if "--date" not in argv:
+            print("--dump 에는 --date YYYY-MM-DD 가 필요합니다.")
+            return
+        s, e = _window(None)
+        dump = (argv[argv.index("--dump") + 1], s, e)
+
+    tavg = None
+    if "--tavg" in argv:
+        if "--date" not in argv:
+            print("--tavg 에는 --date YYYY-MM-DD 가 필요합니다.")
+            return
+        s, e = _window(None)
+        tavg = (argv[argv.index("--tavg") + 1], s, e)
+
+    endpoints = build_candidates(argv)
+    ok = False
+    try:
+        for ep in endpoints:
+            if probe(ep, browse=browse, find=find, node_start=node_start,
+                     method_id=method_id, avg=avg, full=full, dump=dump, tavg=tavg):
+                ok = True
+                break
+    except KeyboardInterrupt:
+        print("\n(중단됨)")
+        return
+    print("\n결과:", "✅ 접속·읽기 경로 확인" if ok else "❌ 실패 — 위 오류 메시지 공유")
+
+
+if __name__ == "__main__":
+    main()

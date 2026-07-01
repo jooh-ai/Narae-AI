@@ -1,0 +1,9 @@
+# Core (theory/correction/store/profile) uses only the Python standard library.
+# ASCII-only on purpose: Korean comments break pip on cp949 (Korean Windows).
+pytest>=7.0
+openpyxl>=3.1     # excel3-format temperature Profile .xlsx output (+ excel3-1 parsing)
+
+# On-site / GUI extras (install separately on the plant PC):
+#   xlwings        # drive RiMS fnTagStat add-in via Excel COM (Windows)  [or pywin32]
+#   PySide6        # Windows desktop GUI
+#   pyinstaller    # build standalone .exe

@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# wirye_capacity 패키지를 tests 에서 import 할 수 있도록 tool/ 을 경로에 추가.
+# (이 설정 덕분에 PYTHONPATH 를 따로 지정하지 않아도 `python -m pytest` 가 동작)
+pythonpath = ["."]
+testpaths = ["tests"]
