@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import socket
 import sys
+import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
@@ -74,16 +75,27 @@ def browse_tree(node, max_depth: int, max_children: int, depth: int = 0) -> None
         print("     " + "  " * depth + f"... (+{len(children) - max_children}개 더)")
 
 
-def find_tag(client, substr: str, cap: int = 4000):
-    """Objects 하위를 BFS 하며 NodeId/BrowseName 에 substr 포함 노드 탐색(상한 cap)."""
+def find_tag(client, substr: str, cap: int = 6000, budget_s: float = 25.0):
+    """Objects 하위를 BFS 하며 NodeId/BrowseName 에 substr 포함 노드 탐색.
+
+    주소공간이 크면 오래 걸리므로 노드 상한(cap)과 시간제한(budget_s)으로 제한하고
+    진행상황을 표시한다(멈춘 것처럼 보이는 것 방지). --browse 로 형식 파악이 더 빠름.
+    """
     from collections import deque
 
     dq = deque([client.nodes.objects])
     seen = 0
     key = substr.lower()
+    t0 = time.monotonic()
     while dq and seen < cap:
+        if time.monotonic() - t0 > budget_s:
+            print(f"  ⏱ 시간제한({budget_s:.0f}s) 도달 — 탐색 {seen} 노드에서 중단. "
+                  f"'--browse' 로 태그 위치를 먼저 확인하세요.")
+            return None
         node = dq.popleft()
         seen += 1
+        if seen % 500 == 0:
+            print(f"    … 탐색 중 {seen} 노드")
         try:
             children = node.get_children()
         except Exception:
