@@ -242,6 +242,29 @@ def dump_history(client, nodeid: str, start_dt, end_dt) -> None:
         print(f"  min {min(nums):.3f}  max {max(nums):.3f}  단순평균 {sum(nums)/len(nums):.4f}")
 
 
+def server_time_average(client, nodeid: str, start_dt, end_dt):
+    """서버측 TimeAverage 집계(HistoryReadProcessed, i=2343)로 창 전체 1값 조회.
+
+    fnTagStat 'TimeAvg' 와 동일한 서버 알고리즘 → raw 보간 불일치(경계값·공백) 회피.
+    """
+    from asyncua import ua
+
+    node = client.get_node(nodeid)
+    details = ua.ReadProcessedDetails()
+    details.StartTime = start_dt
+    details.EndTime = end_dt
+    details.ProcessingInterval = (end_dt - start_dt).total_seconds() * 1000.0  # 창 전체=1구간
+    details.AggregateType = [ua.NodeId(2343)]                                  # TimeAverage
+    ac = ua.AggregateConfiguration()
+    ac.UseServerCapabilitiesDefaults = True
+    details.AggregateConfiguration = ac
+    result = node.history_read(details)             # sync 래퍼 → HistoryReadResult
+    data = result.HistoryData
+    vals = [dv.Value.Value for dv in data.DataValues
+            if dv.Value is not None and dv.Value.Value is not None]
+    return vals[0] if vals else None
+
+
 def read_average(client, nodeid: str, start_dt, end_dt) -> None:
     """단일 태그의 시간가중평균(TimeAvg 근사) 출력."""
     print(f"  구간 {start_dt} ~ {end_dt}")
@@ -334,7 +357,7 @@ def build_candidates(argv: list[str]) -> list[str]:
 
 def probe(endpoint: str, browse: bool = False, find: str | None = None,
           node_start: str | None = None, method_id: str | None = None,
-          avg=None, full=None, dump=None) -> bool:
+          avg=None, full=None, dump=None, tavg=None) -> bool:
     from asyncua.sync import Client
 
     print("=" * 64)
@@ -364,6 +387,18 @@ def probe(endpoint: str, browse: bool = False, find: str | None = None,
         for i, u in enumerate(ns):
             print(f"    [{i}] {u}")
 
+        # 서버측 TimeAverage 집계 모드 (fnTagStat 정합)
+        if tavg is not None:
+            node_id, start_dt, end_dt = tavg
+            print(f"  서버 TimeAverage: {node_id}  구간 {start_dt} ~ {end_dt}")
+            try:
+                val = server_time_average(client, node_id, start_dt, end_dt)
+                print(f"  ★ 서버 TimeAverage = {val}")
+                print("  → 이 값이 엑셀1 애드인값과 일치하면 커넥터를 서버집계로 전환.")
+            except Exception as e:  # noqa: BLE001
+                print(f"  서버 집계 실패: {e!r}")
+                print("  (이 오류 메시지를 공유해주세요 — asyncua API 를 맞추겠습니다.)")
+            return True
         # raw history 덤프 모드 (TimeAvg 불일치 진단)
         if dump is not None:
             node_id, start_dt, end_dt = dump
@@ -485,12 +520,20 @@ def main() -> None:
         s, e = _window(None)
         dump = (argv[argv.index("--dump") + 1], s, e)
 
+    tavg = None
+    if "--tavg" in argv:
+        if "--date" not in argv:
+            print("--tavg 에는 --date YYYY-MM-DD 가 필요합니다.")
+            return
+        s, e = _window(None)
+        tavg = (argv[argv.index("--tavg") + 1], s, e)
+
     endpoints = build_candidates(argv)
     ok = False
     try:
         for ep in endpoints:
             if probe(ep, browse=browse, find=find, node_start=node_start,
-                     method_id=method_id, avg=avg, full=full, dump=dump):
+                     method_id=method_id, avg=avg, full=full, dump=dump, tavg=tavg):
                 ok = True
                 break
     except KeyboardInterrupt:
