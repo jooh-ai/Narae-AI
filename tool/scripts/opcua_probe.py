@@ -266,18 +266,19 @@ def server_time_average(client, nodeid: str, start_dt, end_dt):
 
 
 def read_average(client, nodeid: str, start_dt, end_dt) -> None:
-    """단일 태그의 시간가중평균(TimeAvg 근사) 출력."""
+    """단일 태그: 서버측 TimeAverage(정답) + 참고용 raw 통계 출력."""
     print(f"  구간 {start_dt} ~ {end_dt}")
     try:
-        simple, tw, n = _timeavg(client.get_node(nodeid), start_dt, end_dt)
+        val = server_time_average(client, nodeid, start_dt, end_dt)
+        print(f"  ★ 서버 TimeAverage = {val}   (fnTagStat 정합)")
     except Exception as e:  # noqa: BLE001
-        print("  History 읽기 실패:", repr(e))
-        return
-    if not n:
-        print("  구간 내 데이터 0점 — 시간대(TZ)/보존기간 확인 필요.")
-        return
-    print(f"  {n}점  |  단순평균 {simple:.4f}  |  시간가중평균(TimeAvg 근사) {tw:.4f}")
-    print("  → 이 값이 엑셀1 애드인의 TimeAvg 값과 ±소수점 수준이면 네이티브 취득 검증 완료.")
+        print("  서버 집계 실패:", repr(e))
+    try:
+        simple, tw, n = _timeavg(client.get_node(nodeid), start_dt, end_dt)
+        if n:
+            print(f"  (참고 raw: {n}점, 단순평균 {simple:.4f}, 시간가중 {tw:.4f})")
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def resolve_and_read_all(client, start_dt, end_dt) -> None:
@@ -323,23 +324,23 @@ def resolve_and_read_all(client, start_dt, end_dt) -> None:
         print(f"    ✗ {label:<16} 미발견 (검색키 {origkey})")
 
     ref_ok = start_dt.strftime("%Y-%m-%d") == REF_DATE
-    print(f"\n  === TimeAvg 대조 (구간 {start_dt} ~ {end_dt}) ===")
-    hdr = f"  {'측정값':<16}{'TimeAvg':>12}{'점수':>7}"
+    print(f"\n  === TimeAvg 대조 (서버 집계, 구간 {start_dt} ~ {end_dt}) ===")
+    hdr = f"  {'측정값':<16}{'TimeAvg':>12}"
     if ref_ok:
         hdr += f"{'기준(애드인)':>14}{'차이':>10}"
     print(hdr)
     for label, nid, bn, exp in resolved.values():
         try:
-            _, tw, n = _timeavg(client.get_node(nid), start_dt, end_dt)
+            val = server_time_average(client, nid, start_dt, end_dt)
         except Exception as e:  # noqa: BLE001
             print(f"  {label:<16}  읽기 실패: {e!r}")
             continue
-        if not n:
-            print(f"  {label:<16}{'데이터0점':>12}")
+        if val is None:
+            print(f"  {label:<16}{'값없음':>12}")
             continue
-        line = f"  {label:<16}{tw:>12.4f}{n:>7}"
+        line = f"  {label:<16}{val:>12.4f}"
         if ref_ok:
-            line += f"{exp:>14.4f}{tw - exp:>+10.4f}"
+            line += f"{exp:>14.4f}{val - exp:>+10.4f}"
         print(line)
     if ref_ok:
         print("\n  → 모든 '차이'가 0 근처면, 엑셀 없이 OPC UA 직접 취득이 전 항목에서 검증됨.")

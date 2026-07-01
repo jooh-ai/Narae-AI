@@ -57,6 +57,33 @@ def _tcp_open(url: str, timeout: float = 2.0) -> bool:
         return False
 
 
+AGG_TIME_AVERAGE = 2343   # OPC UA TimeAverage 집계 함수 NodeId (fnTagStat 'TimeAvg' 와 정합 확인)
+
+
+def server_time_average(client, nodeid: str, start_dt, end_dt):
+    """서버측 TimeAverage 집계(HistoryReadProcessed)로 창 전체 1값 조회.
+
+    fnTagStat 'TimeAvg' 와 동일 알고리즘 → raw 보간의 공백·경계값 왜곡 없음.
+    사내 검증(2025-09-23 CIT): 서버값 24.85262 ≡ 애드인 24.8526.
+    """
+    from asyncua import ua
+
+    node = client.get_node(nodeid)
+    details = ua.ReadProcessedDetails()
+    details.StartTime = start_dt
+    details.EndTime = end_dt
+    details.ProcessingInterval = (end_dt - start_dt).total_seconds() * 1000.0  # 창 전체 = 1구간
+    details.AggregateType = [ua.NodeId(AGG_TIME_AVERAGE)]
+    ac = ua.AggregateConfiguration()
+    ac.UseServerCapabilitiesDefaults = True
+    details.AggregateConfiguration = ac
+    result = node.history_read(details)
+    data = result.HistoryData
+    vals = [dv.Value.Value for dv in data.DataValues
+            if dv.Value is not None and dv.Value.Value is not None]
+    return vals[0] if vals else None
+
+
 def time_weighted_average(points: list[tuple], start_dt, end_dt) -> float | None:
     """[(timestamp, value), …] 의 [start_dt, end_dt] 구간 시간가중평균 (step 보간).
 
@@ -168,6 +195,13 @@ class OpcUaRimsConnector:
             client.disconnect()
 
     def _read_timeavg(self, client, nodeid: str, start_dt, end_dt):
+        # 서버측 TimeAverage 집계(fnTagStat 정합). 실패 시 raw 시간가중평균 폴백.
+        try:
+            val = server_time_average(client, nodeid, start_dt, end_dt)
+            if val is not None:
+                return val
+        except Exception:  # noqa: BLE001 — 구버전/미지원 서버 → 폴백
+            pass
         node = client.get_node(nodeid)
         hist = node.read_raw_history(start_dt, end_dt)
         points = [(getattr(dv, "SourceTimestamp", None) or getattr(dv, "ServerTimestamp", None),
