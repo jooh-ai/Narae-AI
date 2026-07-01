@@ -26,12 +26,17 @@ SITE_PATH = "/Capstone/UAServer"
 
 # 계산에 사용하는 핵심 태그: field → BrowseName 검색키
 # (엑셀 태그 'WR.PB.<KKS>////<suf>' → BrowseName '<KKS>//<suf>'. CIT 로 형식 확인됨)
+#
+# cc_meas 는 raw 'CC Load' 태그를 쓴다(정규화 CC Gross '공급가능용량' 아님). 근거:
+#  - 엑셀4 이론기준값(I)은 실제조건(실측 대기압·실측 RH)에서 계산됨(씨앗 32건 역추적 확인).
+#  - 보정값 = CC실측 − I − W 이 성립하려면 CC실측도 실제조건 값(=raw)이어야 함.
+#  - 엑셀4 '실측데이터'의 CC실측(G열)이 실제로 raw 값(수동입력)임을 현장 확인(2026-07).
 CORE_TAGS = {
     "cit": "10MBA11CT901//ZQ01",       # Comp Inlet Temp (°C)
     "pressure": "10CXM00CP001//XQ01",  # 대기압 (mbar)
     "gt_meas": "10CJA00DE100//XQ12",   # GT Load (MW)
     "st_meas": "10CJA00DE100//XQ11",   # ST Load (MW)
-    "cc_meas": "10MBY10CE901//XQ01",   # CC Load Gross (MW)
+    "cc_meas": "10MBY10CE901//XQ01",   # CC Load raw Gross (MW) — 정규화값 아님
 }
 
 
