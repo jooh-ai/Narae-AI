@@ -19,14 +19,28 @@
 from __future__ import annotations
 
 import os
+import socket
 import sys
 from datetime import datetime, timedelta
+from urllib.parse import urlparse
 
 DEFAULT_EP = "opc.tcp://localhost:51235/Capstone/OPCUAServer"
 # 사이트 서버(UASiteConfiguration.xml)에서 확인된 UA 서버 포트 후보 + 경로
 SITE_PORTS = (51236, 51237, 51238, 51239, 51240, 51241, 51242, 51235)
 SITE_PATH = "/Capstone/UAServer"
 CIT_TAG = "WR.PB.10MBA11CT901////ZQ01"     # 엑셀1 AD11 (CIT). addin TimeAvg(17~18) = 20.98
+
+
+def _tcp_open(url: str, timeout: float = 2.0) -> bool:
+    """OPC UA 핸드셰이크 전에 포트가 살아있는지 빠르게 확인(막힌 포트 매달림 방지)."""
+    p = urlparse(url)
+    if not p.hostname or not p.port:
+        return True                      # 파싱 불가 시 그냥 시도
+    try:
+        with socket.create_connection((p.hostname, p.port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 def build_candidates(argv: list[str]) -> list[str]:
@@ -44,6 +58,9 @@ def probe(endpoint: str) -> bool:
 
     print("=" * 64)
     print("접속 시도:", endpoint)
+    if not _tcp_open(endpoint):
+        print("  · TCP 포트 닫힘/필터됨 — 건너뜀 (2s)")
+        return False
     client = Client(endpoint, timeout=8)        # 기본 SecurityPolicy=None + Anonymous
     try:
         client.connect()
@@ -118,12 +135,16 @@ def main() -> None:
     except ImportError:
         print("asyncua 미설치 →  pip install asyncua")
         return
-    endpoints = sys.argv[1:] or [os.environ.get("WIRYE_OPCUA_EP", DEFAULT_EP)]
+    endpoints = build_candidates(sys.argv[1:])
     ok = False
-    for ep in endpoints:
-        if probe(ep):
-            ok = True
-            break
+    try:
+        for ep in endpoints:
+            if probe(ep):
+                ok = True
+                break
+    except KeyboardInterrupt:
+        print("\n(중단됨)")
+        return
     print("\n결과:", "✅ 접속·읽기 경로 확인" if ok else "❌ 실패 — 위 오류 메시지 공유")
 
 
