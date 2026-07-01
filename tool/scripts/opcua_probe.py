@@ -12,9 +12,10 @@
 
 필요:  pip install asyncua
 실행:
-  python scripts/opcua_probe.py --host <서버이름>     # 51236~51242 포트 자동 스윕(권장)
-  python scripts/opcua_probe.py opc.tcp://<서버>:51236/Capstone/UAServer   # 특정 엔드포인트
-  python scripts/opcua_probe.py                        # localhost(로컬 서버 있을 때)
+  python scripts/opcua_probe.py --host <서버이름>              # 접속+태그 자동 매칭 시도
+  python scripts/opcua_probe.py --host <서버이름> --browse     # 주소공간 탐색(태그 형식 확인)
+  python scripts/opcua_probe.py --host <서버이름> --find 10MBA11CT901  # 태그 이름 검색
+  python scripts/opcua_probe.py opc.tcp://<서버>:51236/Capstone/UAServer  # 특정 엔드포인트
 """
 from __future__ import annotations
 
@@ -43,6 +44,65 @@ def _tcp_open(url: str, timeout: float = 2.0) -> bool:
         return False
 
 
+def _bn(node) -> str:
+    try:
+        return node.read_browse_name().Name
+    except Exception:
+        return "?"
+
+
+def _ncls(node) -> str:
+    try:
+        return node.read_node_class().name
+    except Exception:
+        return "?"
+
+
+def browse_tree(node, max_depth: int, max_children: int, depth: int = 0) -> None:
+    """주소공간을 얕게 훑어 NodeId | BrowseName | NodeClass 출력(태그 형식 파악용)."""
+    try:
+        children = node.get_children()
+    except Exception as e:  # noqa: BLE001
+        print("     " + "  " * depth + f"(browse 실패: {e!r})")
+        return
+    for ch in children[:max_children]:
+        cls = _ncls(ch)
+        print("     " + "  " * depth + f"{ch.nodeid.to_string()} | {_bn(ch)} | {cls}")
+        if depth < max_depth and cls in ("Object", "View"):
+            browse_tree(ch, max_depth, max_children, depth + 1)
+    if len(children) > max_children:
+        print("     " + "  " * depth + f"... (+{len(children) - max_children}개 더)")
+
+
+def find_tag(client, substr: str, cap: int = 4000):
+    """Objects 하위를 BFS 하며 NodeId/BrowseName 에 substr 포함 노드 탐색(상한 cap)."""
+    from collections import deque
+
+    dq = deque([client.nodes.objects])
+    seen = 0
+    key = substr.lower()
+    while dq and seen < cap:
+        node = dq.popleft()
+        seen += 1
+        try:
+            children = node.get_children()
+        except Exception:
+            continue
+        for ch in children:
+            sid = ch.nodeid.to_string()
+            bn = _bn(ch)
+            if key in sid.lower() or key in bn.lower():
+                print(f"  ★ 발견: {sid} | {bn} | {_ncls(ch)}")
+                try:
+                    print("      현재값:", ch.read_value())
+                except Exception as e:  # noqa: BLE001
+                    print("      값 읽기 실패:", repr(e))
+                return ch
+            dq.append(ch)
+    print(f"  '{substr}' 미발견 (탐색 {seen} 노드, 상한 {cap})")
+    return None
+
+
 def build_candidates(argv: list[str]) -> list[str]:
     urls = [a for a in argv if a.startswith("opc.tcp://")]
     if "--host" in argv:
@@ -53,7 +113,7 @@ def build_candidates(argv: list[str]) -> list[str]:
     return urls
 
 
-def probe(endpoint: str) -> bool:
+def probe(endpoint: str, browse: bool = False, find: str | None = None) -> bool:
     from asyncua.sync import Client
 
     print("=" * 64)
@@ -83,30 +143,42 @@ def probe(endpoint: str) -> bool:
         for i, u in enumerate(ns):
             print(f"    [{i}] {u}")
 
-        # 1) CIT 태그 노드 자동 매칭 (문자열 NodeId: ns=?;s=<tag>)
-        found = None
-        for nsidx in range(len(ns)):
-            nid = f"ns={nsidx};s={CIT_TAG}"
-            try:
-                node = client.get_node(nid)
-                val = node.read_value()
-                print(f"  ★ 태그 현재값 읽기 성공: {nid}  →  {val}")
-                found = node
-                break
-            except Exception:
-                continue
-
-        if found is None:
-            print("  태그 NodeId 자동 매칭 실패 → Objects 폴더 상위 탐색(태그 위치 파악용):")
-            try:
-                for child in client.nodes.objects.get_children()[:25]:
+        # 주소 탐색 모드 — 태그 NodeId 형식 확인용
+        if browse:
+            print("  Objects 하위 주소 탐색(태그 형식 확인):")
+            browse_tree(client.nodes.objects, max_depth=3, max_children=15)
+            return True
+        if find:
+            print(f"  태그 검색: '{find}'")
+            found = find_tag(client, find)
+            if found is None:
+                return True
+        else:
+            # CIT 태그 노드 자동 매칭 (문자열 NodeId 변형 시도)
+            found = None
+            variants = [CIT_TAG, CIT_TAG.split("////")[0]]
+            for v in variants:
+                for nsidx in range(len(ns)):
+                    nid = f"ns={nsidx};s={v}"
                     try:
-                        print("     ", child.nodeid.to_string(), "|", child.read_browse_name().Name)
+                        node = client.get_node(nid)
+                        val = node.read_value()
+                        print(f"  ★ 태그 현재값 읽기 성공: {nid}  →  {val}")
+                        found = node
+                        break
                     except Exception:
-                        print("     ", child)
-            except Exception as e:  # noqa: BLE001
-                print("     탐색 실패:", repr(e))
-            return True   # 접속 자체는 성공
+                        continue
+                if found is not None:
+                    break
+            if found is None:
+                print("  태그 자동 매칭 실패 → '--browse' 로 주소 형식을 확인하거나 "
+                      "'--find 10MBA11CT901' 로 검색하세요. Objects 상위:")
+                try:
+                    for child in client.nodes.objects.get_children()[:25]:
+                        print("     ", child.nodeid.to_string(), "|", _bn(child), "|", _ncls(child))
+                except Exception as e:  # noqa: BLE001
+                    print("     탐색 실패:", repr(e))
+                return True   # 접속 자체는 성공
 
         # 2) 과거 데이터 접근 확인 (최근 3시간 raw)
         try:
@@ -135,11 +207,14 @@ def main() -> None:
     except ImportError:
         print("asyncua 미설치 →  pip install asyncua")
         return
-    endpoints = build_candidates(sys.argv[1:])
+    argv = sys.argv[1:]
+    browse = "--browse" in argv
+    find = argv[argv.index("--find") + 1] if "--find" in argv else None
+    endpoints = build_candidates(argv)
     ok = False
     try:
         for ep in endpoints:
-            if probe(ep):
+            if probe(ep, browse=browse, find=find):
                 ok = True
                 break
     except KeyboardInterrupt:
