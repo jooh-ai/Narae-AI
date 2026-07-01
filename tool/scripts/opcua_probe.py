@@ -156,6 +156,43 @@ def show_method(client, nodeid: str) -> None:
             print("     ", ch.nodeid.to_string(), "|", _bn(ch), "|", _ncls(ch))
 
 
+def read_average(client, nodeid: str, start_dt, end_dt) -> None:
+    """[start,end] 구간 raw history 를 읽어 단순평균·시간가중평균(TimeAvg 근사) 출력.
+
+    fnTagStat(tag, start, end, 'TimeAvg') = 시간가중 평균. 안정된 1시간 테스트 구간에서는
+    단순평균과 거의 같다. 애드인 값과 대조해 네이티브 취득의 정확도를 확인한다.
+    """
+    node = client.get_node(nodeid)
+    try:
+        hist = node.read_raw_history(start_dt, end_dt)
+    except Exception as e:  # noqa: BLE001
+        print("  History 읽기 실패:", repr(e))
+        return
+    pts = []
+    for dv in hist:
+        t = getattr(dv, "SourceTimestamp", None) or getattr(dv, "ServerTimestamp", None)
+        v = dv.Value.Value if dv.Value is not None else None
+        if t is not None and isinstance(v, (int, float)):
+            pts.append((t, float(v)))
+    pts.sort()
+    print(f"  구간 {start_dt} ~ {end_dt}")
+    if not pts:
+        print("  구간 내 데이터 0점 — 시간대(TZ)/보존기간 확인 필요.")
+        return
+    simple = sum(v for _, v in pts) / len(pts)
+    tw_num = tw_den = 0.0
+    for i, (t, v) in enumerate(pts):
+        t_next = pts[i + 1][0] if i + 1 < len(pts) else end_dt
+        dt = (t_next - t).total_seconds()
+        if dt > 0:
+            tw_num += v * dt
+            tw_den += dt
+    tw = tw_num / tw_den if tw_den else simple
+    print(f"  {len(pts)}점  |  단순평균 {simple:.4f}  |  시간가중평균(TimeAvg 근사) {tw:.4f}")
+    print(f"  첫점 {pts[0][0]}={pts[0][1]:.3f}  끝점 {pts[-1][0]}={pts[-1][1]:.3f}")
+    print("  → 이 값이 엑셀1 애드인의 TimeAvg 값과 ±소수점 수준이면 네이티브 취득 검증 완료.")
+
+
 def build_candidates(argv: list[str]) -> list[str]:
     urls = [a for a in argv if a.startswith("opc.tcp://")]
     if "--host" in argv:
@@ -167,7 +204,8 @@ def build_candidates(argv: list[str]) -> list[str]:
 
 
 def probe(endpoint: str, browse: bool = False, find: str | None = None,
-          node_start: str | None = None, method_id: str | None = None) -> bool:
+          node_start: str | None = None, method_id: str | None = None,
+          avg=None) -> bool:
     from asyncua.sync import Client
 
     print("=" * 64)
@@ -197,6 +235,12 @@ def probe(endpoint: str, browse: bool = False, find: str | None = None,
         for i, u in enumerate(ns):
             print(f"    [{i}] {u}")
 
+        # 시간가중평균 검증 모드 (애드인 대조)
+        if avg is not None:
+            node_id, start_dt, end_dt = avg
+            print(f"  TimeAvg 검증: {node_id}")
+            read_average(client, node_id, start_dt, end_dt)
+            return True
         # 메서드 인자 확인 모드
         if method_id:
             show_method(client, method_id)
@@ -272,12 +316,25 @@ def main() -> None:
     find = argv[argv.index("--find") + 1] if "--find" in argv else None
     node_start = argv[argv.index("--node") + 1] if "--node" in argv else None
     method_id = argv[argv.index("--method") + 1] if "--method" in argv else None
+    avg = None
+    if "--avg" in argv:
+        node_id = argv[argv.index("--avg") + 1]
+        date = argv[argv.index("--date") + 1] if "--date" in argv else None
+        stime = argv[argv.index("--start") + 1] if "--start" in argv else "17:00"
+        etime = argv[argv.index("--end") + 1] if "--end" in argv else "18:00"
+        if not date:
+            print("--avg 에는 --date YYYY-MM-DD 가 필요합니다.")
+            return
+        # 로컬 시간대(KST)로 해석 → asyncua 가 UTC 로 변환 전송
+        start_dt = datetime.strptime(f"{date} {stime}", "%Y-%m-%d %H:%M").astimezone()
+        end_dt = datetime.strptime(f"{date} {etime}", "%Y-%m-%d %H:%M").astimezone()
+        avg = (node_id, start_dt, end_dt)
     endpoints = build_candidates(argv)
     ok = False
     try:
         for ep in endpoints:
-            if probe(ep, browse=browse, find=find,
-                     node_start=node_start, method_id=method_id):
+            if probe(ep, browse=browse, find=find, node_start=node_start,
+                     method_id=method_id, avg=avg):
                 ok = True
                 break
     except KeyboardInterrupt:
