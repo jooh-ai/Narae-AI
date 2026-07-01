@@ -19,27 +19,44 @@ def _t(h, m, s=0):
 def test_time_weighted_average_basic():
     # 17:00 값10 (30분 유지) → 17:30 값20 (30분 유지) → 18:00 종료 = (10*1800+20*1800)/3600 = 15
     pts = [(_t(17, 0), 10.0), (_t(17, 30), 20.0)]
-    assert time_weighted_average(pts, _t(18, 0)) == pytest.approx(15.0)
+    assert time_weighted_average(pts, _t(17, 0), _t(18, 0)) == pytest.approx(15.0)
 
 
 def test_time_weighted_average_unequal_weights():
     # 17:00 값10 (45분) → 17:45 값30 (15분) = (10*2700+30*900)/3600 = 15
     pts = [(_t(17, 0), 10.0), (_t(17, 45), 30.0)]
-    assert time_weighted_average(pts, _t(18, 0)) == pytest.approx(15.0)
+    assert time_weighted_average(pts, _t(17, 0), _t(18, 0)) == pytest.approx(15.0)
 
 
 def test_time_weighted_average_sorts_input():
     pts = [(_t(17, 45), 30.0), (_t(17, 0), 10.0)]      # 역순 입력도 정렬
-    assert time_weighted_average(pts, _t(18, 0)) == pytest.approx(15.0)
+    assert time_weighted_average(pts, _t(17, 0), _t(18, 0)) == pytest.approx(15.0)
+
+
+def test_time_weighted_average_clamps_bounding_value():
+    """★ 회귀: 창 시작 전 경계값(저부하)이 과대가중되면 안 됨.
+
+    16:00 값100 (창 밖, 램프업 전 저부하) → 17:00 값200 → 17:30 값200.
+    버그 버전은 16:00 값을 [16:00,17:00] 통째로 가중해 평균을 100 쪽으로 끌어내렸음.
+    클램프하면 창 [17:00,18:00] 안은 전부 200 → 200.
+    """
+    pts = [(_t(16, 0), 100.0), (_t(17, 0), 200.0), (_t(17, 30), 200.0)]
+    assert time_weighted_average(pts, _t(17, 0), _t(18, 0)) == pytest.approx(200.0)
+
+
+def test_time_weighted_average_clamps_trailing_point():
+    # 창 끝(18:00) 이후 점은 창 밖 → 무시. 17:00 값10 전체 창 유지 = 10.
+    pts = [(_t(17, 0), 10.0), (_t(18, 30), 99.0)]
+    assert time_weighted_average(pts, _t(17, 0), _t(18, 0)) == pytest.approx(10.0)
 
 
 def test_time_weighted_average_single_point_falls_back_to_simple():
-    assert time_weighted_average([(_t(17, 0), 42.0)], _t(18, 0)) == pytest.approx(42.0)
+    assert time_weighted_average([(_t(17, 0), 42.0)], _t(17, 0), _t(18, 0)) == pytest.approx(42.0)
 
 
 def test_time_weighted_average_empty_returns_none():
-    assert time_weighted_average([], _t(18, 0)) is None
-    assert time_weighted_average([(None, 5.0), (_t(17, 0), None)], _t(18, 0)) is None
+    assert time_weighted_average([], _t(17, 0), _t(18, 0)) is None
+    assert time_weighted_average([(None, 5.0), (_t(17, 0), None)], _t(17, 0), _t(18, 0)) is None
 
 
 def test_requires_endpoint_or_host():

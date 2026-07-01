@@ -57,23 +57,27 @@ def _tcp_open(url: str, timeout: float = 2.0) -> bool:
         return False
 
 
-def time_weighted_average(points: list[tuple], end_dt) -> float | None:
-    """[(timestamp, value), …] 의 시간가중평균 (step 보간). fnTagStat 'TimeAvg' 재현.
+def time_weighted_average(points: list[tuple], start_dt, end_dt) -> float | None:
+    """[(timestamp, value), …] 의 [start_dt, end_dt] 구간 시간가중평균 (step 보간).
 
-    각 표본값이 다음 표본까지(마지막은 end_dt 까지) 유지된다고 보고 시간으로 가중 평균.
-    points 는 시간순 정렬을 가정하지 않으며 내부에서 정렬한다. 비면 None.
+    fnTagStat 'TimeAvg' 재현. 각 표본값이 다음 표본까지 유지된다고 보되, 각 구간을
+    창 [start_dt, end_dt] 로 클램프한다 — 히스토리안이 창 시작 직전에 주는 경계값
+    (bounding value)이 창 밖 구간까지 과대가중되어 평균을 왜곡하는 것을 방지.
+    points 는 정렬을 가정하지 않으며 내부 정렬한다. 비면 None.
     """
     pts = sorted((t, float(v)) for t, v in points if t is not None and v is not None)
     if not pts:
         return None
     num = den = 0.0
     for i, (t, v) in enumerate(pts):
-        t_next = pts[i + 1][0] if i + 1 < len(pts) else end_dt
-        dt = (t_next - t).total_seconds()
+        nxt = pts[i + 1][0] if i + 1 < len(pts) else end_dt
+        seg_start = t if t > start_dt else start_dt        # 창 시작 이전은 창 시작으로 클램프
+        seg_end = nxt if nxt < end_dt else end_dt           # 창 끝 이후는 창 끝으로 클램프
+        dt = (seg_end - seg_start).total_seconds()
         if dt > 0:
             num += v * dt
             den += dt
-    if den <= 0:                       # 표본 1개뿐 등 → 단순평균
+    if den <= 0:                       # 유효 구간 없음(표본 1개 등) → 단순평균
         return sum(v for _, v in pts) / len(pts)
     return num / den
 
@@ -168,7 +172,7 @@ class OpcUaRimsConnector:
         hist = node.read_raw_history(start_dt, end_dt)
         points = [(getattr(dv, "SourceTimestamp", None) or getattr(dv, "ServerTimestamp", None),
                    dv.Value.Value if dv.Value is not None else None) for dv in hist]
-        return time_weighted_average(points, end_dt)
+        return time_weighted_average(points, start_dt, end_dt)
 
     def _resolve_nodeids(self, client, force: bool = False) -> dict:
         """BrowseName BFS 로 tag_keys 를 NodeId 로 해결(1회). get_children_descriptions 사용."""

@@ -197,8 +197,10 @@ def _timeavg(node, start_dt, end_dt):
     simple = sum(v for _, v in pts) / len(pts)
     tw_num = tw_den = 0.0
     for i, (t, v) in enumerate(pts):
-        t_next = pts[i + 1][0] if i + 1 < len(pts) else end_dt
-        dt = (t_next - t).total_seconds()
+        nxt = pts[i + 1][0] if i + 1 < len(pts) else end_dt
+        seg_start = t if t > start_dt else start_dt      # 창 시작 이전은 클램프(경계값 과대가중 방지)
+        seg_end = nxt if nxt < end_dt else end_dt
+        dt = (seg_end - seg_start).total_seconds()
         if dt > 0:
             tw_num += v * dt
             tw_den += dt
