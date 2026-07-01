@@ -115,6 +115,33 @@ def find_tag(client, substr: str, cap: int = 6000, budget_s: float = 25.0):
     return None
 
 
+def show_method(client, nodeid: str) -> None:
+    """Method 노드의 InputArguments/OutputArguments 출력(UAData 가 fnTagStat 인지 확인)."""
+    m = client.get_node(nodeid)
+    print(f"  Method: {nodeid} | {_bn(m)}")
+    try:
+        children = m.get_children()
+    except Exception as e:  # noqa: BLE001
+        print("    자식 조회 실패:", repr(e))
+        return
+    shown = False
+    for ch in children:
+        bn = _bn(ch)
+        if bn in ("InputArguments", "OutputArguments"):
+            shown = True
+            print(f"    {bn}:")
+            try:
+                for a in ch.read_value() or []:
+                    desc = a.Description.Text if getattr(a, "Description", None) else ""
+                    print(f"      - {a.Name}  (DataType={a.DataType}, rank={a.ValueRank})  {desc or ''}")
+            except Exception as e:  # noqa: BLE001
+                print("      읽기 실패:", repr(e))
+    if not shown:
+        print("    (InputArguments/OutputArguments 없음 — 자식 목록:)")
+        for ch in children[:20]:
+            print("     ", ch.nodeid.to_string(), "|", _bn(ch), "|", _ncls(ch))
+
+
 def build_candidates(argv: list[str]) -> list[str]:
     urls = [a for a in argv if a.startswith("opc.tcp://")]
     if "--host" in argv:
@@ -125,7 +152,8 @@ def build_candidates(argv: list[str]) -> list[str]:
     return urls
 
 
-def probe(endpoint: str, browse: bool = False, find: str | None = None) -> bool:
+def probe(endpoint: str, browse: bool = False, find: str | None = None,
+          node_start: str | None = None, method_id: str | None = None) -> bool:
     from asyncua.sync import Client
 
     print("=" * 64)
@@ -155,6 +183,14 @@ def probe(endpoint: str, browse: bool = False, find: str | None = None) -> bool:
         for i, u in enumerate(ns):
             print(f"    [{i}] {u}")
 
+        # 특정 노드부터 깊이 탐색 / 메서드 인자 확인 모드
+        if method_id:
+            show_method(client, method_id)
+            return True
+        if node_start:
+            print(f"  주소 탐색 시작: {node_start}")
+            browse_tree(client.get_node(node_start), max_depth=2, max_children=30)
+            return True
         # 주소 탐색 모드 — 태그 NodeId 형식 확인용
         if browse:
             print("  Objects 하위 주소 탐색(태그 형식 확인):")
@@ -222,11 +258,14 @@ def main() -> None:
     argv = sys.argv[1:]
     browse = "--browse" in argv
     find = argv[argv.index("--find") + 1] if "--find" in argv else None
+    node_start = argv[argv.index("--node") + 1] if "--node" in argv else None
+    method_id = argv[argv.index("--method") + 1] if "--method" in argv else None
     endpoints = build_candidates(argv)
     ok = False
     try:
         for ep in endpoints:
-            if probe(ep, browse=browse, find=find):
+            if probe(ep, browse=browse, find=find,
+                     node_start=node_start, method_id=method_id):
                 ok = True
                 break
     except KeyboardInterrupt:
