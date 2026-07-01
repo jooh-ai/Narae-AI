@@ -34,14 +34,27 @@ CIT_TAG = "WR.PB.10MBA11CT901////ZQ01"     # 엑셀1 AD11 (CIT). addin TimeAvg(1
 
 # 전체 태그 검증(--full)용: (라벨, BrowseName 검색키, 2026-05-05 17~18시 애드인 기준값)
 # BrowseName 은 엑셀 태그의 'WR.PB.' 접두 제거 + '////'→'//' 형태(CIT=10MBA11CT901//ZQ01 확인).
+# ★=계산에 실제 사용(CIT/대기압/GT/ST/CC). 나머지는 모니터링·검증용.
+# 상대습도(2.0955)는 값이 비정상 → 우리 계산은 RH 60% 고정(사용 안 함).
 FULL_TAGS = [
-    ("CIT(°C)",        "10MBA11CT901//ZQ01", 20.9844),
+    ("★CIT(°C)",       "10MBA11CT901//ZQ01", 20.9844),
     ("Comp.Inlet Pr",  "10MBA11CP101//XQ01", 986.0561),
-    ("대기압(mbar)",   "10CXM00CP001//XQ01", 1005.6397),
+    ("★대기압(mbar)",  "10CXM00CP001//XQ01", 1005.6397),
     ("상대습도(%)",    "10MBL11CM001//XQ01", 2.0955),
-    ("GT Load",        "10CJA00DE100//XQ12", 271.7202),
-    ("ST Load",        "10CJA00DE100//XQ11", 128.4340),
-    ("CC Load(Gross)", "10MBY10CE901//XQ01", 400.2644),
+    ("★GT Load",       "10CJA00DE100//XQ12", 271.7202),
+    ("★ST Load",       "10CJA00DE100//XQ11", 128.4340),
+    ("★CC Load(Gross)", "10MBY10CE901//XQ01", 400.2644),
+    ("Aux Power",      "10CJA00DE100B//XQ04", 10.5934),
+    ("EBH(hr)",        "10MBY10EP801//XQ10", 71207.1349),
+    ("진공",           "10MAG10FP002//XQ01", 0.0503),
+    ("외기온도(°C)",   "10CXM00CT001//XQ01", 20.7917),
+    ("슬립(ppm)",      "10HSA01CQ004//XQ01", 5.2166),
+    ("Ammonia(kg/h)",  "10QCD02CF001//XQ02", 123.7620),
+    ("NOx",            "10HNE10CQ003M//XQ01", 4.1573),
+    ("GT Exhaust Pr",  "10MBA10CP011//XQ01", 568.0334),
+    ("Basin Temp1",    "10PAB21CT901//ZQ01", 23.7217),
+    ("Basin Temp2",    "10PAB31CT901//ZQ01", 30.3026),
+    ("Gcal/h",         "10NDD10FJ001//XQ01", 38.2268),
 ]
 REF_DATE = "2026-05-05"   # FULL_TAGS 기준값이 유효한 날짜
 
