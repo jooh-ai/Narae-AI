@@ -96,6 +96,7 @@ def find_tag(client, substr: str, start=None, cap: int = 200000, budget_s: float
 
     dq = deque([start if start is not None else client.nodes.objects])
     seen = 0
+    visited: set[str] = set()          # 순환 참조 방지
     key = substr.lower()
     t0 = time.monotonic()
     while dq and seen < cap:
@@ -121,7 +122,8 @@ def find_tag(client, substr: str, start=None, cap: int = 200000, budget_s: float
                 except Exception as e:  # noqa: BLE001
                     print("      값 읽기 실패:", repr(e))
                 return client.get_node(nid)
-            if d.NodeClass.name in ("Object", "View"):
+            if d.NodeClass.name in ("Object", "View") and sid not in visited:
+                visited.add(sid)
                 dq.append(client.get_node(nid))
     print(f"  '{substr}' 미발견 (탐색 {seen} 노드, 상한 {cap})")
     return None
