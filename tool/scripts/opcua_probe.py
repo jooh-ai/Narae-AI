@@ -75,15 +75,16 @@ def browse_tree(node, max_depth: int, max_children: int, depth: int = 0) -> None
         print("     " + "  " * depth + f"... (+{len(children) - max_children}개 더)")
 
 
-def find_tag(client, substr: str, cap: int = 6000, budget_s: float = 25.0):
-    """Objects 하위를 BFS 하며 NodeId/BrowseName 에 substr 포함 노드 탐색.
+def find_tag(client, substr: str, start=None, cap: int = 6000, budget_s: float = 30.0):
+    """start(기본 Objects) 하위를 BFS 하며 NodeId/BrowseName 에 substr 포함 노드 탐색.
 
-    주소공간이 크면 오래 걸리므로 노드 상한(cap)과 시간제한(budget_s)으로 제한하고
-    진행상황을 표시한다(멈춘 것처럼 보이는 것 방지). --browse 로 형식 파악이 더 빠름.
+    태그는 ns=12 숫자 NodeId + BrowseName(사람이 읽는 태그명)로 노출되므로 BrowseName
+    부분일치로 찾는다. 주소공간이 크면 --node 로 특정 서브트리에서 검색하면 빠르다.
+    노드 상한(cap)·시간제한(budget_s)·진행표시로 멈춤을 방지한다.
     """
     from collections import deque
 
-    dq = deque([client.nodes.objects])
+    dq = deque([start if start is not None else client.nodes.objects])
     seen = 0
     key = substr.lower()
     t0 = time.monotonic()
@@ -183,26 +184,29 @@ def probe(endpoint: str, browse: bool = False, find: str | None = None,
         for i, u in enumerate(ns):
             print(f"    [{i}] {u}")
 
-        # 특정 노드부터 깊이 탐색 / 메서드 인자 확인 모드
+        # 메서드 인자 확인 모드
         if method_id:
             show_method(client, method_id)
             return True
-        if node_start:
+        # 태그 검색 모드 (--node 지정 시 그 서브트리만, 아니면 Objects 전체)
+        if find:
+            start = client.get_node(node_start) if node_start else None
+            scope = node_start or "Objects"
+            print(f"  태그 검색: '{find}'  (범위: {scope})")
+            found = find_tag(client, find, start=start)
+            if found is None:
+                return True
+            # 찾으면 아래 History 블록으로 흘러감
+        elif node_start:
             print(f"  주소 탐색 시작: {node_start}")
             browse_tree(client.get_node(node_start), max_depth=2, max_children=30)
             return True
-        # 주소 탐색 모드 — 태그 NodeId 형식 확인용
-        if browse:
+        elif browse:
             print("  Objects 하위 주소 탐색(태그 형식 확인):")
             browse_tree(client.nodes.objects, max_depth=3, max_children=15)
             return True
-        if find:
-            print(f"  태그 검색: '{find}'")
-            found = find_tag(client, find)
-            if found is None:
-                return True
         else:
-            # CIT 태그 노드 자동 매칭 (문자열 NodeId 변형 시도)
+            # CIT 태그 노드 자동 매칭 (문자열 NodeId 변형 시도 — 실패 시 --find 안내)
             found = None
             variants = [CIT_TAG, CIT_TAG.split("////")[0]]
             for v in variants:
@@ -219,13 +223,8 @@ def probe(endpoint: str, browse: bool = False, find: str | None = None,
                 if found is not None:
                     break
             if found is None:
-                print("  태그 자동 매칭 실패 → '--browse' 로 주소 형식을 확인하거나 "
-                      "'--find 10MBA11CT901' 로 검색하세요. Objects 상위:")
-                try:
-                    for child in client.nodes.objects.get_children()[:25]:
-                        print("     ", child.nodeid.to_string(), "|", _bn(child), "|", _ncls(child))
-                except Exception as e:  # noqa: BLE001
-                    print("     탐색 실패:", repr(e))
+                print("  태그 자동 매칭 실패(태그는 숫자 NodeId) → "
+                      "'--node <계층> --find 10MBA11CT901' 로 서브트리 검색하세요.")
                 return True   # 접속 자체는 성공
 
         # 2) 과거 데이터 접근 확인 (최근 3시간 raw)
