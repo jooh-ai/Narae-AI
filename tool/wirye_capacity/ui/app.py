@@ -28,11 +28,16 @@ def _require_qt():
         raise SystemExit("PySide6 가 필요합니다 (사내 PC): pip install PySide6") from e
 
 
-def build_connector(use_mock: bool, workbook_path: str | None):
+def build_connector(use_mock: bool, workbook_path: str | None,
+                    opcua_host: str | None = None):
     if use_mock:
         from ..rims import MockRimsConnector
         return MockRimsConnector.from_seed()
-    if workbook_path:
+    if opcua_host:                                   # B: DataPARC OPC UA 직접 취득
+        from ..rims.opcua import OpcUaRimsConnector
+        cache = str(Path.home() / ".wirye_opcua_nodeids.json")
+        return OpcUaRimsConnector(host=opcua_host, cache_path=cache)
+    if workbook_path:                                # A: 엑셀1 경유
         from ..rims.excel_addin import ExcelAddinRimsConnector
         return ExcelAddinRimsConnector(workbook_path)
     return None
@@ -77,14 +82,11 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.accum_chk = QtWidgets.QCheckBox("이 테스트를 누적에 반영(저장)")
             self.accum_chk.setToolTip("체크 안 하면 확인용(보정값만 표시, 누적 미저장)")
             self.forecast_in = self._file_row("엑셀3-1 (날씨)")
-            self.workbook_in = self._file_row("엑셀1 (RiMS) — 실제 취득")
+            self.opcua_in = QtWidgets.QLineEdit()
+            self.opcua_in.setPlaceholderText("DataPARC OPC UA 서버 호스트 (예: skes-rimspall1)")
+            self.workbook_in = self._file_row("엑셀1 (RiMS) — A: 엑셀 경유")
             self.workbook_in["edit"].setPlaceholderText(
-                "exe와 같은 폴더에 엑셀1을 두면 자동 감지 — 비워두면 자동 탐색")
-            # 시작 시 exe(또는 현재) 폴더의 엑셀1 자동 감지 → 날짜·시간만 입력하면 됨
-            from ..rims.locate import resolve_workbook
-            _found = resolve_workbook()
-            if _found is not None and _found.exists():
-                self.workbook_in["edit"].setText(str(_found))
+                "OPC UA 미사용 시에만 — 엑셀1 경로(비우면 exe 폴더 자동 감지)")
             self.mock_chk = QtWidgets.QCheckBox("mock RiMS 사용(테스트)")
             self.out_in = self._file_row("출력 엑셀3 입찰파일", save=True)
 
@@ -92,7 +94,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             form.addRow("Degradation", self.deg_in)
             form.addRow("입찰 적용일", self.bidday_in)
             form.addRow("날씨", self.forecast_in["row"])
-            form.addRow("RiMS", self.workbook_in["row"])
+            form.addRow("RiMS (B:OPC UA)", self.opcua_in)
+            form.addRow("RiMS (A:엑셀1)", self.workbook_in["row"])
             form.addRow("", self.mock_chk)
             form.addRow("", self.curve_chk)
             form.addRow("", self.accum_chk)
@@ -135,10 +138,11 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             from PySide6 import QtCore, QtGui
             use_mock = self.mock_chk.isChecked()
             workbook = self.workbook_in["edit"].text().strip() or None
-            if not use_mock and not workbook:
+            opcua_host = self.opcua_in.text().strip() or None
+            if not use_mock and not workbook and not opcua_host:
                 if QtWidgets.QMessageBox.question(
                         self, "RiMS 미지정",
-                        "RiMS(엑셀1) 또는 mock 이 지정되지 않았습니다.\n"
+                        "OPC UA 호스트/엑셀1/mock 중 아무것도 지정되지 않았습니다.\n"
                         "신규 취득 없이 현재 누적값으로 Profile만 재생성할까요?"
                         ) != QtWidgets.QMessageBox.StandardButton.Yes:
                     return
@@ -150,7 +154,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 res = run_pipeline(
                     date=self.date_in.text().strip(), store=self.store,
                     output_path=self.out_in["edit"].text().strip() or None,
-                    connector=build_connector(use_mock, workbook),
+                    connector=build_connector(use_mock, workbook, opcua_host),
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
                     accumulate=self.accum_chk.isChecked(),

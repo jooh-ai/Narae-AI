@@ -23,11 +23,11 @@
 ```bat
 cd tool
 pip install -r requirements.txt
-pip install xlwings PySide6        :: 사내 전용(RiMS·GUI). 패키징 시 pyinstaller 추가
+pip install asyncua PySide6        :: asyncua=B(OPC UA 취득)·GUI. A(엑셀 경유) 쓰면 xlwings 추가
 python -m pytest -q
 ```
-**기대**: `60 passed`
-**GATE 0**: 60건 통과해야 진행. 실패 시 Python 버전·openpyxl 설치 확인.
+**기대**: `89 passed`
+**GATE 0**: 전건 통과해야 진행. 실패 시 Python 버전·openpyxl 설치 확인.
 
 ---
 
@@ -84,14 +84,21 @@ python -m wirye_capacity check-rims --workbook "C:\경로\엑셀1.xlsx" --date 2
 
 **목적**: 실제 RiMS + 날씨로 입찰 파일을 생성.
 
+**B: OPC UA 직접 취득(권장 — 엑셀 불필요)**
 ```bat
 python -m wirye_capacity run --date 2026-04-15 ^
-       --workbook "C:\경로\엑셀1.xlsx" ^
+       --opcua-host skes-rimspall1 ^
        --forecast "C:\경로\엑셀3-1.xlsx" ^
        --bid-day "수요일, 4월 15일" ^
        --db %USERPROFILE%\wirye_commission.db --seed ^
        --out %USERPROFILE%\bid_20260415.xlsx
 ```
+> DataPARC OPC UA 서버에서 CIT·대기압·GT·ST·CC 를 17~18시 시간가중평균으로 직접 취득.
+> 첫 실행 시 태그 NodeId 를 BrowseName 으로 해결해 `~/.wirye_opcua_nodeids.json` 에 캐시(이후 빠름).
+> 사전 점검: `python scripts\opcua_probe.py --host skes-rimspall1 --full` (전 태그 대조).
+
+**A: 엑셀1 경유(대안)** — `--opcua-host` 대신 `--workbook "C:\경로\엑셀1.xlsx"`(또는 exe 폴더 자동 감지).
+
 (`--bid-day` 라벨은 엑셀3-1 일자 첫 열 문자열 그대로. 생략 시 7일 중위 평균.)
 
 > **누적 반영은 선택입니다.** 위 명령은 **확인용**(보정값만 표시, 누적 미저장)입니다. 출력에

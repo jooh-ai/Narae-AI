@@ -8,5 +8,6 @@
 """
 from .base import AcquiredTest, RimsConnector
 from .mock import MockRimsConnector
+from .opcua import OpcUaRimsConnector
 
-__all__ = ["AcquiredTest", "RimsConnector", "MockRimsConnector"]
+__all__ = ["AcquiredTest", "RimsConnector", "MockRimsConnector", "OpcUaRimsConnector"]

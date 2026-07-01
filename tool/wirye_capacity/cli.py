@@ -46,12 +46,23 @@ def _print_status(table) -> None:
               + "  " + r["status"])
 
 
+DEFAULT_OPCUA_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
+
+
 def _build_connector(args):
     if getattr(args, "mock", False):
         return MockRimsConnector.from_seed()
+    # B: DataPARC OPC UA 직접 취득 (엑셀 불필요)
+    host = getattr(args, "opcua_host", None)
+    ep = getattr(args, "opcua_endpoint", None)
+    if host or ep:
+        from .rims.opcua import OpcUaRimsConnector
+        cache = getattr(args, "opcua_cache", None) or DEFAULT_OPCUA_CACHE
+        print(f"RiMS 취득 방식 : OPC UA ({ep or host})")
+        return OpcUaRimsConnector(endpoint=ep, host=host, cache_path=cache)
+    # A: 엑셀1 경유 (exe/현재 폴더의 엑셀1 자동 감지)
     wb = getattr(args, "workbook", None)
     if not wb:
-        # exe(또는 현재 폴더) 옆에 둔 엑셀1 자동 감지 → 날짜·시간만 입력하면 됨
         from .rims.locate import resolve_workbook
         found = resolve_workbook()
         if found and found.exists():
@@ -71,7 +82,13 @@ def main(argv: list[str] | None = None) -> int:
     r = sub.add_parser("run", help="테스트 취득→누적→엑셀3 입찰파일 생성")
     r.add_argument("--date", required=True, help="테스트 날짜(키)")
     r.add_argument("--forecast", help="엑셀3-1 날씨 파일 경로")
-    r.add_argument("--workbook", help="엑셀1(RiMS 시트) 경로 — 실제 취득(Windows)")
+    r.add_argument("--workbook", help="엑셀1(RiMS 시트) 경로 — A: 엑셀 경유 취득")
+    r.add_argument("--opcua-host", dest="opcua_host",
+                   help="B: DataPARC OPC UA 서버 호스트로 직접 취득(엑셀 불필요)")
+    r.add_argument("--opcua-endpoint", dest="opcua_endpoint",
+                   help="B: OPC UA 엔드포인트 전체 URL(호스트 대신 지정)")
+    r.add_argument("--opcua-cache", dest="opcua_cache",
+                   help="OPC UA 태그 NodeId 캐시 경로(기본 ~/.wirye_opcua_nodeids.json)")
     r.add_argument("--mock", action="store_true", help="mock RiMS(시드) 사용")
     r.add_argument("--db", default=DEFAULT_DB, help="누적 DB 경로")
     r.add_argument("--out", help="출력 엑셀3 입찰파일 경로")
