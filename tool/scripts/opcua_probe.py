@@ -208,6 +208,40 @@ def _timeavg(node, start_dt, end_dt):
     return simple, tw, len(pts)
 
 
+def dump_history(client, nodeid: str, start_dt, end_dt) -> None:
+    """구간 raw history 를 모두 덤프 — 시각·값·품질(StatusCode) 확인(TimeAvg 불일치 진단)."""
+    node = client.get_node(nodeid)
+    hist = node.read_raw_history(start_dt, end_dt)
+    rows = []
+    for dv in hist:
+        t = getattr(dv, "SourceTimestamp", None) or getattr(dv, "ServerTimestamp", None)
+        v = dv.Value.Value if dv.Value is not None else None
+        sc = getattr(dv, "StatusCode", None)
+        q = "Good" if (sc is None or getattr(sc, "value", 0) == 0) else f"0x{getattr(sc,'value',0):08X}"
+        rows.append((t, v, q))
+    rows.sort(key=lambda r: (r[0] is None, r[0]))
+    print(f"  구간 {start_dt} ~ {end_dt} — {len(rows)}점")
+    good = [r for r in rows if r[2] == "Good"]
+    print(f"  품질: Good {len(good)} / 전체 {len(rows)}  (Good 아닌 점이 있으면 fnTagStat 이 제외할 수 있음)")
+    def _show(r):
+        t, v, q = r
+        ts = t.astimezone().strftime("%H:%M:%S") if t is not None else "-"
+        vs = f"{v:.3f}" if isinstance(v, (int, float)) else str(v)
+        print(f"     {ts}  {vs:>10}  {q}")
+    if len(rows) <= 80:
+        for r in rows:
+            _show(r)
+    else:
+        for r in rows[:40]:
+            _show(r)
+        print(f"     … ({len(rows)-80}점 생략) …")
+        for r in rows[-40:]:
+            _show(r)
+    nums = [v for _, v, _ in rows if isinstance(v, (int, float))]
+    if nums:
+        print(f"  min {min(nums):.3f}  max {max(nums):.3f}  단순평균 {sum(nums)/len(nums):.4f}")
+
+
 def read_average(client, nodeid: str, start_dt, end_dt) -> None:
     """단일 태그의 시간가중평균(TimeAvg 근사) 출력."""
     print(f"  구간 {start_dt} ~ {end_dt}")
@@ -300,7 +334,7 @@ def build_candidates(argv: list[str]) -> list[str]:
 
 def probe(endpoint: str, browse: bool = False, find: str | None = None,
           node_start: str | None = None, method_id: str | None = None,
-          avg=None, full=None) -> bool:
+          avg=None, full=None, dump=None) -> bool:
     from asyncua.sync import Client
 
     print("=" * 64)
@@ -330,6 +364,12 @@ def probe(endpoint: str, browse: bool = False, find: str | None = None,
         for i, u in enumerate(ns):
             print(f"    [{i}] {u}")
 
+        # raw history 덤프 모드 (TimeAvg 불일치 진단)
+        if dump is not None:
+            node_id, start_dt, end_dt = dump
+            print(f"  raw 덤프: {node_id}")
+            dump_history(client, node_id, start_dt, end_dt)
+            return True
         # 전체 태그 검증 모드 (엑셀1 8행 대조)
         if full is not None:
             start_dt, end_dt = full
@@ -437,12 +477,20 @@ def main() -> None:
     if "--full" in argv:
         full = _window(REF_DATE)      # 기본 2026-05-05 17~18시(기준값 있는 창)
 
+    dump = None
+    if "--dump" in argv:
+        if "--date" not in argv:
+            print("--dump 에는 --date YYYY-MM-DD 가 필요합니다.")
+            return
+        s, e = _window(None)
+        dump = (argv[argv.index("--dump") + 1], s, e)
+
     endpoints = build_candidates(argv)
     ok = False
     try:
         for ep in endpoints:
             if probe(ep, browse=browse, find=find, node_start=node_start,
-                     method_id=method_id, avg=avg, full=full):
+                     method_id=method_id, avg=avg, full=full, dump=dump):
                 ok = True
                 break
     except KeyboardInterrupt:
