@@ -341,8 +341,9 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             rows = self.store.list_up(order="date")
             self.list_tbl.setRowCount(len(rows))
             for i, r in enumerate(rows):
-                vals = [r.get("date") or "-", r["cit"], r["cc_meas"],
-                        round(r["corr"], 2), r.get("season") or ""]
+                # 표시 자릿수: CIT 1자리·CC 2자리 (저장은 풀 정밀도 유지 — 계산용)
+                vals = [r.get("date") or "-", f"{r['cit']:.1f}", f"{r['cc_meas']:.2f}",
+                        f"{r['corr']:+.2f}", r.get("season") or ""]
                 for j, v in enumerate(vals):
                     self.list_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
 

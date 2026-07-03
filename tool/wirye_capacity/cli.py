@@ -156,8 +156,9 @@ def main(argv: list[str] | None = None) -> int:
         rows = store.list_up()
         print(f"누적 {len(rows)}건:")
         for rec in rows:
-            print(f"  {str(rec.get('date') or '-'):>12} | CIT {rec['cit']:>5}°C | "
-                  f"보정 {rec['corr']:+.2f} MW | {rec.get('season') or ''}")
+            print(f"  {str(rec.get('date') or '-'):>12} | CIT {rec['cit']:>5.1f}°C | "
+                  f"CC {rec['cc_meas']:>7.2f} | 보정 {rec['corr']:+.2f} MW | "
+                  f"{rec.get('season') or ''}")
         _print_status(store.correction_table())
         store.close()
         return 0
