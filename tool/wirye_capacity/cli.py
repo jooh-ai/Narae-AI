@@ -106,6 +106,11 @@ def main(argv: list[str] | None = None) -> int:
     li = sub.add_parser("list", help="누적 테스트 List-up")
     li.add_argument("--db", default=DEFAULT_DB)
 
+    dl = sub.add_parser("delete", help="누적 테스트 삭제(실수 반영 취소) — 날짜 또는 id")
+    dl.add_argument("--db", default=DEFAULT_DB)
+    dl.add_argument("--date", help="이 날짜의 테스트를 삭제")
+    dl.add_argument("--id", type=int, dest="rec_id", help="특정 id 의 테스트를 삭제(list 에 표시)")
+
     ck = sub.add_parser("check-rims", help="RiMS 단건 취득값 출력(수동값과 대조용)")
     ck.add_argument("--workbook", help="엑셀1(RiMS 시트) 경로. 생략 시 exe/현재 폴더에서 자동 감지")
     ck.add_argument("--date", required=True)
@@ -156,9 +161,25 @@ def main(argv: list[str] | None = None) -> int:
         rows = store.list_up()
         print(f"누적 {len(rows)}건:")
         for rec in rows:
-            print(f"  {str(rec.get('date') or '-'):>12} | CIT {rec['cit']:>5.1f}°C | "
-                  f"CC {rec['cc_meas']:>7.2f} | 보정 {rec['corr']:+.2f} MW | "
-                  f"{rec.get('season') or ''}")
+            print(f"  [{rec['id']:>3}] {str(rec.get('date') or '-'):>12} | "
+                  f"CIT {rec['cit']:>5.1f}°C | CC {rec['cc_meas']:>7.2f} | "
+                  f"보정 {rec['corr']:+.2f} MW | {rec.get('season') or ''}")
+        _print_status(store.correction_table())
+        store.close()
+        return 0
+
+    if args.cmd == "delete":
+        if not args.date and args.rec_id is None:
+            print("--date 또는 --id 를 지정하세요 (id 는 list 명령에 표시).")
+            return 1
+        store = MeasurementStore(args.db)
+        if args.rec_id is not None:
+            store.delete(args.rec_id)
+            print(f"id {args.rec_id} 삭제.")
+        else:
+            n = store.delete_by_date(args.date)
+            print(f"'{args.date}' 테스트 {n}건 삭제.")
+        print(f"누적 건수   : {store.count()}")
         _print_status(store.correction_table())
         store.close()
         return 0

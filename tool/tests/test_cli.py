@@ -68,6 +68,24 @@ def test_list_prints_correction_status(tmp_path, capsys):
     assert "°C" in out                   # 온도구간 라벨
 
 
+def test_delete_by_date_removes_and_reaggregates(tmp_path, capsys):
+    """delete --date: 실수 반영 취소 → 누적·보정값 현황 재집계."""
+    db = str(tmp_path / "m.db")
+    main(["run", "--date", "2025-T01", "--mock", "--accumulate", "--db", db])
+    capsys.readouterr()
+    rc = main(["delete", "--date", "2025-T01", "--db", db])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "1건 삭제" in out
+    assert "누적 건수   : 0" in out
+    assert "보정값 현황" in out          # 재집계 표 함께 표시
+
+
+def test_delete_requires_date_or_id(tmp_path, capsys):
+    rc = main(["delete", "--db", str(tmp_path / "m.db")])
+    assert rc == 1
+
+
 def test_verify_cli_self_pass(tmp_path, capsys):
     """verify: Tool 생성본(tool 양식)을 기준으로 자기대조 → PASS."""
     from wirye_capacity.profile import build_profile, write_xlsx

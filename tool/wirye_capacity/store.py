@@ -129,6 +129,12 @@ class MeasurementStore:
         self.conn.execute("DELETE FROM measurements WHERE id=?", (rec_id,))
         self.conn.commit()
 
+    def delete_by_date(self, date: str) -> int:
+        """해당 날짜의 테스트 삭제(실수 반영 취소용). 삭제 건수 반환."""
+        cur = self.conn.execute("DELETE FROM measurements WHERE date=?", (date,))
+        self.conn.commit()
+        return cur.rowcount
+
     def clear(self) -> None:
         self.conn.execute("DELETE FROM measurements")
         self.conn.commit()

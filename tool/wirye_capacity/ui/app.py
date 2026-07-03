@@ -75,6 +75,11 @@ QPushButton#primary:hover {
                 stop:0 #C50024, stop:1 #DC6414);
 }
 QPushButton#primary:disabled { background: #F3B7A3; }
+QPushButton#danger {
+    background: #FFFFFF; color: #C50024; border: 1px solid #F0AAB6;
+    border-radius: 6px; padding: 8px 16px; font-weight: 700;
+}
+QPushButton#danger:hover { background: #FDECEF; border-color: #EA002C; }
 
 QCheckBox { spacing: 8px; padding: 2px; }
 QCheckBox::indicator { width: 17px; height: 17px; }
@@ -327,25 +332,63 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 for j, v in enumerate(vals):
                     self.status_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
 
-        # ---------- Test List-up 탭 ----------
+        # ---------- Test 결과 List-up 탭 ----------
         def _list_tab(self):
+            w = QtWidgets.QWidget()
+            lay = QtWidgets.QVBoxLayout(w)
+            bar = QtWidgets.QHBoxLayout()
+            hint = QtWidgets.QLabel(
+                "실수로 누적에 반영한 테스트는 행을 선택해 삭제하세요 (삭제 즉시 보정값 재집계).")
+            hint.setWordWrap(True)
+            self.del_btn = QtWidgets.QPushButton("🗑 선택 삭제")
+            self.del_btn.setObjectName("danger")
+            self.del_btn.clicked.connect(self._on_delete)
+            bar.addWidget(hint, stretch=1)
+            bar.addWidget(self.del_btn)
             self.list_tbl = QtWidgets.QTableWidget(0, 5)
             self.list_tbl.setHorizontalHeaderLabels(
                 ["날짜", "CIT(°C)", "CC실측", "보정값", "계절"])
             self.list_tbl.setAlternatingRowColors(True)
             self.list_tbl.horizontalHeader().setStretchLastSection(True)
             self.list_tbl.verticalHeader().setVisible(False)
-            return self.list_tbl
+            self.list_tbl.setSelectionBehavior(
+                QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+            self.list_tbl.setEditTriggers(
+                QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+            lay.addLayout(bar)
+            lay.addWidget(self.list_tbl)
+            return w
 
         def _refresh_list(self):
-            rows = self.store.list_up(order="date")
-            self.list_tbl.setRowCount(len(rows))
-            for i, r in enumerate(rows):
+            self._list_rows = self.store.list_up(order="date")   # id 포함(삭제용)
+            self.list_tbl.setRowCount(len(self._list_rows))
+            for i, r in enumerate(self._list_rows):
                 # 표시 자릿수: CIT 1자리·CC 2자리 (저장은 풀 정밀도 유지 — 계산용)
                 vals = [r.get("date") or "-", f"{r['cit']:.1f}", f"{r['cc_meas']:.2f}",
                         f"{r['corr']:+.2f}", r.get("season") or ""]
                 for j, v in enumerate(vals):
                     self.list_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
+
+        def _on_delete(self):
+            sel = sorted({ix.row() for ix in self.list_tbl.selectedIndexes()})
+            if not sel:
+                QtWidgets.QMessageBox.information(self, "선택 없음", "삭제할 행을 선택하세요.")
+                return
+            lines = [f"  · {self._list_rows[r].get('date') or '-'}  "
+                     f"(CIT {self._list_rows[r]['cit']:.1f}°C, "
+                     f"보정 {self._list_rows[r]['corr']:+.2f})" for r in sel]
+            if QtWidgets.QMessageBox.warning(
+                    self, "누적에서 삭제",
+                    f"다음 {len(sel)}건을 누적에서 삭제할까요?\n(삭제 후 보정값이 재집계됩니다)\n\n"
+                    + "\n".join(lines),
+                    QtWidgets.QMessageBox.StandardButton.Yes
+                    | QtWidgets.QMessageBox.StandardButton.No
+                    ) != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            for r in sel:
+                self.store.delete(self._list_rows[r]["id"])
+            self._refresh_list()
+            self._refresh_status(self.store.correction_table())   # 즉시 재집계 반영
 
     app = QtWidgets.QApplication(argv or sys.argv)
     app.setStyleSheet(QSS)
