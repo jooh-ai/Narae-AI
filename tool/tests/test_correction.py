@@ -97,6 +97,15 @@ def test_status_rows_mirror_excel4_status_sheet():
     assert by_bin[(-14, 0)]["kind_label"] == "보수적 고정"
 
 
+def test_table_fingerprint_changes_on_new_record():
+    """지문: 같은 테이블 → 동일, 테스트 추가로 적용값 변경 → 달라짐."""
+    from wirye_capacity.correction import table_fingerprint
+    t1 = aggregate_bins(SEED)
+    assert table_fingerprint(t1) == table_fingerprint(aggregate_bins(SEED))  # 결정적
+    t2 = aggregate_bins(SEED + [{"cit": 26.0, "corr": 10.0}])                # 25~30 평균 이동
+    assert table_fingerprint(t1) != table_fingerprint(t2)
+
+
 def test_status_rows_empty_table_no_crash():
     """데이터 0건이어도 8구간 모두 나오고 avg=None."""
     rows = status_rows(aggregate_bins([]))

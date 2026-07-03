@@ -109,6 +109,20 @@ def applied_correction(cit: float, bin_table: dict[tuple[int, int], dict]) -> fl
     return info["applied"]
 
 
+def table_fingerprint(bin_table: dict[tuple[int, int], dict]) -> str:
+    """보정 테이블 지문(8자 해시) — 입찰파일이 어느 누적 상태 기준인지 식별.
+
+    적용 보정값이 하나라도 바뀌면(테스트 반영/삭제) 지문이 달라진다.
+    입찰파일 속성에 도장으로 찍고, 이후 최신 여부 검사(check-bid)에 사용.
+    """
+    import hashlib
+    import json
+    payload = {f"{lo}~{hi}": (None if info.get("applied") is None
+                              else round(info["applied"], 4))
+               for (lo, hi), info in sorted(bin_table.items())}
+    return hashlib.md5(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:8]
+
+
 def realized_net(theory_gross_with_igv: float, correction: float,
                  cap_net: float = C.BID_CAP_NET, aux: float = C.CC_AUX) -> float:
     """현실화 Net 출력 = min((이론 Gross+IGV) + 보정값 − Aux, 상한 Net)."""

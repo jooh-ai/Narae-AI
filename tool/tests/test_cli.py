@@ -86,6 +86,32 @@ def test_delete_requires_date_or_id(tmp_path, capsys):
     assert rc == 1
 
 
+def test_check_bid_fresh_then_stale(tmp_path, capsys):
+    """check-bid: 생성 직후 ✅최신 → 누적 변경 후 ⚠구버전."""
+    db = str(tmp_path / "m.db")
+    out = str(tmp_path / "bid.xlsx")
+    main(["run", "--date", "2025-T05", "--mock", "--seed", "--accumulate",
+          "--db", db, "--out", out])
+    capsys.readouterr()
+    assert main(["check-bid", "--file", out, "--db", db]) == 0
+    assert "✅ 최신" in capsys.readouterr().out
+    # 누적 변경(avg 구간 테스트 반영 → 적용 보정값 이동) → 구버전
+    # (주: T01 은 '보수적 고정' 구간이라 적용값이 안 변해 지문 유지 — 의도된 동작)
+    main(["run", "--date", "2025-T02", "--mock", "--accumulate", "--db", db])
+    capsys.readouterr()
+    assert main(["check-bid", "--file", out, "--db", db]) == 2
+    assert "구버전" in capsys.readouterr().out
+
+
+def test_check_bid_no_stamp(tmp_path, capsys):
+    """보정지문 없는 파일(외부/구버전 생성) → 경고 리턴 2."""
+    from openpyxl import Workbook
+    f = str(tmp_path / "plain.xlsx")
+    Workbook().save(f)
+    assert main(["check-bid", "--file", f, "--db", str(tmp_path / "m.db")]) == 2
+    assert "보정지문이 없습니다" in capsys.readouterr().out
+
+
 def test_verify_cli_self_pass(tmp_path, capsys):
     """verify: Tool 생성본(tool 양식)을 기준으로 자기대조 → PASS."""
     from wirye_capacity.profile import build_profile, write_xlsx

@@ -19,7 +19,7 @@ from pathlib import Path
 
 from .. import constants as C
 from ..config import get_config, set_config
-from ..correction import status_rows
+from ..correction import status_rows, table_fingerprint
 from ..pipeline import run_pipeline
 from ..store import MeasurementStore
 from ..theory import TheoryEngine
@@ -125,6 +125,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.store = MeasurementStore(db_default)
             if self.store.count() == 0:
                 self.store.seed()
+            self._last_bid = None      # 마지막 생성 입찰파일 {path, fp} — 구버전 감지용
 
             tabs = QtWidgets.QTabWidget()
             tabs.addTab(self._run_tab(), "공급가능용량 산정")
@@ -294,6 +295,10 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self._fill_profile(res.profile_rows)
             self._refresh_status(res.correction_table)
             self._refresh_list()
+            if res.output_path:
+                self._last_bid = {"path": res.output_path, "fp": res.fingerprint}
+            elif res.reflected:
+                self._check_bid_freshness()   # 파일 생성 없이 누적만 변경 → 기존 파일 구버전?
 
         def _fill_profile(self, rows):
             self.profile_tbl.setRowCount(len(rows))
@@ -389,6 +394,53 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 self.store.delete(self._list_rows[r]["id"])
             self._refresh_list()
             self._refresh_status(self.store.correction_table())   # 즉시 재집계 반영
+            self._check_bid_freshness()                            # 기존 입찰파일 구버전 감지
+
+        # ---------- 입찰파일 최신성 감시 (누적 변경 → 재생성 유도) ----------
+        def _check_bid_freshness(self):
+            if not self._last_bid:
+                return
+            fp_now = table_fingerprint(self.store.correction_table())
+            if fp_now == self._last_bid["fp"]:
+                return
+            name = Path(self._last_bid["path"]).name
+            if QtWidgets.QMessageBox.warning(
+                    self, "입찰파일 구버전 경고",
+                    f"누적이 변경되어 보정값이 바뀌었습니다.\n"
+                    f"이미 생성한 입찰파일이 이전 보정값 기준입니다:\n\n    {name}\n\n"
+                    f"현재 누적 기준으로 다시 생성할까요? (RiMS 재취득 없이 빠르게 재생성)",
+                    QtWidgets.QMessageBox.StandardButton.Yes
+                    | QtWidgets.QMessageBox.StandardButton.No
+                    ) != QtWidgets.QMessageBox.StandardButton.Yes:
+                self._last_bid = None      # 사용자가 거부 → 더 묻지 않음(파일은 구버전 상태)
+                return
+            self._regenerate_bid()
+
+        def _regenerate_bid(self):
+            """RiMS 재취득 없이 현재 누적으로 마지막 입찰파일을 다시 생성."""
+            from PySide6 import QtCore, QtGui
+            template = get_config("template_path") or C.resource(
+                "templates", "excel3_profile_template.xlsx")
+            QtGui.QGuiApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+            try:
+                res = run_pipeline(
+                    date=self.date_in.text().strip(), store=self.store,
+                    output_path=self._last_bid["path"], connector=None,
+                    engine=self.engine, deg=self.deg_in.value(),
+                    bid_day=self.bidday_in.text().strip() or None,
+                    correction_method="curve" if self.curve_chk.isChecked() else "bin",
+                    forecast_path=self.forecast_in["edit"].text().strip() or None,
+                    template_path=template,
+                    start=self.start_in.text().strip() or "17:00")
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.critical(self, "재생성 오류", str(e))
+                return
+            finally:
+                QtGui.QGuiApplication.restoreOverrideCursor()
+            self._last_bid = {"path": res.output_path, "fp": res.fingerprint}
+            self.summary.setText(f"♻ 입찰파일 재생성 완료 (현재 누적 {res.measurement_count}건 기준)"
+                                 f"    |    {res.output_path}")
+            self._fill_profile(res.profile_rows)
 
     app = QtWidgets.QApplication(argv or sys.argv)
     app.setStyleSheet(QSS)

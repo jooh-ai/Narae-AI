@@ -187,13 +187,14 @@ def fill_excel3_template(output_path: str, *, engine: TheoryEngine, correction_t
                          pressure: float = C.REF_PRESSURE, deg: float = C.DEFAULT_DEG,
                          forecast=None, template_path: str | Path = DEFAULT_TEMPLATE,
                          mode3_sheet: str = "Mode3", corrector=None,
-                         test_date: str | None = None) -> str:
+                         test_date: str | None = None, stamp: str | None = None) -> str:
     """현실화 Mode3 GT/ST를 엑셀3 템플릿 Mode3!B5:C65 에 채워 최종 입찰 파일 생성.
 
     pressure: 입찰 적용 대기압(보통 weather.applied_pressure = 중위−8). 현실화값에 반영됨.
     forecast: 있으면 온도 Profile 날씨 블록도 채움(M2 적용대기압·크롤링시각·Update time).
     corrector: 있으면 연속곡선 등으로 보정값 산출(없으면 구간 평균).
     test_date: 있으면 B2 제목의 날짜를 갱신("위례열병합 Baseload Test ('YY.MM.DD)").
+    stamp: 있으면 파일 속성(설명)에 기록 — 생성 시점 보정지문·누적 건수(check-bid 검사용).
     반환: output_path. (Excel에서 열면 6모드·온도Profile이 수식으로 재계산됨)
     """
     from openpyxl import load_workbook
@@ -221,5 +222,10 @@ def fill_excel3_template(output_path: str, *, engine: TheoryEngine, correction_t
         wb.calculation.fullCalcOnLoad = True
     except Exception:
         pass
+    if stamp:                              # 파일 속성(설명)에 생성 정보 도장(시트는 안 건드림)
+        try:
+            wb.properties.description = stamp
+        except Exception:
+            pass
     wb.save(output_path)
     return output_path

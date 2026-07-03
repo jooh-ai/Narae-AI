@@ -117,6 +117,10 @@ def main(argv: list[str] | None = None) -> int:
     ck.add_argument("--start", default="17:00")
     ck.add_argument("--sheet", default="RiMS 계산 Sheet")
 
+    cb = sub.add_parser("check-bid", help="입찰파일이 현재 누적 보정값 기준(최신)인지 확인")
+    cb.add_argument("--file", required=True, help="검사할 입찰파일(.xlsx)")
+    cb.add_argument("--db", default=DEFAULT_DB)
+
     vf = sub.add_parser("verify", help="시운전: 기준 엑셀 ↔ Tool Profile 대조(±tol)")
     vf.add_argument("--ref", required=True, help="기준 엑셀(기존 온도 Profile) 경로")
     vf.add_argument("--layout", default="excel4", choices=["excel4", "tool"])
@@ -204,6 +208,28 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  CC Gross   : {acq.cc_meas} MW")
         print("→ 엑셀1을 같은 날짜·시각으로 수동 취득한 8행 값과 일치하는지 대조하세요.")
         return 0
+
+    if args.cmd == "check-bid":
+        import re
+
+        from openpyxl import load_workbook
+
+        from .correction import table_fingerprint
+        desc = (load_workbook(args.file, read_only=True).properties.description or "")
+        m = re.search(r"보정지문 (\w+)", desc)
+        if not m:
+            print("⚠ 이 파일에는 보정지문이 없습니다(구버전 툴 생성 또는 외부 파일).")
+            return 2
+        store = MeasurementStore(args.db)
+        now_fp = table_fingerprint(store.correction_table())
+        store.close()
+        print(f"파일 도장   : {desc}")
+        print(f"현재 지문   : {now_fp}")
+        if m.group(1) == now_fp:
+            print("✅ 최신 — 현재 누적 보정값 기준으로 생성된 파일입니다.")
+            return 0
+        print("⚠ 구버전 — 생성 이후 누적(반영/삭제)이 변경되었습니다. 입찰파일을 다시 생성하세요.")
+        return 2
 
     if args.cmd == "verify":
         from .profile import build_profile

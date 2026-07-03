@@ -32,6 +32,7 @@ class PipelineResult:
     output_path: str | None = None
     reflected: bool = False          # 이번 테스트가 누적에 반영(저장)됐는지
     duplicate_skipped: bool = False  # 같은 날짜가 이미 있어 반영을 건너뛰었는지
+    fingerprint: str = ""            # 보정 테이블 지문 — 입찰파일 최신 여부 검사용
 
 
 def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None = None,
@@ -79,16 +80,23 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
         corrector = CorrectionCurve(
             [{"cit": r.cit, "corr": r.corr} for r in store.all()], bandwidth=bandwidth)
 
-    # 4. 현실화 Profile + 엑셀3 출력
+    # 4. 현실화 Profile + 엑셀3 출력 (보정지문 도장 → check-bid 최신 여부 검사)
+    from datetime import datetime
+
+    from .correction import table_fingerprint
+    fp = table_fingerprint(table)
     rows = build_profile(eng, table, pressure=pressure, deg=deg, corrector=corrector)
     out = None
     if output_path:
+        stamp = (f"위례입찰툴 | 테스트 {date} | 누적 {store.count()}건 | "
+                 f"보정지문 {fp} | 생성 {datetime.now():%Y-%m-%d %H:%M}")
         out = fill_excel3_template(output_path, engine=eng, correction_table=table,
                                    pressure=pressure, deg=deg, forecast=forecast,
                                    template_path=template_path, corrector=corrector,
-                                   test_date=date)
+                                   test_date=date, stamp=stamp)
 
     return PipelineResult(date=date, applied_pressure=pressure, deg=deg,
                           measurement_count=store.count(), new_record=new_record,
                           correction_table=table, profile_rows=rows, output_path=out,
-                          reflected=reflected, duplicate_skipped=duplicate_skipped)
+                          reflected=reflected, duplicate_skipped=duplicate_skipped,
+                          fingerprint=fp)
