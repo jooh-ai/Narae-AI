@@ -7,7 +7,9 @@
   3. 테스트 창(17~18시) raw history 의 시간가중평균(TimeAvg) 을 읽어 AcquiredTest 반환
 
 NodeId 는 서버 재구성 시 바뀔 수 있어 BrowseName(사람이 읽는 태그명) 기준으로 해결한다.
-RH 는 값이 비정상(현장 확인)이라 취득하지 않는다 → 코어에서 60% 고정.
+RH 는 취득하되 유효범위(5~100%) 검사 후 사용 — 센서 고장값(예: 2.09, 2026-05 확인)이면
+None(→코어 60% 고정 폴백). 과거 테스트는 정상 RH 라 엑셀4 이론값(I열)과 정합됨
+(실사례: 2026-01-06 RH 23% — 60% 고정 시 이론 +1.01MW 어긋남).
 asyncua 는 사내에서만 필요하므로 메서드 내부에서 import 한다.
 """
 from __future__ import annotations
@@ -37,7 +39,11 @@ CORE_TAGS = {
     "gt_meas": "10CJA00DE100//XQ12",   # GT Load (MW)
     "st_meas": "10CJA00DE100//XQ11",   # ST Load (MW)
     "cc_meas": "10MBY10CE901//XQ01",   # CC Load raw Gross (MW) — 정규화값 아님
+    "rh": "10MBL11CM001//XQ01",        # 상대습도 (%) — 유효범위 밖이면 60% 폴백
 }
+
+# 상대습도 유효범위(%) — 밖이면 센서 고장으로 보고 None(→이론 60% 고정)
+RH_VALID_RANGE = (5.0, 100.0)
 
 
 def _local(date: str, start: str) -> datetime:
@@ -144,9 +150,13 @@ class OpcUaRimsConnector:
         if missing:
             raise RuntimeError(f"OPC UA 취득 실패: 필수 태그 값 없음 {missing} "
                                f"(태그 해결/시간창/보존기간 확인)")
+        rh = vals.get("rh")
+        if not (isinstance(rh, (int, float))
+                and RH_VALID_RANGE[0] <= rh <= RH_VALID_RANGE[1]):
+            rh = None                       # 센서 고장값 → 이론계산 60% 고정 폴백
         return AcquiredTest(
             date=date, cit=vals["cit"], pressure=vals["pressure"], cc_meas=vals["cc_meas"],
-            gt_meas=vals.get("gt_meas"), st_meas=vals.get("st_meas"), rh=None)
+            gt_meas=vals.get("gt_meas"), st_meas=vals.get("st_meas"), rh=rh)
 
     # ---------------- 네트워크 (사내 전용, 테스트 시 오버라이드 가능) ----------------
     def endpoints(self) -> list[str]:

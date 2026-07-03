@@ -85,15 +85,27 @@ def test_acquire_assembles_acquiredtest(monkeypatch):
         captured["start"] = start_dt
         captured["end"] = end_dt
         return {"cit": 21.0, "pressure": 1005.6, "cc_meas": 400.2,
-                "gt_meas": 271.7, "st_meas": 128.4}
+                "gt_meas": 271.7, "st_meas": 128.4, "rh": 44.0}
 
     monkeypatch.setattr(c, "_connect_and_read", fake_read)
     acq = c.acquire("2026-05-05", "17:00")
     assert (acq.cit, acq.pressure, acq.cc_meas) == (21.0, 1005.6, 400.2)
     assert acq.gt_meas == 271.7 and acq.st_meas == 128.4
-    assert acq.rh is None and acq.date == "2026-05-05"
+    assert acq.rh == 44.0 and acq.date == "2026-05-05"    # 유효 RH → 실측 사용
     # 창 = 17:00 ~ 18:00 (window_min=60)
     assert (captured["end"] - captured["start"]) == timedelta(minutes=60)
+
+
+def test_acquire_filters_broken_rh(monkeypatch):
+    """센서 고장 RH(예: 2.09, 2026-05 실측)는 None → 이론 60% 고정 폴백."""
+    c = OpcUaRimsConnector(host="h")
+    base = {"cit": 21.0, "pressure": 1005.6, "cc_meas": 400.2}
+    for bad in (2.09, 0.0, 150.0, None, "x"):
+        monkeypatch.setattr(c, "_connect_and_read", lambda s, e, b=bad: {**base, "rh": b})
+        assert c.acquire("2026-05-05").rh is None, bad
+    # 경계값은 유효
+    monkeypatch.setattr(c, "_connect_and_read", lambda s, e: {**base, "rh": 5.0})
+    assert c.acquire("2026-05-05").rh == 5.0
 
 
 def test_acquire_raises_when_core_missing(monkeypatch):
