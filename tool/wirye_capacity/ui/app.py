@@ -73,6 +73,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             form = QtWidgets.QFormLayout()
             self.date_in = QtWidgets.QLineEdit()
             self.date_in.setPlaceholderText("예: 2025-09-12 (테스트 날짜)")
+            self.start_in = QtWidgets.QLineEdit("17:00")
+            self.start_in.setPlaceholderText("테스트 시작 시각 HH:MM (1시간 창)")
             self.deg_in = QtWidgets.QDoubleSpinBox()
             self.deg_in.setRange(1.0, 1.2); self.deg_in.setSingleStep(0.001)
             self.deg_in.setDecimals(3); self.deg_in.setValue(C.DEFAULT_DEG)
@@ -94,6 +96,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.out_in = self._file_row("출력 엑셀3 입찰파일", save=True)
 
             form.addRow("테스트 날짜", self.date_in)
+            form.addRow("시작 시각", self.start_in)
             form.addRow("Degradation", self.deg_in)
             form.addRow("입찰 적용일", self.bidday_in)
             form.addRow("날씨", self.forecast_in["row"])
@@ -165,7 +168,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     correction_method="curve" if self.curve_chk.isChecked() else "bin",
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=(self.template_in["edit"].text().strip() or C.resource(
-                        "templates", "excel3_profile_template.xlsx")))
+                        "templates", "excel3_profile_template.xlsx")),
+                    start=self.start_in.text().strip() or "17:00")
             except Exception as e:  # noqa: BLE001
                 QtWidgets.QMessageBox.critical(self, "오류", str(e))
                 return

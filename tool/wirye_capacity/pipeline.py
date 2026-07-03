@@ -40,7 +40,7 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                  forecast: WeatherForecast | None = None, forecast_path: str | None = None,
                  bid_day: str | None = None, template_path: str | Path = DEFAULT_TEMPLATE,
                  accumulate: bool = False, correction_method: str = "bin",
-                 bandwidth: float = 3.5) -> PipelineResult:
+                 bandwidth: float = 3.5, start: str = "17:00") -> PipelineResult:
     """전 단계 실행. connector 가 있으면 RiMS 자동취득.
 
     accumulate=False(기본): 취득·보정값 계산만(확인용) — 누적에 저장 안 함.
@@ -48,6 +48,7 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     forecast/forecast_path 로 입찰 대기압(예보 중위 − 8) 결정. 없으면 ISO 1013.
     correction_method: 'bin'(구간 평균, 기본) 또는 'curve'(연속 보정곡선).
     output_path 가 있으면 엑셀3 양식 입찰 파일 생성.
+    start: 테스트 시작 시각(기본 17:00, 1시간 창). 다른 시각에 수행된 테스트 취득용.
     """
     eng = engine or TheoryEngine()
 
@@ -62,7 +63,7 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     reflected = False
     duplicate_skipped = False
     if connector is not None:
-        new_record = store.compute_from_rims(connector, date, engine=eng, deg=deg)
+        new_record = store.compute_from_rims(connector, date, start=start, engine=eng, deg=deg)
         if accumulate:
             if store.has_date(date):
                 duplicate_skipped = True            # 같은 날짜 이미 반영됨 → 중복 방지

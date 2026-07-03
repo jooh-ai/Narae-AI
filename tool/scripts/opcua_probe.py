@@ -59,6 +59,11 @@ FULL_TAGS = [
 REF_DATE = "2026-05-05"   # FULL_TAGS 기준값이 유효한 날짜
 
 
+def _local_dt(date: str, hhmm: str):
+    """'YYYY-MM-DD'+'HH:MM' → 로컬 시간대(aware) datetime."""
+    return datetime.strptime(f"{date} {hhmm}", "%Y-%m-%d %H:%M").astimezone()
+
+
 def _tcp_open(url: str, timeout: float = 2.0) -> bool:
     """OPC UA 핸드셰이크 전에 포트가 살아있는지 빠르게 확인(막힌 포트 매달림 방지)."""
     p = urlparse(url)
@@ -265,6 +270,41 @@ def server_time_average(client, nodeid: str, start_dt, end_dt):
     return vals[0] if vals else None
 
 
+def hourly_profile(client, nodeid: str, date: str) -> None:
+    """하루 24시간의 시간대별 서버 TimeAverage 출력 — 테스트가 실제 몇 시였는지 찾기."""
+    from asyncua import ua
+
+    start_dt = _local_dt(date, "00:00")
+    end_dt = start_dt + timedelta(days=1)
+    node = client.get_node(nodeid)
+    details = ua.ReadProcessedDetails()
+    details.StartTime = start_dt
+    details.EndTime = end_dt
+    details.ProcessingInterval = 3600 * 1000.0          # 1시간 버킷 × 24
+    details.AggregateType = [ua.NodeId(2343)]           # TimeAverage
+    ac = ua.AggregateConfiguration()
+    ac.UseServerCapabilitiesDefaults = True
+    details.AggregateConfiguration = ac
+    result = node.history_read(details)
+    print(f"  {date} 시간대별 TimeAverage ({nodeid}):")
+    vals = []
+    for dv in result.HistoryData.DataValues:
+        t = dv.SourceTimestamp
+        v = dv.Value.Value if dv.Value is not None else None
+        if t is None:
+            continue
+        hh = t.astimezone().strftime("%H:%M")
+        if isinstance(v, (int, float)):
+            bar = "█" * max(0, min(50, int(v / 10)))
+            print(f"    {hh}~  {v:>10.2f}  {bar}")
+            vals.append((hh, v))
+        else:
+            print(f"    {hh}~  (값없음)")
+    if vals:
+        top = max(vals, key=lambda x: x[1])
+        print(f"  → 최대 구간: {top[0]}~ ({top[1]:.2f}) — 테스트 창은 이 부근일 가능성.")
+
+
 def read_average(client, nodeid: str, start_dt, end_dt) -> None:
     """단일 태그: 서버측 TimeAverage(정답) + 참고용 raw 통계 출력."""
     print(f"  구간 {start_dt} ~ {end_dt}")
@@ -358,7 +398,7 @@ def build_candidates(argv: list[str]) -> list[str]:
 
 def probe(endpoint: str, browse: bool = False, find: str | None = None,
           node_start: str | None = None, method_id: str | None = None,
-          avg=None, full=None, dump=None, tavg=None) -> bool:
+          avg=None, full=None, dump=None, tavg=None, hourly=None) -> bool:
     from asyncua.sync import Client
 
     print("=" * 64)
@@ -388,6 +428,14 @@ def probe(endpoint: str, browse: bool = False, find: str | None = None,
         for i, u in enumerate(ns):
             print(f"    [{i}] {u}")
 
+        # 시간대별 프로파일 모드 (테스트 창 찾기)
+        if hourly is not None:
+            node_id, date = hourly
+            try:
+                hourly_profile(client, node_id, date)
+            except Exception as e:  # noqa: BLE001
+                print(f"  시간대별 조회 실패: {e!r}")
+            return True
         # 서버측 TimeAverage 집계 모드 (fnTagStat 정합)
         if tavg is not None:
             node_id, start_dt, end_dt = tavg
@@ -529,12 +577,21 @@ def main() -> None:
         s, e = _window(None)
         tavg = (argv[argv.index("--tavg") + 1], s, e)
 
+    hourly = None
+    if "--hourly" in argv:
+        if "--date" not in argv:
+            print("--hourly 에는 --date YYYY-MM-DD 가 필요합니다.")
+            return
+        hourly = (argv[argv.index("--hourly") + 1],
+                  argv[argv.index("--date") + 1])
+
     endpoints = build_candidates(argv)
     ok = False
     try:
         for ep in endpoints:
             if probe(ep, browse=browse, find=find, node_start=node_start,
-                     method_id=method_id, avg=avg, full=full, dump=dump, tavg=tavg):
+                     method_id=method_id, avg=avg, full=full, dump=dump, tavg=tavg,
+                     hourly=hourly):
                 ok = True
                 break
     except KeyboardInterrupt:

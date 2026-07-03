@@ -105,6 +105,22 @@ def test_no_connector_just_builds_profile(forecast):
     assert len(res.profile_rows) == 61
 
 
+def test_start_time_passed_to_connector(forecast):
+    """start(테스트 시작 시각)가 커넥터 acquire 까지 전달된다 (17시 외 테스트 지원)."""
+    captured = {}
+
+    class SpyConnector:
+        def acquire(self, date, start="17:00"):
+            captured["start"] = start
+            return AcquiredTest(date=date, cit=4.0, pressure=1011.0, cc_meas=460.0)
+
+    store = MeasurementStore(":memory:"); store.seed()
+    run_pipeline(date="2025-01-06", store=store, connector=SpyConnector(),
+                 forecast=forecast, start="14:00")
+    assert captured["start"] == "14:00"
+    store.close()
+
+
 def test_default_pressure_without_forecast():
     store = MeasurementStore(":memory:")
     store.seed()

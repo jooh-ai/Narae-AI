@@ -81,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
 
     r = sub.add_parser("run", help="테스트 취득→누적→엑셀3 입찰파일 생성")
     r.add_argument("--date", required=True, help="테스트 날짜(키)")
+    r.add_argument("--start", default="17:00",
+                   help="테스트 시작 시각 HH:MM (기본 17:00, 1시간 창)")
     r.add_argument("--forecast", help="엑셀3-1 날씨 파일 경로")
     r.add_argument("--workbook", help="엑셀1(RiMS 시트) 경로 — A: 엑셀 경유 취득")
     r.add_argument("--opcua-host", dest="opcua_host",
@@ -130,7 +132,8 @@ def main(argv: list[str] | None = None) -> int:
                            connector=_build_connector(args), forecast_path=args.forecast,
                            deg=args.deg, bid_day=args.bid_day, accumulate=args.accumulate,
                            correction_method="curve" if args.curve else "bin",
-                           template_path=args.template or DEFAULT_TEMPLATE)
+                           template_path=args.template or DEFAULT_TEMPLATE,
+                           start=args.start)
         src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
         print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
         if res.new_record is not None:
