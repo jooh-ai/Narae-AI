@@ -64,16 +64,39 @@ def test_weather_block_filled(tmp_path, ctx):
     import openpyxl
     eng, table = ctx
     fc = WeatherForecast(
-        capture="2026-04-15 18:09:12",
+        capture="2026-06-01 18:09:12",
         days=["수요일, 4월 15일", "목요일, 4월 16일"],
         times=[0, 3, 6, 9, 12, 15, 18, 21],
         pressure_median={"수요일, 4월 15일": 1010.0, "목요일, 4월 16일": 1015.0},
         pressure_min={"수요일, 4월 15일": 1009.0, "목요일, 4월 16일": 1014.0},
         pressure_grid={"수요일, 4월 15일": [1010, 1009, 1010, 1010, 1010, 1009, 1009, 1011],
-                       "목요일, 4월 16일": [1014, 1015, 1015, 1017, 1017, 1015, 1015, 1015]})
+                       "목요일, 4월 16일": [1014, 1015, 1015, 1017, 1017, 1015, 1015, 1015]},
+        update_time="15:00")
     out = fill_excel3_template(str(tmp_path / "bid.xlsx"), engine=eng,
                                correction_table=table, pressure=1006, deg=1.028, forecast=fc)
     ws = openpyxl.load_workbook(out)["온도 Profile"]
     assert ws.cell(row=6, column=16).value == "수요일, 4월 15일"   # P6 일자
     assert ws.cell(row=6, column=17).value == 1010                # Q6 0시
     assert ws.cell(row=6, column=25).value == pytest.approx(1010) # Y6 중위
+    assert ws["P2"].value == "2026-06-01 18:09:12"                # 크롤링 시각 자동 기입
+    assert ws["Q3"].value == "15:00"                              # Update time 자동 기입
+
+
+def test_title_date_updated(tmp_path, ctx):
+    """B2 제목의 날짜가 테스트 날짜로 갱신: 위례열병합 Baseload Test ('YY.MM.DD)."""
+    import openpyxl
+    eng, table = ctx
+    out = fill_excel3_template(str(tmp_path / "bid.xlsx"), engine=eng,
+                               correction_table=table, test_date="2026-06-15")
+    ws = openpyxl.load_workbook(out)["온도 Profile"]
+    assert ws["B2"].value == "위례열병합 Baseload Test ('26.06.15)"
+
+
+def test_title_kept_for_unparseable_date(tmp_path, ctx):
+    """mock 키('2025-T05') 등 날짜 형식이 아니면 제목을 건드리지 않는다."""
+    import openpyxl
+    eng, table = ctx
+    out = fill_excel3_template(str(tmp_path / "bid.xlsx"), engine=eng,
+                               correction_table=table, test_date="2025-T05")
+    ws = openpyxl.load_workbook(out)["온도 Profile"]
+    assert "Baseload Test" in ws["B2"].value      # 원본 제목 유지

@@ -85,7 +85,8 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     if output_path:
         out = fill_excel3_template(output_path, engine=eng, correction_table=table,
                                    pressure=pressure, deg=deg, forecast=forecast,
-                                   template_path=template_path, corrector=corrector)
+                                   template_path=template_path, corrector=corrector,
+                                   test_date=date)
 
     return PipelineResult(date=date, applied_pressure=pressure, deg=deg,
                           measurement_count=store.count(), new_record=new_record,

@@ -24,61 +24,75 @@ from ..pipeline import run_pipeline
 from ..store import MeasurementStore
 from ..theory import TheoryEngine
 
-# ── 모던 스타일시트 (플랫 · 카드 · 파랑 액센트) ─────────────────────────────
+# ── SK 브랜드 스타일시트 (행복날개 레드 #EA002C · 오렌지 #F47725, 플랫 · 카드) ──
 QSS = """
 * { font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; font-size: 10pt; }
-QMainWindow, QWidget { background: #F4F6FA; color: #1F2937; }
+QMainWindow, QWidget { background: #FAF7F5; color: #2B2422; }
+
+QLabel#header {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #EA002C, stop:0.6 #F0431F, stop:1 #F47725);
+    color: #FFFFFF; font-size: 14pt; font-weight: 800;
+    padding: 14px 18px; border: none;
+}
+QLabel#headersub { color: #FFE3D6; font-size: 9pt; }
 
 QTabWidget::pane { border: none; background: transparent; }
 QTabBar::tab {
     background: transparent; padding: 10px 20px; margin-right: 2px;
-    color: #6B7280; border: none; border-bottom: 3px solid transparent;
+    color: #8A7F7A; border: none; border-bottom: 3px solid transparent;
     font-weight: 600;
 }
-QTabBar::tab:selected { color: #1D4ED8; border-bottom: 3px solid #2563EB; }
-QTabBar::tab:hover { color: #1D4ED8; }
+QTabBar::tab:selected { color: #EA002C; border-bottom: 3px solid #EA002C; }
+QTabBar::tab:hover { color: #F0431F; }
 
 QGroupBox {
-    background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 10px;
-    margin-top: 14px; padding: 16px 12px 10px 12px; font-weight: 700; color: #374151;
+    background: #FFFFFF; border: 1px solid #EDE4DF; border-radius: 10px;
+    margin-top: 14px; padding: 16px 12px 10px 12px; font-weight: 700; color: #5B4A42;
 }
 QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }
 
 QLineEdit, QDoubleSpinBox {
-    background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 6px;
-    padding: 7px 9px; selection-background-color: #BFDBFE;
+    background: #FFFFFF; border: 1px solid #DCD2CC; border-radius: 6px;
+    padding: 7px 9px; selection-background-color: #FFD3C2;
 }
-QLineEdit:focus, QDoubleSpinBox:focus { border: 2px solid #2563EB; }
-QLineEdit:disabled { background: #F3F4F6; color: #9CA3AF; }
+QLineEdit:focus, QDoubleSpinBox:focus { border: 2px solid #F0431F; }
+QLineEdit:disabled { background: #F5EFEC; color: #A89B94; }
 
 QPushButton {
-    background: #E8ECF3; color: #1F2937; border: none; border-radius: 6px;
+    background: #F1E9E4; color: #4A3B33; border: none; border-radius: 6px;
     padding: 8px 16px; font-weight: 600;
 }
-QPushButton:hover { background: #D8DEE9; }
+QPushButton:hover { background: #E7DAD2; }
 QPushButton#primary {
-    background: #2563EB; color: #FFFFFF; font-weight: 700; font-size: 11.5pt;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #EA002C, stop:1 #F47725);
+    color: #FFFFFF; font-weight: 800; font-size: 11.5pt;
     padding: 12px; border-radius: 8px;
 }
-QPushButton#primary:hover { background: #1D4ED8; }
-QPushButton#primary:disabled { background: #93C5FD; }
+QPushButton#primary:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #C50024, stop:1 #DC6414);
+}
+QPushButton#primary:disabled { background: #F3B7A3; }
 
 QCheckBox { spacing: 8px; padding: 2px; }
 QCheckBox::indicator { width: 17px; height: 17px; }
+QCheckBox::indicator:checked { background: #EA002C; border-radius: 3px; }
 
 QTableWidget {
-    background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px;
-    gridline-color: #F3F4F6; alternate-background-color: #F9FAFB;
+    background: #FFFFFF; border: 1px solid #EDE4DF; border-radius: 8px;
+    gridline-color: #F7F1EE; alternate-background-color: #FBF7F4;
 }
 QHeaderView::section {
-    background: #F3F4F6; color: #374151; border: none;
-    border-bottom: 1px solid #E5E7EB; padding: 7px; font-weight: 700;
+    background: #F5EDE8; color: #5B4A42; border: none;
+    border-bottom: 2px solid #F0B8A0; padding: 7px; font-weight: 700;
 }
 QLabel#summary {
-    background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 8px;
-    padding: 12px; color: #1E3A8A; font-weight: 600;
+    background: #FFF3EC; border: 1px solid #FFCDB2; border-radius: 8px;
+    padding: 12px; color: #8A2A00; font-weight: 600;
 }
-QToolTip { background: #1F2937; color: #F9FAFB; border: none; padding: 6px; }
+QToolTip { background: #3A2E28; color: #FFF7F2; border: none; padding: 6px; }
 """
 
 NODEID_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
@@ -110,8 +124,17 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             tabs = QtWidgets.QTabWidget()
             tabs.addTab(self._run_tab(), "공급가능용량 산정")
             tabs.addTab(self._status_tab(), "온도 구간별 보정값 현황")
-            tabs.addTab(self._list_tab(), "Test List-up")
-            self.setCentralWidget(tabs)
+            tabs.addTab(self._list_tab(), "Test 결과 List-up")
+
+            header = QtWidgets.QLabel("🦋  위례 공급가능용량 입찰 산정")
+            header.setObjectName("header")
+            central = QtWidgets.QWidget()
+            v = QtWidgets.QVBoxLayout(central)
+            v.setContentsMargins(0, 0, 0, 0)
+            v.setSpacing(0)
+            v.addWidget(header)
+            v.addWidget(tabs)
+            self.setCentralWidget(central)
             self._refresh_list()
             self._refresh_status(self.store.correction_table())   # 시작 시 현재 누적 기준
 

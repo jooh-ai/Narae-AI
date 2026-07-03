@@ -11,6 +11,11 @@ from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".wirye_tool.json"
 
+# 사내 기본값 — 설정파일/환경변수가 없어도 바로 동작(자동화 원칙: 묻지 않는다)
+DEFAULTS = {
+    "opcua_host": "skes-rimspall1",   # DataPARC OPC UA 사이트 서버
+}
+
 
 def load_config(path: str | Path = CONFIG_PATH) -> dict:
     try:
@@ -21,10 +26,14 @@ def load_config(path: str | Path = CONFIG_PATH) -> dict:
 
 
 def get_config(key: str, default=None, path: str | Path = CONFIG_PATH):
+    """우선순위: 환경변수 > 설정파일 > 내장 기본값(DEFAULTS) > default 인자."""
     env = os.environ.get(f"WIRYE_{key.upper()}")
     if env:
         return env
-    return load_config(path).get(key, default)
+    data = load_config(path)
+    if key in data:
+        return data[key]
+    return DEFAULTS.get(key, default)
 
 
 def set_config(key: str, value, path: str | Path = CONFIG_PATH) -> None:

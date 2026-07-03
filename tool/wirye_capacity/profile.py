@@ -140,8 +140,26 @@ def write_xlsx(profile: list[ProfileRow], path: str, *,
 # 엑셀3 'Mode3' 시트: A=온도, B=GT Gross, C=ST Gross (행5 = −20°C … 행65 = 40°C)
 _MODE3_FIRST_ROW = 5
 # 엑셀3 '온도 Profile' 날씨(Pressure) 블록: P=일자, Q~X=시간대, Y=중위, Z=최소 (행6~12)
+# capture(P2)=크롤링 시각, update(Q3)='Update time :' 값, title(B2)=제목(테스트 날짜)
 _WX = {"sheet": "온도 Profile", "first_row": 6, "day_col": 16,
-       "first_time_col": 17, "median_col": 25, "min_col": 26}
+       "first_time_col": 17, "median_col": 25, "min_col": 26,
+       "capture_cell": "P2", "update_cell": "Q3"}
+_TITLE_CELL = "B2"
+
+
+def _fill_title(wb, test_date: str | None) -> None:
+    """B2 제목의 날짜를 테스트 날짜로 갱신: 위례열병합 Baseload Test ('YY.MM.DD)."""
+    from datetime import datetime
+    if not test_date or _WX["sheet"] not in wb.sheetnames:
+        return
+    try:
+        d = datetime.strptime(test_date, "%Y-%m-%d")
+    except ValueError:
+        return                                    # mock 키('2025-T05') 등은 건드리지 않음
+    ws = wb[_WX["sheet"]]
+    cur = ws[_TITLE_CELL].value
+    if isinstance(cur, str) and "Baseload Test" in cur:   # 양식 변경 방어
+        ws[_TITLE_CELL] = f"위례열병합 Baseload Test ('{d:%y.%m.%d})"
 
 
 def _fill_weather(wb, forecast) -> None:
@@ -149,6 +167,10 @@ def _fill_weather(wb, forecast) -> None:
     if _WX["sheet"] not in wb.sheetnames:
         return
     ws = wb[_WX["sheet"]]
+    if forecast.capture:
+        ws[_WX["capture_cell"]] = forecast.capture            # P2 = 크롤링 시각
+    if getattr(forecast, "update_time", None):
+        ws[_WX["update_cell"]] = forecast.update_time         # Q3 = Update time
     for i, day in enumerate(forecast.days[:7]):
         r = _WX["first_row"] + i
         ws.cell(row=r, column=_WX["day_col"], value=day)
@@ -164,12 +186,14 @@ def _fill_weather(wb, forecast) -> None:
 def fill_excel3_template(output_path: str, *, engine: TheoryEngine, correction_table: dict,
                          pressure: float = C.REF_PRESSURE, deg: float = C.DEFAULT_DEG,
                          forecast=None, template_path: str | Path = DEFAULT_TEMPLATE,
-                         mode3_sheet: str = "Mode3", corrector=None) -> str:
+                         mode3_sheet: str = "Mode3", corrector=None,
+                         test_date: str | None = None) -> str:
     """현실화 Mode3 GT/ST를 엑셀3 템플릿 Mode3!B5:C65 에 채워 최종 입찰 파일 생성.
 
     pressure: 입찰 적용 대기압(보통 weather.applied_pressure = 중위−8). 현실화값에 반영됨.
-    forecast: 있으면 온도 Profile 날씨 블록도 채움(M2 적용대기압 갱신).
+    forecast: 있으면 온도 Profile 날씨 블록도 채움(M2 적용대기압·크롤링시각·Update time).
     corrector: 있으면 연속곡선 등으로 보정값 산출(없으면 구간 평균).
+    test_date: 있으면 B2 제목의 날짜를 갱신("위례열병합 Baseload Test ('YY.MM.DD)").
     반환: output_path. (Excel에서 열면 6모드·온도Profile이 수식으로 재계산됨)
     """
     from openpyxl import load_workbook
@@ -189,6 +213,7 @@ def fill_excel3_template(output_path: str, *, engine: TheoryEngine, correction_t
         rr = _MODE3_FIRST_ROW + i
         m3.cell(row=rr, column=2, value=row.gt_real)   # B = GT Gross (현실화)
         m3.cell(row=rr, column=3, value=row.st_real)   # C = ST Gross (= CC현실화 − GT)
+    _fill_title(wb, test_date)
     if forecast is not None:
         _fill_weather(wb, forecast)
     # Excel에서 열 때 6모드·온도Profile 수식이 재계산되도록

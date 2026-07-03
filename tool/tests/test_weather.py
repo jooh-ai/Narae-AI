@@ -11,6 +11,8 @@ def _make_excel3_1(path):
     wb = Workbook()
     ws = wb.active
     ws["A1"] = "2026-04-15 18:09:12"
+    ws["A2"] = "Update time :"
+    ws["B2"] = "17:00"
     # Pressure 섹션
     ws["A5"] = "Pressure"
     times = [0, 3, 6, 9, 12, 15, 18, 21]
@@ -46,6 +48,7 @@ def test_parse_and_applied_pressure(tmp_path):
     path, days, medians = _make_excel3_1(str(tmp_path / "w.xlsx"))
     fc = load_excel3_1(path)
     assert fc.capture.startswith("2026-04-15")
+    assert fc.update_time == "17:00"          # 'Update time :' 값 파싱
     assert fc.days == days
     assert fc.times == [0, 3, 6, 9, 12, 15, 18, 21]
     assert fc.pressure_median[days[0]] == pytest.approx(1010)

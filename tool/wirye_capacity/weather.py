@@ -23,6 +23,7 @@ class WeatherForecast:
     pressure_min: dict[str, float] = field(default_factory=dict)
     pressure_grid: dict[str, list[float]] = field(default_factory=dict)   # day → 시간대별 대기압
     temp_median: dict[str, float] = field(default_factory=dict)
+    update_time: str | None = None            # 'Update time :' 값 (예: '17:00')
 
 
 def _grid(path: str):
@@ -77,6 +78,18 @@ def _parse_block(rows, start: int):
     return med, mn, grid, days, times
 
 
+def _find_update_time(rows) -> str | None:
+    """상단 몇 행에서 'Update time :' 라벨 옆 값을 찾는다 (시간/문자열 모두 허용)."""
+    for r in rows[:8]:
+        for j, v in enumerate(r):
+            if isinstance(v, str) and v.strip().lower().startswith("update time"):
+                for nxt in r[j + 1:]:
+                    if nxt is None:
+                        continue
+                    return nxt.strftime("%H:%M") if hasattr(nxt, "strftime") else str(nxt)
+    return None
+
+
 def load_excel3_1(path: str) -> WeatherForecast:
     """엑셀3-1 파일 파싱."""
     rows = _grid(path)
@@ -90,7 +103,8 @@ def load_excel3_1(path: str) -> WeatherForecast:
     t_med = _parse_block(rows, t_i)[0] if t_i is not None else {}
     return WeatherForecast(capture=str(capture) if capture is not None else None,
                            days=days, times=times, pressure_median=p_med,
-                           pressure_min=p_min, pressure_grid=p_grid, temp_median=t_med)
+                           pressure_min=p_min, pressure_grid=p_grid, temp_median=t_med,
+                           update_time=_find_update_time(rows))
 
 
 def applied_pressure(fc: WeatherForecast, *, day: str | None = None,
