@@ -152,22 +152,25 @@ python -m wirye_capacity verify ^
 
 ---
 
-## STEP 7 — 패키징 (.exe, 선택)
+## STEP 7 — 패키징 (.exe)
 
-GUI를 단독 실행파일로:
+GUI를 단독 실행파일로. **spec 파일**로 빌드(asyncua·PySide6·템플릿·데이터·숨은 import 자동 포함):
 ```bat
-pip install pyinstaller
-pyinstaller --noconfirm --windowed --name 위례입찰툴 ^
-  --add-data "wirye_capacity\templates\excel3_profile_template.xlsx;wirye_capacity\templates" ^
-  --add-data "wirye_capacity\data;wirye_capacity\data" ^
-  --hidden-import win32com --hidden-import win32com.client ^
-  wirye_capacity\ui\app.py
+cd tool
+pip install pyinstaller asyncua PySide6 openpyxl
+pyinstaller --noconfirm wirye_tool.spec
 ```
-**확인**: `dist\위례입찰툴\위례입찰툴.exe` 실행 → 입력·실행·List-up 동작. **반드시 .exe 자체로 STEP 4 재확인**(스크립트 아닌 패키지에서 템플릿·xlwings 동작).
+**결과**: `dist\WiryeBidTool\WiryeBidTool.exe`
 
-> **엑셀1 배치(자동 감지).** 패키징 후 **엑셀1(`*Base Load Test*.xlsx`)을 `위례입찰툴.exe` 와 같은 폴더**
-> (`dist\위례입찰툴\`)에 두면, 실행 시 자동 감지되어 **날짜·시간만 입력**하면 됩니다. 파일명이 다르면
-> 환경변수 `WIRYE_WORKBOOK`(파일명) 또는 GUI 경로 칸으로 지정하세요.
+**확인**: `WiryeBidTool.exe` 더블클릭 → SK 톤 화면 → 날짜·시각 입력 → ▶ 실행.
+**반드시 .exe 자체로 STEP 4~5 재확인**(스크립트 아닌 패키지에서 템플릿·asyncua 동작 검증).
+
+> **실행 즉시 닫히면(오류 원인 확인)**: `wirye_tool.spec` 의 `console=False` → `True` 로
+> 바꿔 재빌드하면 콘솔 창에 오류가 출력됩니다.
+> **서버 호스트**: 기본값(`skes-rimspall1`)이 내장돼 바로 동작. 다르면 `%USERPROFILE%\.wirye_tool.json`
+> 에 `{"opcua_host":"..."}` 또는 환경변수 `WIRYE_OPCUA_HOST` 로 지정.
+> **배포**: `dist\WiryeBidTool` 폴더 통째로 복사하면 다른 PC(Excel+RiMS망)에서도 실행.
+> Python 설치 불필요. (첫 실행 시 태그 NodeId 해결 수십 초 → 이후 캐시로 빠름)
 
 ---
 
