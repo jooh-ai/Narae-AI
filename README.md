@@ -1,6 +1,7 @@
 # HEIF → JPG/PNG 변환기
 
-아이폰에서 촬영한 HEIF/HEIC 이미지를 JPG 또는 PNG로 변환하는 Python CLI 도구입니다.
+아이폰에서 촬영한 HEIF/HEIC 이미지를 JPG 또는 PNG로 변환하는 Python 도구입니다.
+명령줄(CLI)과 클릭으로 쓰는 그래픽(GUI) 두 가지 방식을 제공합니다.
 
 ## 특징
 
@@ -17,7 +18,26 @@
 pip install -r requirements.txt
 ```
 
-## 사용법
+## GUI 사용법 (권장)
+
+폴더를 통째로 변환할 때 가장 편합니다. 터미널에서 다음을 실행하면 창이 열립니다.
+
+```bash
+python heif_converter_gui.py
+```
+
+1. **입력 폴더** — 변환할 HEIC 사진이 들어있는 폴더를 선택합니다.
+2. **출력 폴더** — 변환된 파일을 저장할 새 폴더를 선택합니다. (입력 폴더를 고르면
+   옆에 `converted` 폴더가 자동으로 제안됩니다.)
+3. 출력 형식(JPG/PNG), JPEG 품질, 하위 폴더 포함 여부, 덮어쓰기 여부를 지정합니다.
+4. **변환 시작**을 누르면 진행 상황이 실시간으로 표시되고, 원본 폴더 구조를
+   유지한 채 새 폴더에 저장됩니다.
+
+> GUI는 파이썬 표준 라이브러리 `tkinter`를 사용합니다. 리눅스에서 `tkinter`가
+> 없다는 오류가 나면 `sudo apt install python3-tk`로 설치하세요. Windows/macOS의
+> 공식 파이썬에는 기본 포함되어 있습니다.
+
+## CLI 사용법
 
 ```bash
 # 단일 파일 변환 (기본: JPG, 원본 파일 옆에 저장)
@@ -52,3 +72,4 @@ python heif_converter.py ./photos --overwrite
 - Python 3.9 이상
 - [Pillow](https://python-pillow.org/)
 - [pillow-heif](https://github.com/bigcat88/pillow_heif)
+- GUI 사용 시 `tkinter` (파이썬 표준 라이브러리; 리눅스는 `python3-tk` 패키지)
