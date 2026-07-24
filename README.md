@@ -22,6 +22,9 @@
 >   다운로드 링크로 내려받는 방식으로 자동 전환됩니다.
 > - 맥OS가 만드는 `._`로 시작하는 메타데이터 파일은 자동으로 건너뜁니다.
 >
+> - HEIC 디코딩에는 최신 **libheif 1.19** 기반 [heic-to](https://github.com/hoppergee/heic-to)를
+>   사용합니다. (구버전 라이브러리에서 나던 `ERR_LIBHEIF format not supported` 오류 해결)
+>
 > (`vendor/` 폴더에는 원본 라이브러리와 MIT 라이선스가 보관돼 있습니다. HTML을
 > 다시 빌드할 때만 필요하며, 실행에는 필요 없습니다.)
 
