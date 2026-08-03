@@ -78,9 +78,9 @@ def read_reference_xlsx(path: str, layout: str = "tool", sheet: str | None = Non
     layout='tool'  : Tool write_xlsx 형식
     layout='excel4': 엑셀4 'Mode3' Profile 형식 (A온도/D CC이론/G CC현실화)
     """
-    from openpyxl import load_workbook
+    from .excel_io import load_workbook_safe
     lay = LAYOUTS[layout]
-    wb = load_workbook(path, data_only=True)
+    wb = load_workbook_safe(path, data_only=True)     # 보안/손상 파일 → 친절한 오류
     ws = wb[sheet] if sheet else wb[wb.sheetnames[0]]
     fields = [k for k in ("cc_theory", "cc_real_gross", "cc_real_net") if k in lay]
     ref: dict[int, dict] = {}

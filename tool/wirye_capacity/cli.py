@@ -228,10 +228,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "check-bid":
         import re
 
-        from openpyxl import load_workbook
-
         from .correction import table_fingerprint
-        desc = (load_workbook(args.file, read_only=True).properties.description or "")
+        from .excel_io import load_workbook_safe
+        desc = (load_workbook_safe(args.file, read_only=True).properties.description or "")
         m = re.search(r"보정지문 (\w+)", desc)
         if not m:
             print("⚠ 이 파일에는 보정지문이 없습니다(구버전 툴 생성 또는 외부 파일).")
