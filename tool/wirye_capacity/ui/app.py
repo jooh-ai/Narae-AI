@@ -343,16 +343,31 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             lay = QtWidgets.QVBoxLayout(w)
             bar = QtWidgets.QHBoxLayout()
             hint = QtWidgets.QLabel(
-                "실수로 누적에 반영한 테스트는 행을 선택해 삭제하세요 (삭제 즉시 보정값 재집계).")
+                "행을 선택해 [삭제 표시] 후 [💾 저장]을 눌러야 실제로 삭제됩니다. "
+                "저장 전에는 [되돌리기]로 취소할 수 있습니다.")
             hint.setWordWrap(True)
-            self.del_btn = QtWidgets.QPushButton("🗑 선택 삭제")
+            self.datefill_btn = QtWidgets.QPushButton("📅 엑셀4에서 날짜 채우기")
+            self.datefill_btn.setToolTip(
+                "과거 누적(시드) 32건은 날짜가 비어 있습니다.\n"
+                "엑셀4 '실측데이터'를 지정하면 (CC실측·CIT) 매칭으로 날짜를 채웁니다.")
+            self.datefill_btn.clicked.connect(self._on_backfill_dates)
+            self.del_btn = QtWidgets.QPushButton("🗑 삭제 표시")
             self.del_btn.setObjectName("danger")
-            self.del_btn.clicked.connect(self._on_delete)
+            self.del_btn.clicked.connect(self._on_mark_delete)
+            self.undo_btn = QtWidgets.QPushButton("되돌리기")
+            self.undo_btn.clicked.connect(self._on_undo_delete)
+            self.save_btn = QtWidgets.QPushButton("💾 저장")
+            self.save_btn.setObjectName("primary")
+            self.save_btn.setMaximumWidth(140)
+            self.save_btn.clicked.connect(self._on_save_deletes)
             bar.addWidget(hint, stretch=1)
+            bar.addWidget(self.datefill_btn)
             bar.addWidget(self.del_btn)
-            self.list_tbl = QtWidgets.QTableWidget(0, 5)
+            bar.addWidget(self.undo_btn)
+            bar.addWidget(self.save_btn)
+            self.list_tbl = QtWidgets.QTableWidget(0, 6)
             self.list_tbl.setHorizontalHeaderLabels(
-                ["날짜", "CIT(°C)", "CC실측", "보정값", "계절"])
+                ["날짜", "CIT(°C)", "대기압(mbar)", "CC실측", "보정값", "계절"])
             self.list_tbl.setAlternatingRowColors(True)
             self.list_tbl.horizontalHeader().setStretchLastSection(True)
             self.list_tbl.verticalHeader().setVisible(False)
@@ -362,39 +377,84 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
             lay.addLayout(bar)
             lay.addWidget(self.list_tbl)
+            self._pending_del = set()          # 삭제 대기 id (저장 시 확정)
+            self._update_del_buttons()
             return w
 
         def _refresh_list(self):
+            from PySide6 import QtGui
             self._list_rows = self.store.list_up(order="date")   # id 포함(삭제용)
             self.list_tbl.setRowCount(len(self._list_rows))
             for i, r in enumerate(self._list_rows):
-                # 표시 자릿수: CIT 1자리·CC 2자리 (저장은 풀 정밀도 유지 — 계산용)
-                vals = [r.get("date") or "-", f"{r['cit']:.1f}", f"{r['cc_meas']:.2f}",
-                        f"{r['corr']:+.2f}", r.get("season") or ""]
+                # 표시 자릿수: CIT 1자리·대기압 1자리·CC 2자리 (저장은 풀 정밀도 — 계산용)
+                vals = [r.get("date") or "-", f"{r['cit']:.1f}", f"{r['press']:.1f}",
+                        f"{r['cc_meas']:.2f}", f"{r['corr']:+.2f}", r.get("season") or ""]
+                marked = r["id"] in getattr(self, "_pending_del", set())
                 for j, v in enumerate(vals):
-                    self.list_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
+                    item = QtWidgets.QTableWidgetItem(str(v))
+                    if marked:                     # 삭제 대기 행: 취소선 + 회색
+                        f = item.font(); f.setStrikeOut(True); item.setFont(f)
+                        item.setForeground(QtGui.QColor("#B9AFA9"))
+                    self.list_tbl.setItem(i, j, item)
+            self._update_del_buttons()
 
-        def _on_delete(self):
+        def _update_del_buttons(self):
+            n = len(getattr(self, "_pending_del", set()))
+            self.save_btn.setEnabled(n > 0)
+            self.undo_btn.setEnabled(n > 0)
+            self.save_btn.setText(f"💾 저장 ({n}건 삭제)" if n else "💾 저장")
+
+        def _on_mark_delete(self):
             sel = sorted({ix.row() for ix in self.list_tbl.selectedIndexes()})
             if not sel:
                 QtWidgets.QMessageBox.information(self, "선택 없음", "삭제할 행을 선택하세요.")
                 return
-            lines = [f"  · {self._list_rows[r].get('date') or '-'}  "
-                     f"(CIT {self._list_rows[r]['cit']:.1f}°C, "
-                     f"보정 {self._list_rows[r]['corr']:+.2f})" for r in sel]
+            for r in sel:
+                self._pending_del.add(self._list_rows[r]["id"])
+            self._refresh_list()               # 취소선 표시(아직 DB 반영 없음)
+
+        def _on_undo_delete(self):
+            self._pending_del.clear()
+            self._refresh_list()
+
+        def _on_save_deletes(self):
+            ids = set(self._pending_del)
+            if not ids:
+                return
+            targets = [r for r in self._list_rows if r["id"] in ids]
+            lines = [f"  · {t.get('date') or '-'}  (CIT {t['cit']:.1f}°C, "
+                     f"보정 {t['corr']:+.2f})" for t in targets]
             if QtWidgets.QMessageBox.warning(
-                    self, "누적에서 삭제",
-                    f"다음 {len(sel)}건을 누적에서 삭제할까요?\n(삭제 후 보정값이 재집계됩니다)\n\n"
-                    + "\n".join(lines),
+                    self, "삭제 저장",
+                    f"다음 {len(targets)}건을 누적에서 삭제합니다.\n"
+                    f"(저장 후 보정값이 재집계되며 되돌릴 수 없습니다)\n\n" + "\n".join(lines),
                     QtWidgets.QMessageBox.StandardButton.Yes
                     | QtWidgets.QMessageBox.StandardButton.No
                     ) != QtWidgets.QMessageBox.StandardButton.Yes:
                 return
-            for r in sel:
-                self.store.delete(self._list_rows[r]["id"])
+            for rec_id in ids:
+                self.store.delete(rec_id)
+            self._pending_del.clear()
             self._refresh_list()
             self._refresh_status(self.store.correction_table())   # 즉시 재집계 반영
             self._check_bid_freshness()                            # 기존 입찰파일 구버전 감지
+
+        def _on_backfill_dates(self):
+            fn, _ = QtWidgets.QFileDialog.getOpenFileName(
+                self, "엑셀4 파일 선택 (실측데이터)", "", "Excel (*.xlsx)")
+            if not fn:
+                return
+            try:
+                from ..excel4 import load_excel4_records
+                recs = load_excel4_records(fn)
+                n = self.store.backfill_dates(recs)
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.critical(self, "날짜 채우기 오류", str(e))
+                return
+            self._refresh_list()
+            QtWidgets.QMessageBox.information(
+                self, "날짜 채우기",
+                f"엑셀4 {len(recs)}건을 읽어 날짜 {n}건을 채웠습니다.")
 
         # ---------- 입찰파일 최신성 감시 (누적 변경 → 재생성 유도) ----------
         def _check_bid_freshness(self):

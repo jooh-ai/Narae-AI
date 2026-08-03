@@ -129,6 +129,33 @@ class MeasurementStore:
         self.conn.execute("DELETE FROM measurements WHERE id=?", (rec_id,))
         self.conn.commit()
 
+    def backfill_dates(self, records: list[dict], tol: float = 0.05) -> int:
+        """날짜가 빈 레코드에 엑셀4 날짜를 채운다((CC실측[, CIT]) 근사 매칭). 채운 건수 반환.
+
+        시드 32건은 날짜 없이 적재돼 List-up 에 '-' 로 보이므로, 원본 엑셀4에서 날짜를 가져온다.
+        """
+        rows = self.conn.execute(
+            "SELECT id, cit, cc_meas FROM measurements "
+            "WHERE date IS NULL OR date=''").fetchall()
+        used: set[int] = set()
+        filled = 0
+        for row in rows:
+            for k, rec in enumerate(records):
+                if k in used or not rec.get("date"):
+                    continue
+                if abs(rec["cc_meas"] - row["cc_meas"]) > tol:
+                    continue
+                if (rec.get("cit") is not None
+                        and abs(rec["cit"] - row["cit"]) > 0.15):   # 엑셀4 온도는 1자리 표기
+                    continue
+                self.conn.execute("UPDATE measurements SET date=? WHERE id=?",
+                                  (rec["date"], row["id"]))
+                used.add(k)
+                filled += 1
+                break
+        self.conn.commit()
+        return filled
+
     def delete_by_date(self, date: str) -> int:
         """해당 날짜의 테스트 삭제(실수 반영 취소용). 삭제 건수 반환."""
         cur = self.conn.execute("DELETE FROM measurements WHERE date=?", (date,))

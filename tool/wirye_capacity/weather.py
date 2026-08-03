@@ -27,8 +27,8 @@ class WeatherForecast:
 
 
 def _grid(path: str):
-    from openpyxl import load_workbook
-    wb = load_workbook(path, data_only=True)
+    from .excel_io import load_workbook_safe
+    wb = load_workbook_safe(path, data_only=True)      # 보안/손상 파일 → 친절한 오류
     ws = wb[wb.sheetnames[0]]
     return [[c.value for c in r] for r in ws.iter_rows()]
 

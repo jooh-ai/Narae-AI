@@ -197,11 +197,11 @@ def fill_excel3_template(output_path: str, *, engine: TheoryEngine, correction_t
     stamp: 있으면 파일 속성(설명)에 기록 — 생성 시점 보정지문·누적 건수(check-bid 검사용).
     반환: output_path. (Excel에서 열면 6모드·온도Profile이 수식으로 재계산됨)
     """
-    from openpyxl import load_workbook
+    from .excel_io import load_workbook_safe
 
     rows = build_profile(engine, correction_table, pressure=pressure, deg=deg,
                          temps=list(range(-20, 41)), corrector=corrector)
-    wb = load_workbook(template_path)            # 수식·서식 보존
+    wb = load_workbook_safe(template_path)       # 수식·서식 보존(보안/손상 → 친절한 오류)
     m3 = wb[mode3_sheet]
     # 양식 정합 검사: Mode3 온도축이 행5=−20 … 행65=40 인지 확인(템플릿/양식 변경 방어)
     a_first = m3.cell(row=_MODE3_FIRST_ROW, column=1).value

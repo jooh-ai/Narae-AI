@@ -117,6 +117,12 @@ def main(argv: list[str] | None = None) -> int:
     ck.add_argument("--start", default="17:00")
     ck.add_argument("--sheet", default="RiMS 계산 Sheet")
 
+    bf = sub.add_parser("backfill-dates",
+                        help="엑셀4 '실측데이터'에서 누적 레코드의 빈 날짜 채우기(시드 32건)")
+    bf.add_argument("--excel4", required=True, help="엑셀4 파일 경로")
+    bf.add_argument("--sheet", default=None, help="시트명(기본: 실측데이터 자동탐색)")
+    bf.add_argument("--db", default=DEFAULT_DB)
+
     cb = sub.add_parser("check-bid", help="입찰파일이 현재 누적 보정값 기준(최신)인지 확인")
     cb.add_argument("--file", required=True, help="검사할 입찰파일(.xlsx)")
     cb.add_argument("--db", default=DEFAULT_DB)
@@ -207,6 +213,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  GT/ST      : {acq.gt_meas} / {acq.st_meas} MW")
         print(f"  CC Gross   : {acq.cc_meas} MW")
         print("→ 엑셀1을 같은 날짜·시각으로 수동 취득한 8행 값과 일치하는지 대조하세요.")
+        return 0
+
+    if args.cmd == "backfill-dates":
+        from .excel4 import load_excel4_records
+        recs = load_excel4_records(args.excel4, sheet=args.sheet)
+        store = MeasurementStore(args.db)
+        n = store.backfill_dates(recs)
+        blank = sum(1 for r in store.list_up() if not r.get("date"))
+        print(f"엑셀4 {len(recs)}건 읽음 → 날짜 {n}건 채움. 남은 미기입: {blank}건")
+        store.close()
         return 0
 
     if args.cmd == "check-bid":
