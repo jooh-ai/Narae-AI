@@ -1,0 +1,34 @@
+name: NaraeSync
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    # 아래 개발팀 ID는 본인 Apple 개발자 팀 ID로 바꾸세요 (Xcode > Signing에서 자동 설정 가능)
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+
+targets:
+  NaraeSync:
+    type: application
+    platform: iOS
+    sources:
+      - path: NaraeSync
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.naraesync
+        INFOPLIST_FILE: NaraeSync/Info.plist
+        CODE_SIGN_ENTITLEMENTS: NaraeSync/NaraeSync.entitlements
+        # Strava OAuth 콜백에 쓰는 커스텀 URL scheme
+        # Info.plist의 CFBundleURLSchemes와 반드시 일치해야 함
+    entitlements:
+      path: NaraeSync/NaraeSync.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
