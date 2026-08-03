@@ -121,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="엑셀4 '실측데이터'에서 누적 레코드의 빈 날짜 채우기(시드 32건)")
     bf.add_argument("--excel4", required=True, help="엑셀4 파일 경로")
     bf.add_argument("--sheet", default=None, help="시트명(기본: 실측데이터 자동탐색)")
+    bf.add_argument("--list-sheets", action="store_true",
+                    help="채우지 않고 엑셀4의 시트 목록·머리글만 출력(진단용)")
     bf.add_argument("--db", default=DEFAULT_DB)
 
     cb = sub.add_parser("check-bid", help="입찰파일이 현재 누적 보정값 기준(최신)인지 확인")
@@ -216,12 +218,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "backfill-dates":
-        from .excel4 import load_excel4_records
+        from .excel4 import list_excel4_sheets, load_excel4_records
+        if args.list_sheets:
+            print(f"[{args.excel4}] 시트 목록·머리글")
+            print(list_excel4_sheets(args.excel4))
+            print("\n실측 기록이 있는 시트를 --sheet \"시트명\" 으로 지정하세요.")
+            return 0
         recs = load_excel4_records(args.excel4, sheet=args.sheet)
+        src = {r.get("sheet") for r in recs if r.get("sheet")}
         store = MeasurementStore(args.db)
         n = store.backfill_dates(recs)
         blank = sum(1 for r in store.list_up() if not r.get("date"))
-        print(f"엑셀4 {len(recs)}건 읽음 → 날짜 {n}건 채움. 남은 미기입: {blank}건")
+        print(f"엑셀4 {len(recs)}건 읽음{' (시트: ' + ', '.join(src) + ')' if src else ''} "
+              f"→ 날짜 {n}건 채움. 남은 미기입: {blank}건")
         store.close()
         return 0
 
