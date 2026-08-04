@@ -132,6 +132,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             tabs.addTab(self._run_tab(), "공급가능용량 산정")
             tabs.addTab(self._status_tab(), "온도 구간별 보정값 현황")
             tabs.addTab(self._list_tab(), "Test 결과 List-up")
+            tabs.addTab(self._sim_tab(), "🧪 출력 시뮬레이션")
             tabs.addTab(self._chart_tab(), "📈 출력곡선 비교")
 
             header = QtWidgets.QLabel("🦋  위례 공급가능용량 입찰 산정")
@@ -358,6 +359,166 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     self.status_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
 
         # ---------- Test 결과 List-up 탭 ----------
+        # ---------- 출력 시뮬레이션 탭 ----------
+        def _sim_tab(self):
+            w = QtWidgets.QWidget()
+            outer = QtWidgets.QHBoxLayout(w)
+
+            # ── 좌: 조건 입력 ──
+            left = QtWidgets.QVBoxLayout()
+            g1 = QtWidgets.QGroupBox("운전 조건 (출력에 영향을 주는 값)")
+            f1 = QtWidgets.QFormLayout(g1)
+
+            def spin(lo, hi, val, dec=1, step=0.1, suffix=""):
+                s = QtWidgets.QDoubleSpinBox()
+                s.setRange(lo, hi)
+                s.setDecimals(dec)
+                s.setSingleStep(step)
+                s.setValue(val)
+                if suffix:
+                    s.setSuffix(suffix)
+                return s
+
+            self.sim_cit = spin(-20, 40, 25.0, 1, 0.5, " °C")
+            self.sim_press = spin(950, 1050, C.REF_PRESSURE, 1, 0.5, " mbar")
+            self.sim_rh = spin(0, 100, 60.0, 1, 1.0, " %")
+            self.sim_rh_auto = QtWidgets.QCheckBox("기준 60% 사용(습도보정 없음)")
+            self.sim_rh_auto.setChecked(True)
+            self.sim_rh_auto.setToolTip(
+                "체크: 입찰 Profile과 동일하게 RH 60%(보정 없음)\n"
+                "해제: 실측 RH를 반영 — 테스트 대조 시에는 해제하고 실측값 입력")
+            self.sim_rh_auto.stateChanged.connect(
+                lambda: self.sim_rh.setEnabled(not self.sim_rh_auto.isChecked()))
+            self.sim_rh.setEnabled(False)
+            self.sim_deg = spin(1.0, 1.2, C.DEFAULT_DEG, 3, 0.001)
+            self.sim_w = spin(0, 12, 0.0, 1, 1.0, " MW")
+            self.sim_w_auto = QtWidgets.QCheckBox("온도밴드 자동")
+            self.sim_w_auto.setChecked(True)
+            self.sim_w_auto.setToolTip(
+                "IGV turn-up 자동 산정: ≤−2°C=0 / −1°C=+2 / 0~24°C=+4 / 25°C↑=+6")
+            self.sim_w_auto.stateChanged.connect(
+                lambda: self.sim_w.setEnabled(not self.sim_w_auto.isChecked()))
+            self.sim_w.setEnabled(False)
+            self.sim_cp = spin(0, 200, 0.0, 1, 0.5)
+            self.sim_cp_use = QtWidgets.QCheckBox("복수기압 입력(참고용)")
+            self.sim_cp_use.setToolTip(
+                "복수기(콘덴서) 보정은 base 테이블에 ISO 조건으로 동결되어 있어\n"
+                "이론값 계산에 직접 반영되지 않습니다.\n"
+                "입력하면 유사 온도 실측의 설계값 대비 편차를 참고로 표시합니다.")
+            self.sim_cp_use.stateChanged.connect(
+                lambda: self.sim_cp.setEnabled(self.sim_cp_use.isChecked()))
+            self.sim_cp.setEnabled(False)
+
+            f1.addRow("외기온도 CIT", self.sim_cit)
+            f1.addRow("대기압", self.sim_press)
+            f1.addRow("상대습도 RH", self.sim_rh)
+            f1.addRow("", self.sim_rh_auto)
+            f1.addRow("Degradation", self.sim_deg)
+            f1.addRow("W (IGV turn-up)", self.sim_w)
+            f1.addRow("", self.sim_w_auto)
+            f1.addRow("복수기압 실측", self.sim_cp)
+            f1.addRow("", self.sim_cp_use)
+
+            # ② 실측 대조
+            g2 = QtWidgets.QGroupBox("실측 대조 (테스트 후 입력 — 선택)")
+            f2 = QtWidgets.QFormLayout(g2)
+            self.sim_meas = spin(0, 600, 0.0, 2, 0.1, " MW")
+            self.sim_meas_use = QtWidgets.QCheckBox("실측 CC(Gross)와 비교")
+            self.sim_meas_use.setToolTip(
+                "테스트가 끝난 뒤 실측 CC Gross를 넣으면\n"
+                "실측 보정값·예상과의 차이·±0.5% 밴드 판정을 바로 보여줍니다.")
+            self.sim_meas_use.stateChanged.connect(
+                lambda: self.sim_meas.setEnabled(self.sim_meas_use.isChecked()))
+            self.sim_meas.setEnabled(False)
+            f2.addRow("실측 CC (Gross)", self.sim_meas)
+            f2.addRow("", self.sim_meas_use)
+
+            # ③ 보정 옵션
+            g3 = QtWidgets.QGroupBox("보정 옵션")
+            f3 = QtWidgets.QFormLayout(g3)
+            self.sim_method = QtWidgets.QComboBox()
+            self.sim_method.addItems(["구간 평균 (기본)", "커널 보정곡선", "GP (가우시안 프로세스)"])
+            self.sim_margin = QtWidgets.QDoubleSpinBox()
+            self.sim_margin.setRange(0.0, 3.0)
+            self.sim_margin.setSingleStep(0.1)
+            self.sim_margin.setValue(0.0)
+            self.sim_margin.setSuffix(" ×")
+            f3.addRow("보정 방법", self.sim_method)
+            f3.addRow("안전마진 계수", self.sim_margin)
+
+            self.sim_btn = QtWidgets.QPushButton("🧪  시뮬레이션 실행")
+            self.sim_btn.setObjectName("primary")
+            self.sim_btn.clicked.connect(self._on_simulate)
+
+            left.addWidget(g1)
+            left.addWidget(g2)
+            left.addWidget(g3)
+            left.addWidget(self.sim_btn)
+            left.addStretch(1)
+
+            # ── 우: 결과 ──
+            right = QtWidgets.QVBoxLayout()
+            self.sim_big = QtWidgets.QLabel("조건을 입력하고 [시뮬레이션 실행]")
+            self.sim_big.setObjectName("summary")
+            self.sim_big.setWordWrap(True)
+            self.sim_out = QtWidgets.QPlainTextEdit()
+            self.sim_out.setReadOnly(True)
+            self.sim_out.setStyleSheet(
+                "font-family: 'Consolas','D2Coding',monospace; font-size: 10pt;"
+                "background:#FFFFFF; border:1px solid #EDE4DF; border-radius:8px; padding:8px;")
+            right.addWidget(self.sim_big)
+            right.addWidget(self.sim_out, stretch=1)
+
+            outer.addLayout(left, stretch=0)
+            outer.addLayout(right, stretch=1)
+            return w
+
+        def _on_simulate(self):
+            from ..simulate import SimInput, format_result, simulate
+
+            recs = [{"cit": r["cit"], "corr": r["corr"], "cp_meas": r.get("cp_meas"),
+                     "cp_design": r.get("cp_design")} for r in self.store.list_up()]
+            table = self.store.correction_table()
+            idx = self.sim_method.currentIndex()
+            base = None
+            if idx == 1:
+                from ..curve import CorrectionCurve
+                base = CorrectionCurve(recs, method="kernel")
+            elif idx == 2:
+                from ..gp import GPCorrectionCurve
+                base = GPCorrectionCurve(recs)
+            corrector = base
+            k = self.sim_margin.value()
+            if k > 0:
+                from ..correction import applied_correction
+                from ..margin import MarginCorrector
+                inner = base if base is not None else (
+                    lambda t: applied_correction(t, table))
+                corrector = MarginCorrector(inner, recs, k=k)
+
+            inp = SimInput(
+                cit=self.sim_cit.value(),
+                pressure=self.sim_press.value(),
+                rh=None if self.sim_rh_auto.isChecked() else self.sim_rh.value(),
+                deg=self.sim_deg.value(),
+                w=None if self.sim_w_auto.isChecked() else self.sim_w.value(),
+                cp_meas=self.sim_cp.value() if self.sim_cp_use.isChecked() else None,
+                cc_meas=self.sim_meas.value() if self.sim_meas_use.isChecked() else None)
+            try:
+                res = simulate(inp, engine=self.engine, records=recs,
+                               correction_table=table, corrector=corrector)
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.critical(self, "시뮬레이션 오류", str(e))
+                return
+            big = f"예상 입찰값 (Net)   {res.real_net:.2f} MW"
+            if res.meas_net is not None:
+                verdict = ("⚠ 미달" if res.shortfall else
+                           "✅ 밴드 안" if res.in_band else "실측이 밴드보다 높음")
+                big += (f"\n실측 Net {res.meas_net:.2f} MW"
+                        f"  ·  차이 {res.net_diff:+.2f} MW  ·  {verdict}")
+            self.sim_big.setText(big)
+            self.sim_out.setPlainText(format_result(res, inp))
+
         # ---------- 출력곡선 비교 탭 ----------
         def _chart_tab(self):
             from .chart import CurveChart
@@ -466,11 +627,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 "행을 선택해 [삭제 표시] 후 [💾 저장]을 눌러야 실제로 삭제됩니다. "
                 "저장 전에는 [되돌리기]로 취소할 수 있습니다.")
             hint.setWordWrap(True)
-            self.datefill_btn = QtWidgets.QPushButton("📅 엑셀4에서 날짜 채우기")
-            self.datefill_btn.setToolTip(
-                "과거 누적(시드) 32건은 날짜가 비어 있습니다.\n"
-                "엑셀4 '실측데이터'를 지정하면 (CC실측·CIT) 매칭으로 날짜를 채웁니다.")
-            self.datefill_btn.clicked.connect(self._on_backfill_dates)
             self.del_btn = QtWidgets.QPushButton("🗑 삭제 표시")
             self.del_btn.setObjectName("danger")
             self.del_btn.clicked.connect(self._on_mark_delete)
@@ -481,7 +637,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.save_btn.setMaximumWidth(140)
             self.save_btn.clicked.connect(self._on_save_deletes)
             bar.addWidget(hint, stretch=1)
-            bar.addWidget(self.datefill_btn)
             bar.addWidget(self.del_btn)
             bar.addWidget(self.undo_btn)
             bar.addWidget(self.save_btn)
@@ -559,23 +714,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self._refresh_status(self.store.correction_table())   # 즉시 재집계 반영
             self._refresh_chart()
             self._check_bid_freshness()                            # 기존 입찰파일 구버전 감지
-
-        def _on_backfill_dates(self):
-            fn, _ = QtWidgets.QFileDialog.getOpenFileName(
-                self, "엑셀4 파일 선택 (실측데이터)", "", "Excel (*.xlsx)")
-            if not fn:
-                return
-            try:
-                from ..excel4 import load_excel4_records
-                recs = load_excel4_records(fn)
-                n = self.store.backfill_dates(recs)
-            except Exception as e:  # noqa: BLE001
-                QtWidgets.QMessageBox.critical(self, "날짜 채우기 오류", str(e))
-                return
-            self._refresh_list()
-            QtWidgets.QMessageBox.information(
-                self, "날짜 채우기",
-                f"엑셀4 {len(recs)}건을 읽어 날짜 {n}건을 채웠습니다.")
 
         # ---------- 입찰파일 최신성 감시 (누적 변경 → 재생성 유도) ----------
         def _check_bid_freshness(self):
