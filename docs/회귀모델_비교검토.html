@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>회귀모델 비교 검토</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* DejaVu Sans 폴백 — 나눔고딕에 없는 기호(², ×, ÷, −)를 중국어 폰트 대신 여기로 */
+  body { font-family: "NanumGothic", "DejaVu Sans", sans-serif; font-size: 9.6pt;
+         line-height: 1.55; color: #1a1c20; margin: 0; }
+  h1, h2, h3 { margin: 0; font-weight: 800; }
+  sup { font-size: .72em; vertical-align: super; line-height: 0; }
+
+  /* ── 표지 헤더 (음수 마진 금지 — 페이지 경계 밖은 잘림) ── */
+  .hd { background: #10141c; color: #fff; padding: 11mm 10mm 9mm; margin: 0 0 8mm;
+        border-bottom: 4px solid #EA002C; }
+  .hd .eyebrow { font-size: 8.4pt; letter-spacing: 3px; color: #ff5c78; font-weight: 700; }
+  .hd h1 { font-size: 20pt; margin: 5mm 0 3mm; line-height: 1.3; letter-spacing: -.4px; }
+  .hd .sub { font-size: 10pt; color: #aeb6c4; font-weight: 400; }
+  .meta { display: flex; gap: 7mm; margin-top: 7mm; padding-top: 5mm;
+          border-top: 1px solid #2c333f; font-size: 8.4pt; }
+  .meta div { color: #8b94a4; }
+  .meta b { display: block; color: #e8ecf2; font-weight: 700; margin-top: 1mm; font-size: 9pt; }
+
+  /* ── 섹션 ── 섹션 전체에 break-inside:avoid 를 걸면 페이지 하단이 크게 비므로
+        개별 요소(표·코드·카드)에만 적용하고, 제목은 뒤 내용과 붙인다 */
+  section { margin-bottom: 8mm; }
+  h2, h3 { break-after: avoid; }
+  h2 { font-size: 12.5pt; padding: 0 0 2.5mm; margin: 0 0 4mm;
+       border-bottom: 2px solid #10141c; display: flex; align-items: baseline; gap: 3mm; }
+  h2 .n { background: #EA002C; color: #fff; font-size: 8.4pt; padding: .8mm 2.6mm;
+          border-radius: 2px; font-weight: 800; }
+  h3 { font-size: 10.2pt; margin: 6mm 0 2.5mm; color: #10141c; }
+  p { margin: 0 0 2.5mm; }
+  .lead { color: #4a5160; }
+
+  /* ── 결론 카드 ── */
+  .cards { display: flex; gap: 3.5mm; margin-bottom: 5mm; }
+  .card { flex: 1; border: 1px solid #dfe3ea; border-top: 3px solid #EA002C;
+          border-radius: 3px; padding: 4mm; background: #fbfcfd; }
+  .card.ok { border-top-color: #1f9254; }
+  .card .t { font-size: 8.2pt; font-weight: 800; color: #6b7382; letter-spacing: .5px; }
+  .card .v { font-size: 17pt; font-weight: 800; margin: 1.5mm 0; letter-spacing: -.5px; }
+  .card.ok .v { color: #1f9254; } .card.bad .v { color: #c8102e; }
+  .card .d { font-size: 8.2pt; color: #6b7382; line-height: 1.45; }
+
+  /* ── 표 ── */
+  table { width: 100%; border-collapse: collapse; font-size: 8.8pt; margin: 0 0 3mm;
+          break-inside: avoid; }
+  th { background: #eef1f5; text-align: left; padding: 2.2mm 2.6mm; font-weight: 800;
+       border-bottom: 1.5px solid #c6ccd6; font-size: 8.4pt; }
+  td { padding: 2mm 2.6mm; border-bottom: .5px solid #e6e9ef; vertical-align: top; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.best td { background: #eaf7ef; font-weight: 700; }
+  tr.warn td { background: #fdeef0; }
+  tr.sep td { border-top: 1.5px solid #c6ccd6; }
+  .u { color: #8b94a4; font-size: 7.8pt; }
+
+  /* ── 배지 ── */
+  .b { display: inline-block; padding: .5mm 2mm; border-radius: 2px; font-size: 7.6pt;
+       font-weight: 800; white-space: nowrap; }
+  .b.done { background: #dff2e6; color: #14663b; }
+  .b.todo { background: #eceef2; color: #6b7382; }
+  .b.risk { background: #fde2e6; color: #a80f26; }
+
+  /* ── 콜아웃 ── */
+  .note { border-left: 3px solid #EA002C; background: #fff7f8; padding: 3mm 4mm;
+          margin: 3mm 0; font-size: 8.8pt; }
+  .note.good { border-left-color: #1f9254; background: #f2fbf5; }
+  .note b { color: #a80f26; } .note.good b { color: #14663b; }
+  code { font-family: "DejaVu Sans Mono", monospace; font-size: 8.2pt;
+         background: #f1f3f7; padding: .3mm 1.2mm; border-radius: 2px; }
+  pre { font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; background: #10141c;
+        color: #d7dce4; padding: 3mm 3.5mm; border-radius: 3px; margin: 2.5mm 0;
+        line-height: 1.5; white-space: pre-wrap; break-inside: avoid; }
+  pre .c { color: #8b94a4; } pre .r { color: #ff8ba0; }
+  .flow { font-family: "DejaVu Sans Mono", monospace; font-size: 8.2pt; background: #f7f9fc;
+          border: 1px solid #dfe3ea; border-radius: 3px; padding: 3.5mm; line-height: 1.75;
+          break-inside: avoid; white-space: pre-wrap; }
+  .cards, .note, tr, .card { break-inside: avoid; }
+  .flow b { color: #EA002C; }
+  ul { margin: 1.5mm 0 2.5mm; padding-left: 5mm; } li { margin-bottom: 1mm; }
+  .pb { break-before: page; }
+  footer { margin-top: 7mm; padding-top: 3mm; border-top: 1px solid #dfe3ea;
+           font-size: 7.8pt; color: #8b94a4; }
+</style>
+</head>
+<body>
+
+<div class="hd">
+  <div class="eyebrow">위례열병합 공급가능용량</div>
+  <h1>외부 회귀모델 코드 vs 현행 툴<br>비교 검토</h1>
+  <div class="sub">실측 32건 LOOCV 동일조건 검증 결과</div>
+  <div class="meta">
+    <div>작성일<b>2026-08-04</b></div>
+    <div>검토 대상<b>외부 제공 회귀분석 코드</b></div>
+    <div>검증 방법<b>LOOCV (31건 학습 → 1건 예측)</b></div>
+    <div>표본<b>위례 실측 32건</b></div>
+  </div>
+</div>
+
+<section>
+  <h2><span class="n">요약</span>핵심 결론</h2>
+  <div class="cards">
+    <div class="card ok"><div class="t">현행 툴 예측오차</div><div class="v">1.34 MW</div>
+      <div class="d">이론값 + 커널회귀<br>LOOCV 평균절대오차(MAE)</div></div>
+    <div class="card bad"><div class="t">외부 최고 모델</div><div class="v">1.59 MW</div>
+      <div class="d">Poly2 + Ridge<br>현행보다 19% 부정확</div></div>
+    <div class="card bad"><div class="t">외삽 오차 (40°C)</div><div class="v">+67 MW</div>
+      <div class="d">외부 회귀의 학습범위 밖 예측<br>입찰 사용 시 페널티 위험</div></div>
+  </div>
+  <ul>
+    <li><b>외부 코드의 모델은 현행 툴보다 부정확하다.</b> 모든 후보 모델을 동일 조건으로 검증한 결과 현행 방식이 가장 정확했다.</li>
+    <li><b>외부 코드에는 실무 적용을 막는 결함이 있다.</b> 입찰 시점에 알 수 없는 변수 사용, 열 인덱스 불일치로 인한 정답 누출 가능성, 수치 폭주, 외삽 붕괴.</li>
+    <li><b>다만 검증 방법론은 배울 점이 있다.</b> LOOCV, out-of-fold 예측 일괄 평가, 결과 리포트화, Lasso 변수선택을 진단 도구로 쓰는 아이디어.</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="n">1</span>가장 근본적인 차이 — 예측 대상이 다르다</h2>
+  <table>
+    <tr><th style="width:22%">항목</th><th style="width:39%">외부 코드</th><th>현행 툴</th></tr>
+    <tr><td><b>예측 대상</b></td><td>CC실측(MW)을 직접 예측</td>
+        <td class="best"><b>잔차(보정값)만</b> = 실측 − 이론 − W</td></tr>
+    <tr><td><b>설명 주체</b></td><td>회귀식이 92 MW 변동을 전부 담당</td>
+        <td>물리 성능곡선이 담당, 회귀는 오차만</td></tr>
+    <tr><td><b>입력 변수</b></td><td>5개 (온도, 대기압, RH, 복수기압 실측·설계)</td>
+        <td>온도 1개 (대기압·RH·열화는 물리식 처리)</td></tr>
+    <tr><td><b>−20~40°C 전 구간</b></td><td>학습 범위 밖은 외삽 → 불안정</td>
+        <td>물리곡선이 담당 → 안전</td></tr>
+  </table>
+  <div class="note good">현행 방식은 통계학의 <b>잔차 보정(residual / bias correction)</b>이며, 발전 성능시험(ASME PTC-22)에서 쓰는 표준 접근이다. 물리모델을 먼저 세우고 그 편차만 실측으로 학습하는 구조다.</div>
+</section>
+
+<section>
+  <h2><span class="n">2</span>동일 조건(LOOCV) 실측 비교 결과</h2>
+  <table>
+    <tr><th style="width:38%">방식</th><th class="n">MAE</th><th class="n">RMSE</th>
+        <th class="n">R<sup>2</sup></th><th class="n">최대오차</th></tr>
+    <tr class="best"><td>[현행] 이론값 + 커널회귀</td><td class="n">1.34</td><td class="n">1.70</td>
+        <td class="n">0.9970</td><td class="n">4.16</td></tr>
+    <tr class="best"><td>[현행] 이론값 + 구간평균 <span class="u">(기본값)</span></td><td class="n">1.42</td>
+        <td class="n">1.79</td><td class="n">0.9967</td><td class="n">4.16</td></tr>
+    <tr class="sep"><td>[외부] Poly2 + Ridge <span class="u">(외부 최고)</span></td><td class="n">1.59</td>
+        <td class="n">1.90</td><td class="n">0.9963</td><td class="n">3.95</td></tr>
+    <tr><td>[외부] Extended + Lasso</td><td class="n">1.99</td><td class="n">2.59</td>
+        <td class="n">0.9931</td><td class="n">8.21</td></tr>
+    <tr><td>[외부] Ridge (5변수)</td><td class="n">2.49</td><td class="n">2.90</td>
+        <td class="n">0.9913</td><td class="n">6.08</td></tr>
+    <tr><td>[외부] Linear (5변수)</td><td class="n">2.70</td><td class="n">3.14</td>
+        <td class="n">0.9899</td><td class="n">6.58</td></tr>
+    <tr><td>[외부] Poly2 + Linear</td><td class="n">3.22</td><td class="n">4.54</td>
+        <td class="n">0.9788</td><td class="n">14.44</td></tr>
+    <tr class="warn"><td>[외부] Extended + Ridge</td><td class="n">1,353만</td><td class="n">붕괴</td>
+        <td class="n">붕괴</td><td class="n">1.6억</td></tr>
+  </table>
+  <p class="u">단위 MW · CC실측 범위 376.4 ~ 468.8 MW(변동폭 92.4) · 보정 없이 이론값만 쓸 때 MAE 4.51 MW</p>
+  <p><b>현행 방식이 모든 후보보다 정확한 이유</b> — 이론값(물리)이 이미 대부분을 설명하고, 회귀(보정)는 남은 4.51 MW를 1.34 MW로 줄이는 역할만 맡기 때문이다.</p>
+  <div class="note"><b>R<sup>2</sup>에 속으면 안 된다.</b> CC 변동폭이 92 MW라서 <b>온도 하나만 넣어도 R<sup>2</sup> = 0.95</b>가 나온다. 목표 정확도는 ±0.5 MW인데 R<sup>2</sup> 0.99는 RMSE 2.9 MW에 해당한다. 외부 코드가 <code>BEST_BY="R-square"</code>로 모델을 고르는 것은 이 문제에 부적합하며, <b>MAE / RMSE(MW 단위)로 골라야 한다.</b></div>
+</section>
+
+<section>
+  <h2><span class="n">3</span>외부 코드에서 발견한 실제 결함</h2>
+
+  <h3>(1) 열 인덱스 불일치 <span class="b risk">가장 위험</span></h3>
+  <p>앞부분 명세는 X 5개(온도·대기압·RH·복수기압실측·설계)인데 코드는 다음과 같다.</p>
+<pre>X = df.iloc[:, 1:8]      <span class="c"># B~H 7개</span>
+y = df.iloc[:, 8]        <span class="c"># I열</span>
+...
+X = data.iloc[:, 0:6]    <span class="c"># → B~G 6개</span>
+y = data.iloc[:, 6]      <span class="c"># → H열</span></pre>
+  <p>우리 엑셀4 열 구성(<code>날짜|온도|대기압|RH|복수기압실측|설계|CC실측|W값|이론값|보정값</code>)에 그대로 돌리면:</p>
+  <ul>
+    <li><b>X에 CC실측(정답)이 포함되고 Y는 W값(IGV)이 된다</b> → 데이터 누출 + 엉뚱한 타깃. R<sup>2</sup>가 1.0에 가깝게 나오지만 무의미하다.</li>
+    <li><code>dropna</code>에 I열이 포함되어, I열이 비면 <b>전체 행이 삭제</b>된다 ("사용 데이터 수: 0").</li>
+  </ul>
+  <div class="note"><code>iloc</code> 숫자 대신 <b>반드시 컬럼명으로 지정</b>해야 한다.</div>
+
+  <h3>(2) Extended 특성의 역수항 수치 폭주 <span class="b done">재현 확인</span></h3>
+<pre>test 온도 −1.9°C, train 최저 1.9°C
+  → shift = −2.8 → eps(1e-8) clip → <span class="r">역수항 1e+08</span></pre>
+  <p><code>shifted = X − train_min + 1</code> 이 음수가 되면 <code>1e-8</code>로 clip되어 역수가 1억이 된다. LOOCV에서 최저·최고 온도 점이 test가 될 때마다 폭주한다(2장 표의 1,353만 MW가 그 결과). 또한 32건에 특성 35개(<b>p &gt; n</b>)이므로 애초에 불안정하다.</p>
+
+  <h3>(3) 모델 선택 편향 (winner's curse)</h3>
+<pre>25개 후보 중 LOOCV 최고        = 1.902 MW   <span class="c">← 보고되는 값</span>
+같은 선택 절차를 nested LOOCV = <span class="r">2.163 MW</span>   <span class="c">← 실제 성능 (+0.26 낙관)</span></pre>
+  <p>외부 코드는 50개 모델을 비교하므로 편향이 더 크다. <b>선택에 사용한 점수를 성능으로 보고하면 안 된다.</b></p>
+
+  <h3>(4) 실무 치명타 — 예측 시점에 알 수 없는 변수</h3>
+  <p><b>복수기압 실측</b>은 입찰 시점에 알 수 없는 값이다(운전 결과이자 출력의 결과). 내일 온도는 예보로 알 수 있으나 내일 복수기압 실측은 알 수 없다. → <b>이 변수를 사용한 회귀식은 입찰에 사용할 수 없다.</b></p>
+
+  <h3>(5) 외삽 붕괴</h3>
+  <p>입찰 Profile은 −20 ~ 40°C 전 구간이 필요하나 실측은 −1.9 ~ 36.1°C뿐이다.</p>
+  <table>
+    <tr><th style="width:16%">온도</th><th class="n">외부 회귀</th><th class="n">현행(이론+보정)</th><th class="n">차이</th></tr>
+    <tr><td>−20°C</td><td class="n">467.3 MW</td><td class="n">444.6 MW</td><td class="n">+22.8</td></tr>
+    <tr><td>−10°C</td><td class="n">460.5 MW</td><td class="n">461.9 MW</td><td class="n">−1.4</td></tr>
+    <tr class="warn"><td>40°C</td><td class="n">426.2 MW</td><td class="n">359.1 MW</td><td class="n">+67.1</td></tr>
+  </table>
+  <div class="note">36°C 실측이 376 MW인데 <b>40°C를 426 MW로 예측</b>한다(온도가 오르는데 출력이 급증). 입찰에 그대로 쓰면 페널티에 직결된다.</div>
+</section>
+
+<section>
+  <h2><span class="n">4</span>이미 현행 툴에 반영되어 있는 것</h2>
+  <table>
+    <tr><th style="width:36%">외부 코드 요소</th><th style="width:13%">상태</th><th>현행 툴</th></tr>
+    <tr><td>LOOCV 검증</td><td><span class="b done">반영</span></td>
+        <td>기존 검토(1.30 → 1.22 MW)가 이 방식</td></tr>
+    <tr><td>out-of-fold 예측 모아 R<sup>2</sup> 일괄계산</td><td><span class="b done">반영</span></td>
+        <td>통계적으로 옳은 방식 — 동일하게 사용</td></tr>
+    <tr><td>다항 회귀</td><td><span class="b done">반영</span></td>
+        <td><code>curve.py</code> <code>method="poly"</code> (2~3차)</td></tr>
+    <tr><td>비선형 / 비모수 회귀</td><td><span class="b done">반영</span></td>
+        <td>커널회귀(Nadaraya-Watson) <code>--curve</code></td></tr>
+    <tr><td>적합도 R<sup>2</sup> 산출</td><td><span class="b done">반영</span></td>
+        <td><code>CorrectionCurve.r_squared()</code></td></tr>
+    <tr><td>외삽 방어</td><td><span class="b done">반영</span></td>
+        <td>명시적 클램프(외삽 금지) + 특수구간 정책<br>
+            <span class="u">Shaft Limit = 0, 보수적 고정 +8.78</span></td></tr>
+    <tr><td>다중회귀(온도 + 복수기압)</td><td><span class="b todo">미채택</span></td>
+        <td>시도·검증 완료 — 개선 없어 미채택</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2><span class="n">5</span>반영할 만한 것 — 검증 결과 기준</h2>
+  <p>정규화(Ridge/Lasso) 다변량을 현행 구조(잔차 보정)에 접목해 검증한 결과 <b>전부 나빠졌다.</b></p>
+  <table>
+    <tr><th style="width:52%">보정값 예측 방법</th><th class="n">MAE</th><th class="n">RMSE</th><th class="n">최대오차</th></tr>
+    <tr class="best"><td>현행) 커널회귀 (온도)</td><td class="n">1.341</td><td class="n">1.700</td><td class="n">4.16</td></tr>
+    <tr class="best"><td>현행) 구간평균</td><td class="n">1.419</td><td class="n">1.790</td><td class="n">4.16</td></tr>
+    <tr class="sep"><td>접목) Poly2 + Ridge 5변수</td><td class="n">2.040</td><td class="n">2.484</td><td class="n">5.37</td></tr>
+    <tr><td>접목) Ridge 5변수</td><td class="n">2.059</td><td class="n">2.464</td><td class="n">5.07</td></tr>
+    <tr><td>접목) Lasso 5변수</td><td class="n">2.160</td><td class="n">2.545</td><td class="n">5.31</td></tr>
+  </table>
+  <p><b>모델 자체는 반영할 것이 없다.</b> 다만 아래 3개는 가치가 있다.</p>
+
+  <h3>(A) Lasso 변수선택을 진단 도구로 활용 <span class="b done">권장</span></h3>
+  <p>보정값 ~ 5변수, 표준화 계수(전체 32건 학습). 규제를 높이며 어떤 변수가 살아남는지 관찰:</p>
+<pre>α=0.01 → 온도 −3.22, 복수기압실측 +0.86, RH −0.82, 대기압 +0.30, 설계 −0.26
+α=0.1  → 온도 −2.87, RH −0.64, 대기압 +0.04
+α=0.5  → 온도 −2.65, RH −0.38          <span class="c">(복수기압·대기압 탈락)</span>
+α=1.0  → <span class="r">온도 −2.32</span>                         <span class="c">(온도만 생존)</span></pre>
+  <div class="note good">온도가 압도적이며 마지막까지 생존한다. → <b>"보정값은 온도로만 모델링"이라는 현행 설계가 데이터로 정당화된다.</b> 향후 변수 추가를 검토할 때 이 진단을 활용하면 좋다.</div>
+
+  <h3>(B) 커널 폭(bandwidth) 자동 선택 <span class="b done">권장</span></h3>
+  <p>현행은 3.5 고정이나, 데이터로 고르면 약간 개선된다.</p>
+  <table>
+    <tr><th class="n">폭</th><th class="n">1.5</th><th class="n">2.0</th><th class="n">2.5</th><th class="n">3.0</th>
+        <th class="n">3.5</th><th class="n">4.0</th><th class="n">5.0</th><th class="n">6.0</th><th class="n">8.0</th></tr>
+    <tr><td><b>MAE</b></td><td class="n">1.412</td><td class="n">1.347</td>
+        <td class="n" style="background:#eaf7ef;font-weight:800">1.326</td><td class="n">1.328</td>
+        <td class="n" style="background:#fff4d6;font-weight:800">1.341</td><td class="n">1.395</td>
+        <td class="n">1.542</td><td class="n">1.685</td><td class="n">1.908</td></tr>
+  </table>
+  <p class="u">녹색 = 최적(2.5) · 노랑 = 현행(3.5)</p>
+  <p>차이는 작으나(0.015 MW) <b>데이터가 쌓이면 최적 폭이 계속 변한다.</b> LOOCV로 자동 선택하게 만들 가치가 있다(nested CV로 정직하게 평가하는 것까지 포함).</p>
+
+  <h3>(C) 검증 리포트 명령 <span class="b done">권장</span></h3>
+  <p>외부 코드의 "결과를 엑셀 여러 시트로 저장" 아이디어는 사내 공유에 유용하다. <code>validate</code> 명령으로 LOOCV 지표·구간별 편향·목표건수·실측 vs 예측 표를 엑셀로 내보내면 근거자료가 된다.</p>
+</section>
+
+<section>
+  <h2><span class="n">6</span>현행 툴은 어떤 모델이며, 어떻게 검증해야 하는가</h2>
+  <h3>정체 — 2단 구조 (물리 + 통계)</h3>
+  <div class="flow">
+<b>1단 (물리·결정론)</b>
+  base_table(온도) × (1.028 / Deg) ÷ P_corr(대기압) ÷ K_rh(습도)  →  이론기준값
+  엑셀2의 5중보정 곡선엔진(온도·대기압·습도·복수기·열화)의 ISO 산출물을 동결(freeze)
+
+<b>2단 (통계·데이터)</b>
+  보정값 = 실측 − 이론기준값 − W(IGV)
+    → 온도구간별 평균 (계단함수 회귀 / binned mean estimator)
+    → 또는 커널회귀 (비모수 회귀, --curve)
+
+<b>최종</b>
+  현실화 = 이론(IGV 반영) + 보정값,   Net = min(Gross − Aux, 462)</div>
+  <div class="note good">즉 <b>"회귀 모델"이 아니라 "물리모델 + 비모수 잔차보정"</b>이다. 1단이 92 MW 변동의 대부분을, 2단이 남은 4.5 MW를 담당한다.</div>
+
+  <h3>검증해야 할 7가지</h3>
+  <table>
+    <tr><th style="width:5%">#</th><th style="width:19%">검증 항목</th><th style="width:38%">방법</th>
+        <th style="width:11%">상태</th><th>결과 / 계획</th></tr>
+    <tr><td>1</td><td><b>예측 정확도</b></td><td>LOOCV MAE / RMSE / 최대오차</td>
+        <td><span class="b done">완료</span></td><td>1.34 / 1.70 / 4.16 MW</td></tr>
+    <tr><td>2</td><td><b>이론값 정합성</b></td><td>시드 32건 수기 계산과 대조</td>
+        <td><span class="b done">완료</span></td><td>최대오차 0.18 MW</td></tr>
+    <tr><td>3</td><td><b>표본 충분성</b></td><td>구간별 평균의 표준오차</td>
+        <td><span class="b done">완료</span></td><td>목표건수 <b style="color:#c8102e">8/15</b> 근거</td></tr>
+    <tr><td>4</td><td><b>구간별 편향</b></td><td>각 온도구간 잔차 평균이 0인지</td>
+        <td><span class="b todo">미완</span></td><td>검증 리포트에 추가 필요</td></tr>
+    <tr><td>5</td><td><b>물리 타당성</b></td><td>Profile −20~40°C 단조감소 유지,<br>이웃 온도 급변 없음</td>
+        <td><span class="b todo">미완</span></td><td>자동 검사 필요</td></tr>
+    <tr><td>6</td><td><b>시간순 검증</b></td><td>과거 N건 → 미래 예측(walk-forward)<br>실제 운영 조건과 동일</td>
+        <td><span class="b todo">미완</span></td><td>날짜 백필 후 수행 가능</td></tr>
+    <tr><td>7</td><td><b>사후 검증</b></td><td>실제 입찰 후 실측과 비교 누적</td>
+        <td><span class="b todo">미완</span></td><td>운영 단계</td></tr>
+  </table>
+  <div class="note">6번은 외부 코드 첫 요구사항의 "날짜순 상위 20 학습 / 나머지 테스트"와 같은 아이디어이며 <b>타당하다.</b> LOOCV는 미래 정보를 일부 보고 학습하는 낙관적 평가이므로, 시간순 검증이 실제 운영 성능에 더 가깝다.</div>
+</section>
+
+<section>
+  <h2><span class="n">7</span>검증 재현 방법</h2>
+  <p>본 문서의 모든 수치는 위례 실측 32건(<code>measurements_seed.json</code>)으로 LOOCV를 직접 실행하여 산출하였다. 외부 라이브러리(<code>sklearn</code>/<code>numpy</code>)가 없는 환경이므로 StandardScaler / Ridge(정규방정식) / Lasso(좌표하강법) / Poly2 / Extended 특성을 표준 라이브러리로 직접 구현하였으며, 수식 정의는 <code>sklearn</code>과 동일하다.</p>
+<pre>Ridge : ||y − Xw||²  + α||w||²        →  (X'X + αI)w = X'y
+Lasso : (1/2n)||y − Xw||² + α||w||₁   →  좌표하강 + soft-threshold</pre>
+  <footer>위례열병합 공급가능용량 산정 툴 — 외부 회귀모델 비교 검토 · 2026-08-04</footer>
+</section>
+
+</body>
+</html>
