@@ -21,6 +21,7 @@ from .. import constants as C
 from ..config import get_config, set_config
 from ..correction import status_rows, table_fingerprint
 from ..pipeline import run_pipeline
+from ..profile import build_profile
 from ..store import MeasurementStore
 from ..theory import TheoryEngine
 
@@ -131,6 +132,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             tabs.addTab(self._run_tab(), "공급가능용량 산정")
             tabs.addTab(self._status_tab(), "온도 구간별 보정값 현황")
             tabs.addTab(self._list_tab(), "Test 결과 List-up")
+            tabs.addTab(self._chart_tab(), "📈 출력곡선 비교")
 
             header = QtWidgets.QLabel("🦋  위례 공급가능용량 입찰 산정")
             header.setObjectName("header")
@@ -143,6 +145,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.setCentralWidget(central)
             self._refresh_list()
             self._refresh_status(self.store.correction_table())   # 시작 시 현재 누적 기준
+            self._refresh_chart()
 
         # ---------- 공급가능용량 산정 탭 ----------
         def _run_tab(self):
@@ -176,14 +179,28 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             f3 = QtWidgets.QFormLayout(g3)
             self.accum_chk = QtWidgets.QCheckBox("이 테스트를 누적에 반영(저장)")
             self.accum_chk.setToolTip("체크 안 하면 확인용 — 보정값만 표시하고 누적에 저장하지 않습니다")
-            self.curve_chk = QtWidgets.QCheckBox("연속 보정곡선 사용(실험적)")
-            self.curve_chk.setToolTip(
-                "기본(구간 평균): 온도구간별 평균 보정값을 계단식으로 적용.\n"
-                "연속 곡선: 누적 실측점에 곡선을 맞춰 1°C 단위로 부드럽게 적용.\n"
-                "데이터가 충분히 쌓인 뒤 구간 방식과 비교 검증 후 전환 권장.")
+            self.method_cb = QtWidgets.QComboBox()
+            self.method_cb.addItems(["구간 평균 (기본)", "커널 보정곡선", "GP (가우시안 프로세스)"])
+            self.method_cb.setToolTip(
+                "보정값 산출 방법 — 실측 32건 LOOCV 예측오차(MAE)\n"
+                "  구간 평균 1.419 MW : 온도구간별 평균을 계단식 적용(엑셀4 방식)\n"
+                "  커널 보정곡선 1.341 MW : 이웃 실측의 거리가중 평균으로 1°C 단위 적용\n"
+                "  GP 1.243 MW : 커널 + 예측 불확실성 산출. 예측오차 최소\n"
+                "결과는 [📈 출력곡선 비교] 탭에서 곡선으로 확인할 수 있습니다.")
+            self.margin_sb = QtWidgets.QDoubleSpinBox()
+            self.margin_sb.setRange(0.0, 3.0)
+            self.margin_sb.setSingleStep(0.1)
+            self.margin_sb.setValue(0.0)
+            self.margin_sb.setSuffix(" ×")
+            self.margin_sb.setToolTip(
+                "미달 방지 안전마진 = 계수 × 구간별 실측변동\n"
+                "  0     : 마진 없음 — 예측오차 최소(MAE 1.243 MW), 시드 기준 미달 2건\n"
+                "  0.8   : 시드 32건 기준 미달 0건 (오차는 커지지만 전부 안전한 방향)\n"
+                "실측이 없는 특수구간(Shaft Limit·보수적 고정)에는 적용되지 않습니다.")
             self.out_in = self._file_row("출력 엑셀3 입찰파일(.xlsx)", save=True)
             f3.addRow("", self.accum_chk)
-            f3.addRow("", self.curve_chk)
+            f3.addRow("보정 방법", self.method_cb)
+            f3.addRow("안전마진 계수", self.margin_sb)
             f3.addRow("출력 파일", self.out_in["row"])
 
             self.run_btn = QtWidgets.QPushButton("▶  공급가능용량 산정 · 입찰파일 생성")
@@ -269,7 +286,9 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
                     accumulate=self.accum_chk.isChecked(),
-                    correction_method="curve" if self.curve_chk.isChecked() else "bin",
+                    correction_method=("gp" if self.method_cb.currentIndex() == 2 else
+                                       "curve" if self.method_cb.currentIndex() == 1 else "bin"),
+                    margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
                     start=self.start_in.text().strip() or "17:00")
@@ -295,6 +314,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self._fill_profile(res.profile_rows)
             self._refresh_status(res.correction_table)
             self._refresh_list()
+            self._refresh_chart()
             if res.output_path:
                 self._last_bid = {"path": res.output_path, "fp": res.fingerprint}
             elif res.reflected:
@@ -338,6 +358,106 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     self.status_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
 
         # ---------- Test 결과 List-up 탭 ----------
+        # ---------- 출력곡선 비교 탭 ----------
+        def _chart_tab(self):
+            from .chart import CurveChart
+
+            w = QtWidgets.QWidget()
+            lay = QtWidgets.QVBoxLayout(w)
+
+            bar = QtWidgets.QHBoxLayout()
+            self.chart_method = QtWidgets.QComboBox()
+            self.chart_method.addItems(["구간평균(기본)", "커널회귀", "GP(가우시안 프로세스)"])
+            self.chart_method.setToolTip(
+                "보정값 산출 방법 — 실측 32건 LOOCV 예측오차(MAE)\n"
+                "  구간평균 1.419 / 커널회귀 1.341 / GP 1.243 MW")
+            self.chart_method.currentIndexChanged.connect(self._refresh_chart)
+            self.chart_margin = QtWidgets.QDoubleSpinBox()
+            self.chart_margin.setRange(0.0, 3.0)
+            self.chart_margin.setSingleStep(0.1)
+            self.chart_margin.setValue(0.0)
+            self.chart_margin.setSuffix(" ×")
+            self.chart_margin.setToolTip(
+                "입찰 안전마진 = 계수 × 구간별 실측변동\n"
+                "0 = 마진 없음(오차 최소) · 0.8 = 미달 0건(안전 최우선)\n"
+                "마진을 켜면 오차는 커지지만 커지는 방향이 전부 안전한 쪽입니다.")
+            self.chart_margin.valueChanged.connect(self._refresh_chart)
+            self.chart_pts = QtWidgets.QCheckBox("실측점")
+            self.chart_pts.setChecked(True)
+            self.chart_pts.stateChanged.connect(self._refresh_chart)
+            self.chart_band = QtWidgets.QCheckBox("예측구간(GP)")
+            self.chart_band.setChecked(True)
+            self.chart_band.stateChanged.connect(self._refresh_chart)
+            bar.addWidget(QtWidgets.QLabel("보정 방법"))
+            bar.addWidget(self.chart_method)
+            bar.addSpacing(10)
+            bar.addWidget(QtWidgets.QLabel("안전마진"))
+            bar.addWidget(self.chart_margin)
+            bar.addSpacing(10)
+            bar.addWidget(self.chart_pts)
+            bar.addWidget(self.chart_band)
+            bar.addStretch(1)
+            self.chart_info = QtWidgets.QLabel()
+            self.chart_info.setStyleSheet("color:#6b7382;")
+            bar.addWidget(self.chart_info)
+
+            self.chart = CurveChart()
+            lay.addLayout(bar)
+            lay.addWidget(self.chart, stretch=1)
+            note = QtWidgets.QLabel(
+                "위 곡선: 이론값(보정 없음) vs 현실화 Net(보정 반영, 입찰값) · "
+                "아래 곡선: 온도별 보정값과 실측점. 마우스를 올리면 해당 온도 값이 표시됩니다.")
+            note.setWordWrap(True)
+            note.setStyleSheet("color:#6b7382; font-size:11px;")
+            lay.addWidget(note)
+            return w
+
+        def _refresh_chart(self, *_):
+            """누적 실측 기준으로 곡선 재생성."""
+            if not hasattr(self, "chart"):
+                return
+            recs = [{"cit": r["cit"], "corr": r["corr"]} for r in self.store.list_up()]
+            if not recs:
+                self.chart.set_data([], [])
+                self.chart_info.setText("누적 데이터 없음")
+                return
+            table = self.store.correction_table()
+            idx = self.chart_method.currentIndex()
+            sigma_fn = None
+            if idx == 1:
+                from ..curve import CorrectionCurve
+                base = CorrectionCurve(recs, method="kernel")
+            elif idx == 2:
+                from ..gp import GPCorrectionCurve
+                base = GPCorrectionCurve(recs)
+                sigma_fn = base.sigma
+            else:
+                base = None                      # 구간평균(기본)
+            k = self.chart_margin.value()
+            margin_fn = None
+            corrector = base
+            if k > 0:
+                from ..margin import MarginCorrector
+                from ..correction import applied_correction
+                inner = base if base is not None else (
+                    lambda t: applied_correction(t, table))
+                mc = MarginCorrector(inner, recs, k=k)
+                corrector = mc
+                margin_fn = mc.margin
+            rows = build_profile(self.engine, table, corrector=corrector)
+            self.chart.set_toggles(points=self.chart_pts.isChecked(),
+                                   band=self.chart_band.isChecked())
+            self.chart.set_data(rows, [(r["cit"], r["corr"]) for r in recs],
+                                sigma_fn=sigma_fn, margin_fn=margin_fn)
+            msg = f"누적 {len(recs)}건"
+            if idx == 2 and getattr(base, "hyper", None):
+                ls, sf, sn = base.hyper
+                msg += f" · GP 길이척도 {ls:.0f}°C 노이즈 {sn:.1f} MW"
+            if k > 0:
+                mg = [margin_fn(t) for t in range(-14, 41)]
+                msg += f" · 마진 {min(mg):.2f}~{max(mg):.2f} MW"
+            self.chart_info.setText(msg)
+
         def _list_tab(self):
             w = QtWidgets.QWidget()
             lay = QtWidgets.QVBoxLayout(w)
@@ -437,6 +557,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self._pending_del.clear()
             self._refresh_list()
             self._refresh_status(self.store.correction_table())   # 즉시 재집계 반영
+            self._refresh_chart()
             self._check_bid_freshness()                            # 기존 입찰파일 구버전 감지
 
         def _on_backfill_dates(self):
@@ -488,7 +609,9 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     output_path=self._last_bid["path"], connector=None,
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
-                    correction_method="curve" if self.curve_chk.isChecked() else "bin",
+                    correction_method=("gp" if self.method_cb.currentIndex() == 2 else
+                                       "curve" if self.method_cb.currentIndex() == 1 else "bin"),
+                    margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
                     start=self.start_in.text().strip() or "17:00")

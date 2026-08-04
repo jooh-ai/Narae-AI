@@ -41,13 +41,17 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                  forecast: WeatherForecast | None = None, forecast_path: str | None = None,
                  bid_day: str | None = None, template_path: str | Path = DEFAULT_TEMPLATE,
                  accumulate: bool = False, correction_method: str = "bin",
-                 bandwidth: float = 3.5, start: str = "17:00") -> PipelineResult:
+                 bandwidth: float = 3.5, margin_k: float = 0.0,
+                 start: str = "17:00") -> PipelineResult:
     """전 단계 실행. connector 가 있으면 RiMS 자동취득.
 
     accumulate=False(기본): 취득·보정값 계산만(확인용) — 누적에 저장 안 함.
     accumulate=True: 그 테스트를 누적에 반영(저장). 같은 날짜가 이미 있으면 건너뜀.
     forecast/forecast_path 로 입찰 대기압(예보 중위 − 8) 결정. 없으면 ISO 1013.
-    correction_method: 'bin'(구간 평균, 기본) 또는 'curve'(연속 보정곡선).
+    correction_method: 'bin'(구간 평균, 기본) / 'curve'(커널회귀) / 'gp'(가우시안 프로세스).
+      실측 32건 LOOCV 예측오차(MAE): bin 1.419 / curve 1.341 / gp 1.243 MW.
+    margin_k: 미달 방지 안전마진 계수(0=미적용). 마진 = k × 구간별 실측변동.
+      k=0.8 이면 시드 32건에서 미달 0건(오차는 커지지만 전부 안전한 방향).
     output_path 가 있으면 엑셀3 양식 입찰 파일 생성.
     start: 테스트 시작 시각(기본 17:00, 1시간 창). 다른 시각에 수행된 테스트 취득용.
     """
@@ -72,13 +76,22 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                 store.add(new_record)
                 reflected = True
 
-    # 3. 보정 테이블 재집계 (+ 곡선 토글)
+    # 3. 보정 테이블 재집계 (+ 보정 방법 · 안전마진)
     table = store.correction_table()
+    recs = [{"cit": r.cit, "corr": r.corr} for r in store.all()]
     corrector = None
     if correction_method == "curve":
         from .curve import CorrectionCurve
-        corrector = CorrectionCurve(
-            [{"cit": r.cit, "corr": r.corr} for r in store.all()], bandwidth=bandwidth)
+        corrector = CorrectionCurve(recs, bandwidth=bandwidth)
+    elif correction_method == "gp":
+        from .gp import GPCorrectionCurve
+        corrector = GPCorrectionCurve(recs)
+    if margin_k and margin_k > 0:          # 미달 방지 안전마진(실측 변동 비례)
+        from .correction import applied_correction
+        from .margin import MarginCorrector
+        base = corrector if corrector is not None else (
+            lambda t: applied_correction(t, table))
+        corrector = MarginCorrector(base, recs, k=margin_k)
 
     # 4. 현실화 Profile + 엑셀3 출력 (보정지문 도장 → check-bid 최신 여부 검사)
     from datetime import datetime
