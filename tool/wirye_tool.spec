@@ -70,7 +70,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,                # UPX 비활성 (COLLECT 주석 참조)
     console=False,            # 디버그 시 True
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -84,7 +84,10 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    # UPX 비활성: 압축이 DLL·번들 데이터를 손상시켜 실행 시점에 원인 불명 오류를
+    # 내는 사례가 있다(예: 번들 xlsx 템플릿이 zip 으로 인식되지 않음).
+    # 폴더 용량은 다소 커지지만 안정성을 우선한다.
+    upx=False,
     upx_exclude=[],
     name="WiryeBidTool",
 )
