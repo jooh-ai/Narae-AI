@@ -18,11 +18,31 @@ datas = [
     ("wirye_capacity/data", "wirye_capacity/data"),
 ]
 binaries = []
-hiddenimports = []
 
-# asyncua: 동적 import·노드셋 데이터가 있어 통째로 수집(누락 시 런타임 ImportError 방지)
-for pkg in ("asyncua",):
-    d, b, h = collect_all(pkg)
+# 지연(함수 내부) import 모듈은 정적 분석이 놓칠 수 있어 명시한다.
+hiddenimports = [
+    "wirye_capacity.gp",              # GP 보정기 (ui/app, pipeline 에서 지연 import)
+    "wirye_capacity.margin",          # 안전마진
+    "wirye_capacity.curve",           # 커널 보정곡선
+    "wirye_capacity.simulate",        # 출력 시뮬레이션
+    "wirye_capacity.excel4",          # 엑셀4 날짜 백필
+    "wirye_capacity.excel_io",        # 엑셀 열기 가드
+    "wirye_capacity.ui.chart",        # 출력곡선 비교 차트
+    "wirye_capacity.rims.opcua",      # B: OPC UA 취득
+    "wirye_capacity.rims.excel_addin",  # A: 엑셀1 경유 취득
+    "wirye_capacity.rims.locate",     # 엑셀1 자동 탐색
+]
+
+# 동적 import·데이터 파일이 있는 패키지는 통째로 수집(누락 시 런타임 ImportError).
+#   asyncua : B 방식(OPC UA 직접 취득) — 노드셋 XML 데이터 포함
+#   xlwings : A 방식(엑셀1 경유 취득) — Windows 전용. 빌드 PC에 없으면 건너뜀
+#             (A 방식을 쓸 계획이면 빌드 전에 pip install xlwings 필요)
+for pkg in ("asyncua", "xlwings"):
+    try:
+        d, b, h = collect_all(pkg)
+    except Exception as e:      # noqa: BLE001 — 미설치 패키지는 조용히 제외
+        print(f"[wirye_tool.spec] '{pkg}' 미설치 — 번들에서 제외합니다 ({e})")
+        continue
     datas += d
     binaries += b
     hiddenimports += h
