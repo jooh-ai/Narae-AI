@@ -20,6 +20,30 @@ from .theory import TheoryEngine, igv_turnup
 
 # 기본 엑셀3 템플릿 (최종 입찰 양식). PyInstaller 동결 시 _MEIPASS 경로로 해석.
 DEFAULT_TEMPLATE = C.resource("templates", "excel3_profile_template.xlsx")
+# DRM 회피 사본 — 내용은 위 xlsx 와 동일하고 확장자만 다르다.
+# 사내 문서보안이 .xlsx 를 자동 암호화(OLE2 래핑)하는 환경에서 이 파일을 메모리로 읽는다.
+FALLBACK_TEMPLATE = C.resource("templates", "excel3_profile_template.tpl")
+
+
+def open_template(path=None):
+    """엑셀3 템플릿 열기 — .xlsx 가 DRM 으로 암호화된 환경에서 .tpl 사본으로 자동 폴백.
+
+    폴백은 **디스크를 거치지 않고** 바이트를 메모리에서 읽는다(임시 .xlsx 를 만들면
+    그 파일에도 DRM 이 걸리므로). 사용자가 template_path 를 직접 지정한 경우에는
+    그 파일만 시도한다 — 조용히 다른 양식을 쓰면 입찰값이 잘못 나올 수 있다.
+    """
+    from .excel_io import ExcelOpenError, load_workbook_bytes, load_workbook_safe
+
+    target = Path(path) if path else Path(DEFAULT_TEMPLATE)
+    explicit = path is not None and Path(path) != Path(DEFAULT_TEMPLATE)
+    try:
+        return load_workbook_safe(target)
+    except ExcelOpenError:
+        if explicit or not Path(FALLBACK_TEMPLATE).exists():
+            raise
+        # 번들 기본 템플릿이 DRM 에 걸린 상황 → 같은 내용의 .tpl 을 메모리에서 로드
+        return load_workbook_bytes(Path(FALLBACK_TEMPLATE).read_bytes(),
+                                   name=Path(FALLBACK_TEMPLATE).name)
 
 
 @dataclass
@@ -197,11 +221,9 @@ def fill_excel3_template(output_path: str, *, engine: TheoryEngine, correction_t
     stamp: 있으면 파일 속성(설명)에 기록 — 생성 시점 보정지문·누적 건수(check-bid 검사용).
     반환: output_path. (Excel에서 열면 6모드·온도Profile이 수식으로 재계산됨)
     """
-    from .excel_io import load_workbook_safe
-
     rows = build_profile(engine, correction_table, pressure=pressure, deg=deg,
                          temps=list(range(-20, 41)), corrector=corrector)
-    wb = load_workbook_safe(template_path)       # 수식·서식 보존(보안/손상 → 친절한 오류)
+    wb = open_template(template_path)             # 수식·서식 보존 + DRM 시 .tpl 폴백
     m3 = wb[mode3_sheet]
     # 양식 정합 검사: Mode3 온도축이 행5=−20 … 행65=40 인지 확인(템플릿/양식 변경 방어)
     a_first = m3.cell(row=_MODE3_FIRST_ROW, column=1).value

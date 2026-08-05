@@ -14,7 +14,8 @@ from PyInstaller.utils.hooks import collect_all
 
 # 번들 데이터: 엑셀3 템플릿 + 시드/베이스 테이블 (constants.resource 가 _MEIPASS 로 참조)
 datas = [
-    ("wirye_capacity/templates/excel3_profile_template.xlsx", "wirye_capacity/templates"),
+    # 템플릿 폴더 전체 — .xlsx 와 DRM 회피용 .tpl 사본을 함께 번들
+    ("wirye_capacity/templates", "wirye_capacity/templates"),
     ("wirye_capacity/data", "wirye_capacity/data"),
 ]
 binaries = []

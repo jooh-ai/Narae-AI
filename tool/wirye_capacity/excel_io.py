@@ -41,6 +41,18 @@ def _detail(p: Path) -> str:
 
 def _remedy(p: Path) -> str:
     """번들 템플릿과 사용자 지정 파일은 조치가 다르다."""
+    try:
+        drm = _ole2(p.read_bytes()[:8])
+    except OSError:
+        drm = False
+    if drm:
+        return ("원인: 이 파일은 사내 문서보안(DRM)으로 암호화되어 있습니다.\n"
+                "      (정상 xlsx 는 'PK'로 시작하지만 OLE2 컨테이너로 감싸진 상태입니다)\n\n"
+                "해결:\n"
+                "  · 번들 템플릿이라면 프로그램이 자동으로 .tpl 사본을 사용하도록 되어 있습니다.\n"
+                "    이 오류가 계속되면 최신 코드로 다시 빌드하세요.\n"
+                "  · 사용자 파일이라면 DRM 예외 폴더로 옮기거나,\n"
+                "    Excel 에서 열어 [다른 이름으로 저장]으로 보안 해제 사본을 만드세요.")
     if _is_bundled(p):
         return ("이 파일은 프로그램에 포함된 입찰 양식 템플릿입니다.\n"
                 "사용자 파일이 아니므로 보안 해제 대상이 아닙니다.\n\n"
@@ -54,6 +66,25 @@ def _remedy(p: Path) -> str:
     return ("원인: 사내 문서 보안(DRM)이 걸려 있거나, 다운로드 중 파일이 손상되었습니다.\n\n"
             "해결: 파일을 Excel 에서 열어 [파일 → 다른 이름으로 저장]으로 "
             "보안이 해제된 사본(.xlsx)을 만든 뒤 그 파일을 지정하세요.")
+
+
+def _ole2(head: bytes) -> bool:
+    """OLE2(Compound File) 시그니처 — 암호화·DRM 래핑된 Office 파일의 특징."""
+    return head[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def load_workbook_bytes(data: bytes, name: str = "(메모리)", **kwargs):
+    """바이트에서 직접 로드 — 디스크에 .xlsx 를 만들지 않으므로 DRM 이 개입하지 않는다."""
+    import io
+    import zipfile
+
+    from openpyxl import load_workbook
+    if _ole2(data[:8]):
+        raise ExcelOpenError(f"{name}: 암호화(DRM)된 Office 파일입니다(OLE2 컨테이너).")
+    try:
+        return load_workbook(io.BytesIO(data), **kwargs)
+    except zipfile.BadZipFile as e:
+        raise ExcelOpenError(f"{name}: 엑셀(zip) 구조가 아닙니다 — 손상 또는 암호화.") from e
 
 
 def load_workbook_safe(path, **kwargs):

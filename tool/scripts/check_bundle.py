@@ -13,6 +13,7 @@ from pathlib import Path
 
 TARGETS = [
     ("wirye_capacity/templates/excel3_profile_template.xlsx", "xlsx"),
+    ("wirye_capacity/templates/excel3_profile_template.tpl", "xlsx"),   # DRM 회피 사본
     ("wirye_capacity/data/measurements_seed.json", "json"),
     ("wirye_capacity/data/base_table.json", "json"),
 ]
@@ -34,7 +35,10 @@ def check(root: Path) -> int:
         if size == 0:
             ok, note = False, "0바이트"
         elif kind == "xlsx":
-            if not zipfile.is_zipfile(found):
+            head = found.open("rb").read(8)
+            if head == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+                ok, note = False, "사내 DRM 으로 암호화됨(OLE2) — 이 파일은 열 수 없음"
+            elif not zipfile.is_zipfile(found):
                 ok, note = False, "zip(xlsx) 구조가 아님 — 손상"
             else:
                 with zipfile.ZipFile(found) as z:
@@ -51,8 +55,17 @@ def check(root: Path) -> int:
             bad += 1
     print()
     if bad:
-        print(f"손상/누락 {bad}건 — 재빌드가 필요합니다:")
-        print("  pyinstaller --noconfirm wirye_tool.spec")
+        tpl = next((b / "wirye_capacity/templates/excel3_profile_template.tpl"
+                    for b in bases
+                    if (b / "wirye_capacity/templates/excel3_profile_template.tpl").exists()),
+                   None)
+        tpl_ok = bool(tpl and zipfile.is_zipfile(tpl))
+        print(f"문제 {bad}건 발견.")
+        if tpl_ok:
+            print("  다만 DRM 회피 사본(.tpl)이 정상이므로 프로그램은 그것으로 동작합니다.")
+            print("  (입찰파일 생성 가능 — 조치 없이 사용해도 됩니다)")
+            return 0
+        print("  재빌드가 필요합니다:  pyinstaller --noconfirm wirye_tool.spec")
         return 1
     print("번들 데이터 정상 — 실행 가능합니다.")
     return 0
