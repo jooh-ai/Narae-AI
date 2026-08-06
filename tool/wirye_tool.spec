@@ -36,9 +36,15 @@ hiddenimports = [
 
 # 동적 import·데이터 파일이 있는 패키지는 통째로 수집(누락 시 런타임 ImportError).
 #   asyncua : B 방식(OPC UA 직접 취득) — 노드셋 XML 데이터 포함
-#   xlwings : A 방식(엑셀1 경유 취득) — Windows 전용. 빌드 PC에 없으면 건너뜀
-#             (A 방식을 쓸 계획이면 빌드 전에 pip install xlwings 필요)
-for pkg in ("asyncua", "xlwings"):
+#
+# xlwings 는 여기서 수집하지 않는다(중요).
+#   GUI(wirye_gui.py → ui/app.py)는 B 방식(OPC UA)만 쓰고 xlwings 를 참조하지 않는다.
+#   그런데 collect_all("xlwings") 는 xlwings 의 모든 하위 모듈을 hiddenimport 로 올리고,
+#   그 안의 conversion/pandas_conv·numpy_conv 등이 pandas·numpy·PIL 을 import 하는 탓에
+#   pandas → pyarrow(49MB), numpy(20MB), scipy(26MB), PIL(8MB) 이 통째로 딸려 들어왔다.
+#   (2026-08 실측: _internal 341MB 중 100MB 이상이 이 경로로 유입)
+#   A 방식(엑셀1 경유)은 사내 CLI 에서 소스로 실행하며, 그때 pip install xlwings 하면 된다.
+for pkg in ("asyncua",):
     try:
         d, b, h = collect_all(pkg)
     except Exception as e:      # noqa: BLE001 — 미설치 패키지는 조용히 제외
@@ -47,6 +53,26 @@ for pkg in ("asyncua", "xlwings"):
     datas += d
     binaries += b
     hiddenimports += h
+
+# 번들에서 확실히 배제할 것 — 소스 전체를 grep 해 참조가 0건임을 확인한 목록.
+#   과학 스택 : GP·커널회귀·차트를 전부 표준 라이브러리와 QPainter 로 직접 구현했으므로
+#               numpy/scipy/pandas 계열은 한 줄도 쓰지 않는다. xlwings 재유입 차단용으로
+#               루트 패키지까지 함께 막는다.
+#   PIL       : openpyxl 이 이미지가 있는 통합문서를 읽을 때만 선택적으로 쓴다.
+#               excel3 템플릿에는 래스터 이미지가 없어(vmlDrawing 뿐) 불필요.
+#   Qt 미사용 : 우리 UI 는 QtWidgets + QtGui(QPainter) + QtCore 3개뿐이다.
+excludes = [
+    "tkinter", "matplotlib", "PyQt5", "PyQt6",
+    # ── 과학 스택 (참조 0건, xlwings 경유로만 유입되던 것) ──
+    "xlwings", "pandas", "pyarrow", "numpy", "scipy", "PIL", "Pillow",
+    # ── 쓰지 않는 Qt 바인딩 ──
+    "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuick3D", "PySide6.QtQuickWidgets",
+    "PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.QtWebEngineCore",
+    "PySide6.QtWebEngineWidgets", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets",
+    "PySide6.QtCharts", "PySide6.QtDataVisualization", "PySide6.Qt3DCore",
+    "PySide6.QtOpenGL", "PySide6.QtOpenGLWidgets", "PySide6.QtDesigner",
+    "PySide6.QtTest", "PySide6.QtSql", "PySide6.QtBluetooth", "PySide6.QtSerialPort",
+]
 
 a = Analysis(
     ["wirye_gui.py"],
@@ -57,9 +83,23 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "PyQt5", "PyQt6"],
+    excludes=excludes,
     noarchive=False,
 )
+
+# ── 선택적 추가 감량 (기본 비활성) ─────────────────────────────────────────
+# 아래 두 항목은 용량 대비 위험이 있어 기본은 그대로 둔다. 배포 용량을 더
+# 줄여야 하면 하나씩 켜고 반드시 사내 PC(특히 원격데스크톱)에서 실행 확인할 것.
+#
+# 1) opengl32sw.dll (약 20MB) — GPU 드라이버가 없을 때 Qt 가 쓰는 소프트웨어
+#    OpenGL 폴백. 우리 화면은 QPainter 뿐이라 보통 필요 없지만, RDP 접속 환경에서
+#    창이 검게 뜨는 사례가 있어 남겨 둔다.
+# a.binaries = [b for b in a.binaries if "opengl32sw" not in b[0].lower()]
+#
+# 2) Qt 번역 파일 (약 10MB) — 지우면 QMessageBox 의 "확인/취소" 같은 Qt 기본
+#    버튼이 영문으로 바뀐다. 우리 문구는 전부 한국어 하드코딩이라 기능엔 영향 없음.
+# a.datas = [d for d in a.datas if "translations" not in d[0].replace("\\", "/")]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
