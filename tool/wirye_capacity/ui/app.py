@@ -312,6 +312,15 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             if res.output_path:
                 msg.append(f"입찰 파일: {res.output_path}")
             self.summary.setText("    |    ".join(msg))
+            # 취득 품질 경고는 요약줄에 묻히면 안 된다(CC실측 오차는 그대로 보정값 오차).
+            if res.acq_warnings:
+                QtWidgets.QMessageBox.warning(
+                    self, "취득 값 확인 필요",
+                    "RiMS 취득값에 확인이 필요한 사항이 있습니다.\n\n"
+                    + "\n".join(f"· {w}" for w in res.acq_warnings)
+                    + "\n\n엑셀1(fnTagStat) 값과 대조한 뒤 사용하세요.\n"
+                      "진단: python scripts/cc_diagnose.py --host <서버> "
+                      f"--date {res.date}")
             self._fill_profile(res.profile_rows)
             self._refresh_status(res.correction_table)
             self._refresh_list()

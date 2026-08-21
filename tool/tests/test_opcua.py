@@ -127,3 +127,85 @@ def test_nodeid_cache_roundtrip(tmp_path):
     # 다른 host → 로드 안 됨(빈 맵)
     c3 = OpcUaRimsConnector(host="other", cache_path=str(cache))
     assert c3.nodeid_map == {}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 취득 품질 경고 — 2025-10-28 CC실측 +1.73MW 불일치(엑셀1 452.3669 vs Tool 454.10)
+# 조사에서 드러난 구멍: 값만 받고 집계 상태·정합성을 아무도 확인하지 않았다.
+# ─────────────────────────────────────────────────────────────────────────────
+_OK = {"cit": 21.0, "pressure": 1005.6, "rh": 44.0}
+
+
+def test_no_warning_when_cc_matches_gt_plus_st(monkeypatch):
+    """사내 기준(2026-05-05)처럼 CC 와 GT+ST 차이가 0.11MW 면 경고 없음."""
+    c = OpcUaRimsConnector(host="h")
+    monkeypatch.setattr(c, "_connect_and_read", lambda s, e: {
+        **_OK, "gt_meas": 271.7202, "st_meas": 128.4340, "cc_meas": 400.2644})
+    assert c.acquire("2026-05-05").warnings == []
+
+
+def test_warns_when_cc_diverges_from_gt_plus_st(monkeypatch):
+    """CC 태그가 GT+ST 합과 1MW 넘게 벌어지면 경고 — 조용히 누적되면 안 된다."""
+    c = OpcUaRimsConnector(host="h")
+    monkeypatch.setattr(c, "_connect_and_read", lambda s, e: {
+        **_OK, "gt_meas": 271.72, "st_meas": 128.43, "cc_meas": 401.88})   # +1.73
+    w = c.acquire("2026-05-05").warnings
+    assert len(w) == 1
+    assert "1.73" in w[0] and "GT+ST" in w[0]
+
+
+def test_warns_when_aggregate_status_not_good():
+    """서버가 값을 주면서 Uncertain 을 함께 내려보내면 경고 (구간 결측·불량 신호)."""
+    c = OpcUaRimsConnector(host="h")
+    c.quality = {"cc_meas": {"source": "server", "status": "Uncertain_DataSubNormal"}}
+    w = c._quality_warnings({"cc_meas": 400.2, "gt_meas": 271.7, "st_meas": 128.4})
+    assert any("Uncertain_DataSubNormal" in x for x in w)
+
+
+def test_warns_when_server_aggregate_fell_back_to_raw():
+    """서버 집계 실패 → raw 평균 폴백은 엑셀1 과 경계값 처리가 달라 값이 어긋날 수 있다."""
+    c = OpcUaRimsConnector(host="h")
+    c.quality = {"cit": {"source": "fallback", "status": "예외 TimeoutError"}}
+    w = c._quality_warnings({"cc_meas": 400.2, "gt_meas": 271.7, "st_meas": 128.4})
+    assert any("raw 평균" in x for x in w)
+
+
+def test_quality_resets_between_acquires(monkeypatch):
+    """직전 취득의 경고가 다음 취득에 남으면 안 된다."""
+    c = OpcUaRimsConnector(host="h")
+    c.quality = {"cc_meas": {"source": "fallback", "status": "예외 X"}}
+    monkeypatch.setattr(c, "_connect_and_read", lambda s, e: {
+        **_OK, "cc_meas": 400.2644, "gt_meas": 271.7202, "st_meas": 128.4340})
+    assert c.acquire("2026-05-05").warnings == []
+    assert c.quality == {}
+
+
+def _mock(date="2026-05-05"):
+    from wirye_capacity.rims.base import AcquiredTest
+    from wirye_capacity.rims.mock import MockRimsConnector
+    return MockRimsConnector({date: AcquiredTest(
+        date=date, cit=21.0, pressure=1005.6, cc_meas=400.26, rh=44.0)})
+
+
+def test_pipeline_carries_acq_warnings():
+    """커넥터가 올린 경고가 PipelineResult 까지 전달돼야 화면에 띄울 수 있다."""
+    from wirye_capacity.pipeline import run_pipeline
+    from wirye_capacity.store import MeasurementStore
+
+    st = MeasurementStore()
+    st.seed()
+    conn = _mock()
+    conn.last_warnings = ["테스트 경고"]
+    res = run_pipeline(date="2026-05-05", store=st, connector=conn, accumulate=False)
+    assert res.acq_warnings == ["테스트 경고"]
+
+
+def test_pipeline_acq_warnings_empty_for_plain_connector():
+    """last_warnings 를 모르는 커넥터도 그대로 동작해야 한다(빈 리스트)."""
+    from wirye_capacity.pipeline import run_pipeline
+    from wirye_capacity.store import MeasurementStore
+
+    st = MeasurementStore()
+    st.seed()
+    res = run_pipeline(date="2026-05-05", store=st, connector=_mock(), accumulate=False)
+    assert res.acq_warnings == []

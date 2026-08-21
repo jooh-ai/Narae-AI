@@ -33,6 +33,7 @@ class PipelineResult:
     reflected: bool = False          # 이번 테스트가 누적에 반영(저장)됐는지
     duplicate_skipped: bool = False  # 같은 날짜가 이미 있어 반영을 건너뛰었는지
     fingerprint: str = ""            # 보정 테이블 지문 — 입찰파일 최신 여부 검사용
+    acq_warnings: list = field(default_factory=list)  # 취득 품질 경고(커넥터가 올린 것)
 
 
 def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None = None,
@@ -67,8 +68,11 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     new_record = None
     reflected = False
     duplicate_skipped = False
+    acq_warnings: list = []
     if connector is not None:
         new_record = store.compute_from_rims(connector, date, start=start, engine=eng, deg=deg)
+        # 취득 품질 경고(집계 상태·CC vs GT+ST 불일치 등). 지원하는 커넥터만 채운다.
+        acq_warnings = list(getattr(connector, "last_warnings", None) or [])
         if accumulate:
             if store.has_date(date):
                 duplicate_skipped = True            # 같은 날짜 이미 반영됨 → 중복 방지
@@ -112,4 +116,4 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                           measurement_count=store.count(), new_record=new_record,
                           correction_table=table, profile_rows=rows, output_path=out,
                           reflected=reflected, duplicate_skipped=duplicate_skipped,
-                          fingerprint=fp)
+                          fingerprint=fp, acq_warnings=acq_warnings)

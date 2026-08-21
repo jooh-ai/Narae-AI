@@ -1,7 +1,7 @@
 """RiMS 커넥터 인터페이스 + 취득 데이터모델."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 
@@ -22,6 +22,9 @@ class AcquiredTest:
     gt_meas: float | None = None
     st_meas: float | None = None
     season: str | None = None
+    # 취득 품질 경고 — 값은 돌려주되 사람이 확인해야 하는 사항을 담는다.
+    # (예: 서버 집계 StatusCode 가 Good 아님, CC 태그와 GT+ST 합이 크게 벌어짐)
+    warnings: list[str] = field(default_factory=list)
 
 
 @runtime_checkable

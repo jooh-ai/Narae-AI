@@ -71,6 +71,11 @@ def server_time_average(client, nodeid: str, start_dt, end_dt):
 
     fnTagStat 'TimeAvg' 와 동일 알고리즘 → raw 보간의 공백·경계값 왜곡 없음.
     사내 검증(2025-09-23 CIT): 서버값 24.85262 ≡ 애드인 24.8526.
+
+    반환: (값, StatusCode 이름).  StatusCode 를 반드시 함께 본다 — 구간에 결측·불량이
+    섞이면 서버는 값을 주면서 Uncertain_DataSubNormal 등을 함께 내려보낸다. 이걸 버리면
+    '평균이 일부 구간으로만 계산된 값'을 정상 측정값으로 오인한다.
+    (2025-10-28 CC 실측 +1.73MW 불일치 조사 중 발견 — 예전에는 상태를 버렸다.)
     """
     from asyncua import ua
 
@@ -84,10 +89,18 @@ def server_time_average(client, nodeid: str, start_dt, end_dt):
     ac.UseServerCapabilitiesDefaults = True
     details.AggregateConfiguration = ac
     result = node.history_read(details)
-    data = result.HistoryData
-    vals = [dv.Value.Value for dv in data.DataValues
-            if dv.Value is not None and dv.Value.Value is not None]
-    return vals[0] if vals else None
+    for dv in result.HistoryData.DataValues:
+        if dv.Value is None or dv.Value.Value is None:
+            continue
+        sc = getattr(dv, "StatusCode", None)
+        name = getattr(sc, "name", None) or (str(sc) if sc is not None else "미확인")
+        return dv.Value.Value, name
+    return None, "결과 없음"
+
+
+# CC Load 태그와 GT+ST 합의 허용 차이(MW). 사내 기준값(2026-05-05)에서 +0.1102 였다.
+# 이보다 크게 벌어지면 태그가 다른 지점을 보고 있거나 한쪽 데이터가 튄 것이다.
+CC_SUM_TOL = 1.0
 
 
 def time_weighted_average(points: list[tuple], start_dt, end_dt) -> float | None:
@@ -137,12 +150,15 @@ class OpcUaRimsConnector:
         self.cache_path = Path(cache_path) if cache_path else None
         self.window_min = window_min
         self.timeout = timeout
+        self.quality: dict[str, dict] = {}   # field → {source, status} (취득 경로·집계 상태)
+        self.last_warnings: list[str] = []   # 직전 acquire 의 품질 경고
         self._cache_key = endpoint or host
         if self.cache_path and not self.nodeid_map:
             self._load_cache()
 
     # ---------------- 공개 인터페이스 ----------------
     def acquire(self, date: str, start: str = "17:00") -> AcquiredTest:
+        self.quality = {}                   # 이번 취득의 경로·집계 상태만 남긴다
         start_dt = _local(date, start)
         end_dt = start_dt + timedelta(minutes=self.window_min)
         vals = self._connect_and_read(start_dt, end_dt)
@@ -154,9 +170,34 @@ class OpcUaRimsConnector:
         if not (isinstance(rh, (int, float))
                 and RH_VALID_RANGE[0] <= rh <= RH_VALID_RANGE[1]):
             rh = None                       # 센서 고장값 → 이론계산 60% 고정 폴백
+        # 파이프라인이 화면에 띄울 수 있게 커넥터에도 남긴다(store 는 AcquiredTest 를 버린다).
+        self.last_warnings = self._quality_warnings(vals)
         return AcquiredTest(
             date=date, cit=vals["cit"], pressure=vals["pressure"], cc_meas=vals["cc_meas"],
-            gt_meas=vals.get("gt_meas"), st_meas=vals.get("st_meas"), rh=rh)
+            gt_meas=vals.get("gt_meas"), st_meas=vals.get("st_meas"), rh=rh,
+            warnings=list(self.last_warnings))
+
+    def _quality_warnings(self, vals: dict) -> list[str]:
+        """취득값을 그대로 쓰되, 사람이 확인해야 할 사항을 문장으로 모은다.
+
+        보정값 = CC실측 − 이론 − W 이므로 CC실측 오차는 그대로 보정값 오차가 된다.
+        GP 예측오차가 1.24MW 인데 CC 가 1MW 어긋나면 모델보다 데이터가 더 틀린 셈이라,
+        조용히 누적하지 않고 반드시 화면에 띄운다.
+        """
+        w: list[str] = []
+        gt, st, cc = vals.get("gt_meas"), vals.get("st_meas"), vals.get("cc_meas")
+        if None not in (gt, st, cc):
+            gap = cc - (gt + st)
+            if abs(gap) > CC_SUM_TOL:
+                w.append(f"CC 태그({cc:.2f}) 와 GT+ST 합({gt + st:.2f}) 이 "
+                         f"{gap:+.2f} MW 벌어짐 — 엑셀1 값과 대조 필요")
+        for field, q in self.quality.items():
+            if q.get("source") == "fallback":
+                w.append(f"{field}: 서버 집계 실패로 raw 평균 사용 ({q.get('status')}) "
+                         "— 엑셀1 과 값이 다를 수 있음")
+            elif q.get("status") not in ("Good", "미확인"):
+                w.append(f"{field}: 집계 상태 {q.get('status')} — 구간에 결측·불량 가능")
+        return w
 
     # ---------------- 네트워크 (사내 전용, 테스트 시 오버라이드 가능) ----------------
     def endpoints(self) -> list[str]:
@@ -192,26 +233,31 @@ class OpcUaRimsConnector:
             out: dict = {}
             for field, nid in self.nodeid_map.items():
                 try:
-                    out[field] = self._read_timeavg(client, nid, start_dt, end_dt)
+                    out[field] = self._read_timeavg(client, nid, start_dt, end_dt, field)
                 except Exception:  # noqa: BLE001 — NodeId stale 가능 → 1회 재해결
                     out[field] = None
             if any(out.get(f) is None for f in self.tag_keys):
                 self._resolve_nodeids(client, force=True)
                 for field, nid in self.nodeid_map.items():
                     if out.get(field) is None:
-                        out[field] = self._read_timeavg(client, nid, start_dt, end_dt)
+                        out[field] = self._read_timeavg(client, nid, start_dt, end_dt, field)
             return out
         finally:
             client.disconnect()
 
-    def _read_timeavg(self, client, nodeid: str, start_dt, end_dt):
+    def _read_timeavg(self, client, nodeid: str, start_dt, end_dt, field: str = "?"):
         # 서버측 TimeAverage 집계(fnTagStat 정합). 실패 시 raw 시간가중평균 폴백.
+        # 어느 경로로 읽었는지·집계 상태가 무엇이었는지 self.quality 에 남긴다.
+        # 폴백은 fnTagStat 와 경계값 처리가 미묘하게 달라 값이 어긋날 수 있으므로
+        # 조용히 넘기지 않고 반드시 기록한다.
         try:
-            val = server_time_average(client, nodeid, start_dt, end_dt)
+            val, status = server_time_average(client, nodeid, start_dt, end_dt)
             if val is not None:
+                self.quality[field] = {"source": "server", "status": status}
                 return val
-        except Exception:  # noqa: BLE001 — 구버전/미지원 서버 → 폴백
-            pass
+            self.quality[field] = {"source": "fallback", "status": status}
+        except Exception as e:  # noqa: BLE001 — 구버전/미지원 서버 → 폴백
+            self.quality[field] = {"source": "fallback", "status": f"예외 {type(e).__name__}"}
         node = client.get_node(nodeid)
         hist = node.read_raw_history(start_dt, end_dt)
         points = [(getattr(dv, "SourceTimestamp", None) or getattr(dv, "ServerTimestamp", None),
