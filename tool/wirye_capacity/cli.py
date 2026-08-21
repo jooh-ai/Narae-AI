@@ -110,6 +110,25 @@ def main(argv: list[str] | None = None) -> int:
     li = sub.add_parser("list", help="누적 테스트 List-up")
     li.add_argument("--db", default=DEFAULT_DB)
 
+    ad = sub.add_parser("add", help="테스트 1건 수동 입력(엑셀4 확정값 복원·시운전 결과 입력)")
+    ad.add_argument("--db", default=DEFAULT_DB)
+    ad.add_argument("--date", required=True, help="테스트 날짜 (예: 2025-10-28)")
+    ad.add_argument("--cit", type=float, required=True, help="Comp Inlet Temp (°C)")
+    ad.add_argument("--press", type=float, required=True, help="대기압 (mbar)")
+    ad.add_argument("--cc", type=float, required=True, dest="cc_meas",
+                    help="CC Gross 실측 (MW)")
+    ad.add_argument("--rh", type=float, default=None,
+                    help="상대습도 (%%). 생략 시 이론계산 60%% 고정")
+    ad.add_argument("--w", type=float, default=None,
+                    help="W(IGV). 생략 시 온도밴드값 자동")
+    ad.add_argument("--theory", type=float, default=None,
+                    help="이론기준값을 엑셀4 I열 값으로 고정(보정값도 이 값 기준으로 계산). "
+                         "생략 시 엔진으로 계산")
+    ad.add_argument("--season", default=None, help="시즌 라벨(엑셀4 표기)")
+    ad.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
+    ad.add_argument("--force", action="store_true",
+                    help="같은 날짜가 이미 있어도 추가(기본은 거부)")
+
     dl = sub.add_parser("delete", help="누적 테스트 삭제(실수 반영 취소) — 날짜 또는 id")
     dl.add_argument("--db", default=DEFAULT_DB)
     dl.add_argument("--date", help="이 날짜의 테스트를 삭제")
@@ -182,6 +201,41 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  [{rec['id']:>3}] {str(rec.get('date') or '-'):>12} | "
                   f"CIT {rec['cit']:>5.1f}°C | CC {rec['cc_meas']:>7.2f} | "
                   f"보정 {rec['corr']:+.2f} MW | {rec.get('season') or ''}")
+        _print_status(store.correction_table())
+        store.close()
+        return 0
+
+    if args.cmd == "add":
+        # 자동취득이 틀린 값을 넣었을 때 엑셀4 확정값으로 되돌리거나, 시운전 결과를
+        # 손으로 넣는 경로. --theory 를 주면 엑셀4 I열 값을 그대로 보존한다
+        # (엔진 재계산값과 0.1MW 안쪽으로 다른 경우가 있어 기존 31건과 기준을 맞춘다).
+        from .correction import correction_value
+        from .store import TestRecord
+        from .theory import TheoryEngine, igv_turnup
+
+        store = MeasurementStore(args.db)
+        if store.has_date(args.date) and not args.force:
+            print(f"'{args.date}' 는 이미 누적에 있습니다. 먼저 삭제하거나 --force 를 쓰세요:")
+            print(f"  python -m wirye_capacity delete --date {args.date} --db {args.db}")
+            store.close()
+            return 1
+        w = igv_turnup(args.cit) if args.w is None else args.w
+        if args.theory is None:
+            rec = store.build_record(cit=args.cit, press=args.press, cc_meas=args.cc_meas,
+                                     w=w, rh=args.rh, season=args.season, date=args.date,
+                                     deg=args.deg)
+        else:                     # 엑셀4 이론기준값 고정 — 보정값도 그 값 기준
+            rec = TestRecord(cit=args.cit, press=args.press, cc_meas=args.cc_meas, w=w,
+                             theory=args.theory,
+                             corr=correction_value(args.cc_meas, args.theory, w),
+                             rh=args.rh, season=args.season, date=args.date)
+            eng_theory = TheoryEngine().theory_cc(args.cit, args.press, args.deg, rh=args.rh)
+            print(f"이론기준값 고정 {args.theory:.3f} (엔진 계산값 {eng_theory:.3f}, "
+                  f"차 {args.theory - eng_theory:+.3f} MW)")
+        store.add(rec)
+        print(f"추가: {args.date} | CIT {rec.cit:.1f}°C | CC {rec.cc_meas:.4f} | "
+              f"이론 {rec.theory:.3f} | W {rec.w:+.0f} | 보정 {rec.corr:+.3f} MW")
+        print(f"누적 건수   : {store.count()}")
         _print_status(store.correction_table())
         store.close()
         return 0

@@ -29,6 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from wirye_capacity.config import get_config  # noqa: E402
 from wirye_capacity.rims.opcua import (  # noqa: E402
     AGG_TIME_AVERAGE, CORE_TAGS, SITE_PATH, SITE_PORTS, _tcp_open,
     time_weighted_average,
@@ -148,14 +149,18 @@ def raw_stats(client, nodeid, s, e):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("endpoint", nargs="?", default=None)
-    ap.add_argument("--host")
+    ap.add_argument("--host", help="생략 시 Tool 이 쓰는 설정값(~/.wirye_tool.json 의 "
+                                  "opcua_host, 없으면 내장 기본값)을 그대로 사용")
     ap.add_argument("--date", required=True)
     ap.add_argument("--start", default="17:00")
     ap.add_argument("--window", type=int, default=60)
     a = ap.parse_args()
-    target = a.endpoint or a.host
+    # 서버이름을 외우지 않아도 되게, Tool 과 같은 경로로 해결한다.
+    target = a.endpoint or a.host or get_config("opcua_host")
     if not target:
         raise SystemExit("--host 또는 엔드포인트를 지정하세요.")
+    if not (a.endpoint or a.host):
+        print(f"서버: {target}  (설정값 사용 — 다르면 --host 로 지정)")
 
     s = _local(a.date, a.start)
     e = s + timedelta(minutes=a.window)

@@ -126,3 +126,63 @@ def test_verify_cli_self_pass(tmp_path, capsys):
                "--pressure", "1013", "--deg", "1.028"])
     assert rc == 0
     assert "PASS" in capsys.readouterr().out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# add — 테스트 1건 수동 입력.
+# 자동취득이 틀린 값을 넣었을 때(2025-10-28 CC 454.10 vs 엑셀4 452.3669)
+# 엑셀4 확정값으로 되돌릴 경로가 없었다.
+# ─────────────────────────────────────────────────────────────────────────────
+def test_add_inserts_record(tmp_path, capsys):
+    from wirye_capacity.cli import main
+    db = str(tmp_path / "a.db")
+    rc = main(["add", "--db", db, "--date", "2025-10-28", "--cit", "12.7",
+               "--press", "1018.3", "--rh", "24.0", "--cc", "452.3669"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "2025-10-28" in out and "452.3669" in out
+    from wirye_capacity.store import MeasurementStore
+    st = MeasurementStore(db)
+    assert st.count() == 1
+    assert st.has_date("2025-10-28")
+    st.close()
+
+
+def test_add_rejects_duplicate_date(tmp_path):
+    from wirye_capacity.cli import main
+    db = str(tmp_path / "b.db")
+    base = ["add", "--db", db, "--date", "2025-10-28", "--cit", "12.7",
+            "--press", "1018.3", "--cc", "452.3669"]
+    assert main(base) == 0
+    assert main(base) == 1                       # 같은 날짜 두 번 → 거부
+    assert main(base + ["--force"]) == 0         # --force 면 허용
+
+
+def test_add_theory_override_preserves_excel4_basis(tmp_path):
+    """--theory 로 엑셀4 I열 값을 고정하면 보정값도 그 기준으로 계산된다."""
+    from wirye_capacity.cli import main
+    from wirye_capacity.store import MeasurementStore
+    db = str(tmp_path / "c.db")
+    main(["add", "--db", db, "--date", "2025-10-28", "--cit", "12.7", "--press", "1018.3",
+          "--rh", "24.0", "--cc", "452.3669", "--theory", "443.53"])
+    st = MeasurementStore(db)
+    r = st.all()[0]
+    st.close()
+    assert r.theory == pytest.approx(443.53)
+    # 보정값 = CC실측 − 이론 − W(12.7°C 밴드 = +4)
+    assert r.corr == pytest.approx(452.3669 - 443.53 - 4.0, abs=1e-6)
+
+
+def test_add_computes_theory_when_not_given(tmp_path):
+    from wirye_capacity.cli import main
+    from wirye_capacity.store import MeasurementStore
+    from wirye_capacity.theory import TheoryEngine
+    from wirye_capacity import constants as C
+    db = str(tmp_path / "d.db")
+    main(["add", "--db", db, "--date", "2025-10-28", "--cit", "12.7",
+          "--press", "1018.3", "--rh", "24.0", "--cc", "452.3669"])
+    st = MeasurementStore(db)
+    r = st.all()[0]
+    st.close()
+    expect = TheoryEngine().theory_cc(12.7, 1018.3, C.DEFAULT_DEG, rh=24.0)
+    assert r.theory == pytest.approx(expect)
