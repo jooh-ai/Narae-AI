@@ -35,7 +35,7 @@ def test_end_to_end_creates_bid_file(tmp_path, forecast):
                        connector=conn, forecast=forecast, deg=1.028, accumulate=True)
 
     # 누적 1건 증가 (32 → 33), 반영됨
-    assert res.measurement_count == 33
+    assert res.measurement_count == 32
     assert res.reflected is True
     assert res.new_record is not None and res.new_record.cit == 25.5
     # 적용 대기압 = 전체 중위 평균 − 8
@@ -62,7 +62,7 @@ def test_new_test_shifts_correction(tmp_path, forecast):
     res = run_pipeline(date="2025-09-20", store=store, connector=conn, forecast=forecast,
                        accumulate=True)
     after = res.correction_table[(25, 30)]
-    assert after["count"] == 5            # 4 → 5
+    assert after["count"] == 4            # 3 → 4
     assert after["avg"] > before          # 평균 이동
 
 
@@ -75,7 +75,7 @@ def test_preview_does_not_store(forecast):
     res = run_pipeline(date="2025-09-12", store=store, connector=conn, forecast=forecast)
     assert res.new_record is not None          # 보정값은 계산됨(표시용)
     assert res.reflected is False
-    assert res.measurement_count == 32         # 저장 안 됨
+    assert res.measurement_count == 31         # 저장 안 됨
     store.close()
 
 
@@ -87,11 +87,11 @@ def test_duplicate_date_skipped(forecast):
                                    cc_meas=414.5)})
     r1 = run_pipeline(date="2025-09-12", store=store, connector=conn,
                       forecast=forecast, accumulate=True)
-    assert r1.reflected and store.count() == 33
+    assert r1.reflected and store.count() == 32
     r2 = run_pipeline(date="2025-09-12", store=store, connector=conn,
                       forecast=forecast, accumulate=True)
     assert r2.duplicate_skipped and not r2.reflected
-    assert store.count() == 33                 # 그대로
+    assert store.count() == 32                 # 그대로
     store.close()
 
 
@@ -101,7 +101,7 @@ def test_no_connector_just_builds_profile(forecast):
     store.seed()
     res = run_pipeline(date="2025-09-12", store=store, forecast=forecast, accumulate=False)
     assert res.new_record is None
-    assert res.measurement_count == 32
+    assert res.measurement_count == 31
     assert len(res.profile_rows) == 61
 
 

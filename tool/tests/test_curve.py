@@ -28,7 +28,7 @@ def test_special_zones_preserved(curve):
 
 
 def test_continuous_no_boundary_jump(curve):
-    # 구간 방식은 19→20°C 에서 +6.12→+2.62 (3.5MW 점프), 곡선은 완만
+    # 구간 방식은 19→20°C 에서 +5.55→+2.62 (2.9MW 점프), 곡선은 완만
     jump = abs(curve(20) - curve(19))
     assert jump < 1.5
     # 곡선 값은 구간 두 값 사이쯤

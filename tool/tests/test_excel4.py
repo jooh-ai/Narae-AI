@@ -71,7 +71,10 @@ def test_backfill_fills_matching_seed_records(tmp_path):
     recs = load_excel4_records(_make(tmp_path / "e4f.xlsx"))
     store = MeasurementStore(tmp_path / "e4.db")
     store.seed()
-    assert store.count() == 32
+    # 씨앗은 2026-08 정정으로 실제 날짜를 갖고 있다. 백필 시험이므로 비운다.
+    store.conn.execute("UPDATE measurements SET date=NULL")
+    store.conn.commit()
+    assert store.count() == 31
     assert store.backfill_dates(recs) == 3           # 시드 3건과 (CIT, CC실측) 매칭
     dated = {r["date"] for r in store.list_up() if r.get("date")}
     assert dated == {"2026-01-06", "2026-02-25", "2025-09-23"}

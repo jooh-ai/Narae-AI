@@ -31,10 +31,10 @@ def test_preview_default_does_not_accumulate(tmp_path, capsys):
 
 def test_run_seed_then_count(tmp_path, capsys):
     db = str(tmp_path / "m.db")
-    # --seed 로 32건 적재 후 신규 1건(T05는 시드와 동일 데이터지만 별도 레코드)
+    # --seed 로 31건 적재 후 신규 1건(T05는 시드와 동일 데이터지만 별도 레코드)
     main(["run", "--date", "2025-T05", "--mock", "--seed", "--accumulate", "--db", db])
     out = capsys.readouterr().out
-    assert "누적 건수" in out and ": 33" in out
+    assert "누적 건수" in out and ": 32" in out
 
 
 def test_list_after_run(tmp_path, capsys):
@@ -96,8 +96,9 @@ def test_check_bid_fresh_then_stale(tmp_path, capsys):
     assert main(["check-bid", "--file", out, "--db", db]) == 0
     assert "✅ 최신" in capsys.readouterr().out
     # 누적 변경(avg 구간 테스트 반영 → 적용 보정값 이동) → 구버전
-    # (주: T01 은 '보수적 고정' 구간이라 적용값이 안 변해 지문 유지 — 의도된 동작)
-    main(["run", "--date", "2025-T02", "--mock", "--accumulate", "--db", db])
+    # (주: T01·T02 는 -14~0°C '보수적 고정' 구간이라 적용값이 안 변해 지문 유지 —
+    #  의도된 동작이므로 avg 구간에 속하는 T03(CIT 1.9°C)을 쓴다)
+    main(["run", "--date", "2025-T03", "--mock", "--accumulate", "--db", db])
     capsys.readouterr()
     assert main(["check-bid", "--file", out, "--db", db]) == 2
     assert "구버전" in capsys.readouterr().out

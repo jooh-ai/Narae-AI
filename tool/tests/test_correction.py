@@ -43,11 +43,11 @@ def test_aggregate_reproduces_excel4_status_sheet():
     table = aggregate_bins(SEED)
     # 엑셀4 '보정값 현황' B열(AVERAGEIFS) 및 건수(E열)
     expect = {
-        (0, 10): (5.78, 8),
-        (10, 15): (6.28, 6),
-        (15, 20): (6.12, 3),
+        (0, 10): (5.62, 7),
+        (10, 15): (6.12, 6),
+        (15, 20): (5.55, 3),
         (20, 25): (2.62, 1),
-        (25, 30): (-2.39, 4),
+        (25, 30): (-2.69, 3),
         (30, 41): (-0.32, 9),
     }
     for key, (avg, cnt) in expect.items():
@@ -61,13 +61,13 @@ def test_aggregate_reproduces_excel4_status_sheet():
 
 def test_applied_correction_lookup():
     table = aggregate_bins(SEED)
-    assert applied_correction(7, table) == pytest.approx(5.78, abs=0.01)
-    assert applied_correction(27, table) == pytest.approx(-2.39, abs=0.01)
+    assert applied_correction(7, table) == pytest.approx(5.62, abs=0.01)
+    assert applied_correction(27, table) == pytest.approx(-2.69, abs=0.01)
 
 
 def test_realized_net_and_cap():
     # 일반: (이론Gross+IGV) + 보정 − Aux
-    assert realized_net(418.293, -2.39) == pytest.approx(418.293 - 2.39 - 10.0, abs=1e-6)
+    assert realized_net(418.293, -2.69) == pytest.approx(418.293 - 2.69 - 10.0, abs=1e-6)
     # 상한: Net 462 초과 시 cap
     assert realized_net(500.0, 10.0) == C.BID_CAP_NET
 
@@ -80,11 +80,11 @@ def test_status_rows_mirror_excel4_status_sheet():
     assert [r["bin"] for r in rows] == [(lo, hi) for lo, hi, _ in C.BINS]
     by_bin = {r["bin"]: r for r in rows}
     # avg 구간: 실측 평균·건수 그대로 노출
-    assert by_bin[(0, 10)]["count"] == 8
-    assert by_bin[(0, 10)]["avg"] == pytest.approx(5.78, abs=0.01)
-    assert by_bin[(0, 10)]["applied"] == pytest.approx(5.78, abs=0.01)
+    assert by_bin[(0, 10)]["count"] == 7
+    assert by_bin[(0, 10)]["avg"] == pytest.approx(5.62, abs=0.01)
+    assert by_bin[(0, 10)]["applied"] == pytest.approx(5.62, abs=0.01)
     assert by_bin[(0, 10)]["target"] == 15            # 신뢰 목표 건수
-    assert "8/15" in by_bin[(0, 10)]["status"]        # 목표 미달(🔴) 표기
+    assert "7/15" in by_bin[(0, 10)]["status"]        # 목표 미달(🔴) 표기
     # 목표 건수 충족 시 🟢 자동반영
     green = status_rows(aggregate_bins([{"cit": 5, "corr": 5.0} for _ in range(15)]))
     g = next(r for r in green if r["bin"] == (0, 10))

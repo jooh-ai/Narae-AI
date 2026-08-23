@@ -14,8 +14,8 @@ def store():
     s.close()
 
 
-def test_seed_loads_32(store):
-    assert store.count() == 32
+def test_seed_loads_31(store):
+    assert store.count() == 31
 
 
 def test_list_up_sorted_by_cit(store):
@@ -29,8 +29,8 @@ def test_list_up_sorted_by_cit(store):
 def test_correction_table_matches_excel4(store):
     table = store.correction_table()
     expect = {
-        (0, 10): (5.78, 8), (10, 15): (6.28, 6), (15, 20): (6.12, 3),
-        (20, 25): (2.62, 1), (25, 30): (-2.39, 4), (30, 41): (-0.32, 9),
+        (0, 10): (5.62, 7), (10, 15): (6.12, 6), (15, 20): (5.55, 3),
+        (20, 25): (2.62, 1), (25, 30): (-2.69, 3), (30, 41): (-0.32, 9),
     }
     for key, (avg, cnt) in expect.items():
         assert table[key]["count"] == cnt
@@ -46,15 +46,15 @@ def test_record_test_computes_and_accumulates(store):
     expect_theory = eng.theory_cc(25.5, 1008.0, C.DEFAULT_DEG)
     assert rec.theory == pytest.approx(expect_theory, abs=1e-9)
     assert rec.corr == pytest.approx(414.5 - expect_theory - 6.0, abs=1e-9)
-    assert store.count() == 33
+    assert store.count() == 32
     # 새 레코드가 25~30 구간 건수에 반영됨 (시드 4건 + 1)
-    assert store.correction_table()[(25, 30)]["count"] == 5
+    assert store.correction_table()[(25, 30)]["count"] == 4
 
 
 def test_delete_and_clear(store):
     rows = store.list_up()
     store.delete(rows[0]["id"])
-    assert store.count() == 31
+    assert store.count() == 30
     store.clear()
     assert store.count() == 0
 
@@ -86,7 +86,7 @@ def test_update_recalculates_theory_and_corr():
 def test_update_cc_only_keeps_stored_theory():
     """CC실측만 고치면 이론값은 그대로, 보정값만 움직여야 한다.
 
-    씨앗 32건의 theory 는 엑셀4 I열 값이라 엔진 재계산값과 최대 0.19MW 다르다.
+    씨앗 31건의 theory 는 엑셀4 I열 값이라 엔진 재계산값과 최대 0.19MW 다르다.
     CC 편집으로 그게 덮어써지면 기준이 흔들린다.
     """
     st = MeasurementStore()
@@ -182,12 +182,16 @@ def test_update_persists_and_reaggregates():
 
 
 def test_update_date_field():
-    """날짜 오배정 정정용 — 2025-04-15·2026-01-08 사례."""
+    """날짜 오배정 정정용 — 2025-04-15·2026-01-08 사례.
+
+    씨앗에 이미 실제 날짜가 들어 있으므로(2026-08 정정) 씨앗에 없는 날짜로 시험한다.
+    """
     st = MeasurementStore()
     st.seed()
+    assert not st.has_date("2026-06-30")
     rid = st.all()[0].id
-    st.update(rid, date="2026-01-08")
-    assert st.has_date("2026-01-08")
+    st.update(rid, date="2026-06-30")
+    assert st.has_date("2026-06-30")
     st.update(rid, date=None)
-    assert not st.has_date("2026-01-08")
+    assert not st.has_date("2026-06-30")
     st.close()

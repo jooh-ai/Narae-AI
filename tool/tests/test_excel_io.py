@@ -50,7 +50,10 @@ def test_backfill_dates_from_excel4(tmp_path):
 
     s = MeasurementStore(":memory:")
     s.seed()
-    assert all(not r.get("date") for r in s.list_up())        # 시드는 날짜 없음
+    # 씨앗은 2026-08 정정으로 실제 날짜를 갖고 있다. 백필 자체를 시험하려면 비워야 한다.
+    s.conn.execute("UPDATE measurements SET date=NULL")
+    s.conn.commit()
+    assert all(not r.get("date") for r in s.list_up())
     # 시드에 실제 존재하는 (cit, cc_meas) 2건으로 엑셀4 합성
     p = _make_excel4(str(tmp_path / "e4.xlsx"),
                      [("2025-01-06", 3.9, 460.87), ("2025-02-10", 1.9, 466.93)])
