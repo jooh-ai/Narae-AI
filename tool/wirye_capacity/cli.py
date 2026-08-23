@@ -1,0 +1,346 @@
+"""명령행 인터페이스 — GUI 없이 파이프라인 실행/조회 (크로스플랫폼).
+
+  python -m wirye_capacity run  --date 2025-09-12 --forecast 엑셀3-1.xlsx \
+        --workbook 엑셀1.xlsx --out bid.xlsx --db tests.db --seed
+  python -m wirye_capacity list --db tests.db
+"""
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from . import constants as C
+from .pipeline import run_pipeline
+from .rims import MockRimsConnector
+from .store import MeasurementStore
+
+# CLI·GUI 공용 기본 누적 DB — Tool 폴더(쓰기 불가면 홈). constants.db_path() 가 유일한 기준.
+DEFAULT_DB = str(C.db_path())
+
+
+def _disp_width(s: str) -> int:
+    """터미널 표시 폭 (한글·CJK = 2칸)."""
+    import unicodedata
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in str(s))
+
+
+def _pad(s, width: int, right: bool = False) -> str:
+    """표시 폭 기준 정렬 패딩 (한글 폭 보정)."""
+    s = str(s)
+    gap = max(0, width - _disp_width(s))
+    return (" " * gap + s) if right else (s + " " * gap)
+
+
+def _print_status(table) -> None:
+    """온도구간별 보정값 현황 출력 (엑셀4 '보정값 현황' 시트)."""
+    from .correction import status_rows
+    print("\n보정값 현황 (엑셀4 '보정값 현황'):")
+    print("  " + _pad("구간", 11) + _pad("종류", 24) + _pad("건수", 8, True)
+          + _pad("실측평균", 11, True) + _pad("적용값", 10, True) + "  상태")
+    for r in status_rows(table):
+        cnt = f"{r['count']}/{r['target']}" if r["target"] else str(r["count"])
+        avg = f"{r['avg']:+.2f}" if r["avg"] is not None else "-"
+        applied = f"{r['applied']:+.2f}" if r["applied"] is not None else "-"
+        print("  " + _pad(r["bin_label"], 11) + _pad(r["kind_label"], 24)
+              + _pad(cnt, 8, True) + _pad(avg, 11, True) + _pad(applied, 10, True)
+              + "  " + r["status"])
+
+
+DEFAULT_OPCUA_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
+
+
+def _build_connector(args):
+    if getattr(args, "mock", False):
+        return MockRimsConnector.from_seed()
+    # B: DataPARC OPC UA 직접 취득 (엑셀 불필요)
+    host = getattr(args, "opcua_host", None)
+    ep = getattr(args, "opcua_endpoint", None)
+    if host or ep:
+        from .rims.opcua import OpcUaRimsConnector
+        cache = getattr(args, "opcua_cache", None) or DEFAULT_OPCUA_CACHE
+        print(f"RiMS 취득 방식 : OPC UA ({ep or host})")
+        return OpcUaRimsConnector(endpoint=ep, host=host, cache_path=cache)
+    # A: 엑셀1 경유 (exe/현재 폴더의 엑셀1 자동 감지)
+    wb = getattr(args, "workbook", None)
+    if not wb:
+        from .rims.locate import resolve_workbook
+        found = resolve_workbook()
+        if found and found.exists():
+            wb = str(found)
+            print(f"엑셀1 자동 감지 : {found.name}  ({found.parent})")
+    if wb:
+        from .rims.excel_addin import ExcelAddinRimsConnector
+        return ExcelAddinRimsConnector(wb)
+    return None
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="wirye_capacity",
+                                description="위례 공급가능용량 입찰 산정 Tool")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("run", help="테스트 취득→누적→엑셀3 입찰파일 생성")
+    r.add_argument("--date", required=True, help="테스트 날짜(키)")
+    r.add_argument("--start", default="17:00",
+                   help="테스트 시작 시각 HH:MM (기본 17:00, 1시간 창)")
+    r.add_argument("--forecast", help="엑셀3-1 날씨 파일 경로")
+    r.add_argument("--workbook", help="엑셀1(RiMS 시트) 경로 — A: 엑셀 경유 취득")
+    r.add_argument("--opcua-host", dest="opcua_host",
+                   help="B: DataPARC OPC UA 서버 호스트로 직접 취득(엑셀 불필요)")
+    r.add_argument("--opcua-endpoint", dest="opcua_endpoint",
+                   help="B: OPC UA 엔드포인트 전체 URL(호스트 대신 지정)")
+    r.add_argument("--opcua-cache", dest="opcua_cache",
+                   help="OPC UA 태그 NodeId 캐시 경로(기본 ~/.wirye_opcua_nodeids.json)")
+    r.add_argument("--mock", action="store_true", help="mock RiMS(시드) 사용")
+    r.add_argument("--db", default=DEFAULT_DB, help="누적 DB 경로")
+    r.add_argument("--out", help="출력 엑셀3 입찰파일 경로")
+    r.add_argument("--template", help="엑셀3 템플릿(입찰 양식) 경로. 미지정 시 번들 템플릿 사용")
+    r.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
+    r.add_argument("--bid-day", dest="bid_day", default=None,
+                   help="입찰 적용일(엑셀3-1 일자 라벨). 미지정 시 전체 중위 평균")
+    r.add_argument("--curve", action="store_true", help="커널 보정곡선 사용(기본: 구간 평균)")
+    r.add_argument("--gp", action="store_true",
+                   help="GP(가우시안 프로세스) 보정곡선 — LOOCV 예측오차 최소(1.243 MW)")
+    r.add_argument("--margin", type=float, default=0.0, metavar="K",
+                   help="미달 방지 안전마진 계수(0=미적용, 0.8 권장). 마진=K×구간실측변동")
+    r.add_argument("--accumulate", action="store_true",
+                   help="이 테스트를 누적에 반영(저장). 기본은 확인용(미반영)")
+    r.add_argument("--seed", action="store_true", help="DB가 비었으면 시드 32건 적재")
+
+    li = sub.add_parser("list", help="누적 테스트 List-up")
+    li.add_argument("--db", default=DEFAULT_DB)
+
+    ad = sub.add_parser("add", help="테스트 1건 수동 입력(엑셀4 확정값 복원·시운전 결과 입력)")
+    ad.add_argument("--db", default=DEFAULT_DB)
+    ad.add_argument("--date", required=True, help="테스트 날짜 (예: 2025-10-28)")
+    ad.add_argument("--cit", type=float, required=True, help="Comp Inlet Temp (°C)")
+    ad.add_argument("--press", type=float, required=True, help="대기압 (mbar)")
+    ad.add_argument("--cc", type=float, required=True, dest="cc_meas",
+                    help="CC Gross 실측 (MW)")
+    ad.add_argument("--rh", type=float, default=None,
+                    help="상대습도 (%%). 생략 시 이론계산 60%% 고정")
+    ad.add_argument("--w", type=float, default=None,
+                    help="W(IGV). 생략 시 온도밴드값 자동")
+    ad.add_argument("--theory", type=float, default=None,
+                    help="이론기준값을 엑셀4 I열 값으로 고정(보정값도 이 값 기준으로 계산). "
+                         "생략 시 엔진으로 계산")
+    ad.add_argument("--season", default=None, help="시즌 라벨(엑셀4 표기)")
+    ad.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
+    ad.add_argument("--force", action="store_true",
+                    help="같은 날짜가 이미 있어도 추가(기본은 거부)")
+
+    dl = sub.add_parser("delete", help="누적 테스트 삭제(실수 반영 취소) — 날짜 또는 id")
+    dl.add_argument("--db", default=DEFAULT_DB)
+    dl.add_argument("--date", help="이 날짜의 테스트를 삭제")
+    dl.add_argument("--id", type=int, dest="rec_id", help="특정 id 의 테스트를 삭제(list 에 표시)")
+
+    ck = sub.add_parser("check-rims", help="RiMS 단건 취득값 출력(수동값과 대조용)")
+    ck.add_argument("--workbook", help="엑셀1(RiMS 시트) 경로. 생략 시 exe/현재 폴더에서 자동 감지")
+    ck.add_argument("--date", required=True)
+    ck.add_argument("--start", default="17:00")
+    ck.add_argument("--sheet", default="RiMS 계산 Sheet")
+
+    bf = sub.add_parser("backfill-dates",
+                        help="엑셀4 '실측데이터'에서 누적 레코드의 빈 날짜 채우기(시드 32건)")
+    bf.add_argument("--excel4", required=True, help="엑셀4 파일 경로")
+    bf.add_argument("--sheet", default=None, help="시트명(기본: 실측데이터 자동탐색)")
+    bf.add_argument("--list-sheets", action="store_true",
+                    help="채우지 않고 엑셀4의 시트 목록·머리글만 출력(진단용)")
+    bf.add_argument("--db", default=DEFAULT_DB)
+
+    cb = sub.add_parser("check-bid", help="입찰파일이 현재 누적 보정값 기준(최신)인지 확인")
+    cb.add_argument("--file", required=True, help="검사할 입찰파일(.xlsx)")
+    cb.add_argument("--db", default=DEFAULT_DB)
+
+    vf = sub.add_parser("verify", help="시운전: 기준 엑셀 ↔ Tool Profile 대조(±tol)")
+    vf.add_argument("--ref", required=True, help="기준 엑셀(기존 온도 Profile) 경로")
+    vf.add_argument("--layout", default="excel4", choices=["excel4", "tool"])
+    vf.add_argument("--db", default=DEFAULT_DB)
+    vf.add_argument("--pressure", type=float, default=C.REF_PRESSURE)
+    vf.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
+    vf.add_argument("--curve", action="store_true")
+    vf.add_argument("--tol", type=float, default=0.5)
+
+    args = p.parse_args(argv)
+
+    if args.cmd == "run":
+        store = MeasurementStore(args.db)
+        if args.seed and store.count() == 0:
+            store.seed()
+        from .profile import DEFAULT_TEMPLATE
+        res = run_pipeline(date=args.date, store=store, output_path=args.out,
+                           connector=_build_connector(args), forecast_path=args.forecast,
+                           deg=args.deg, bid_day=args.bid_day, accumulate=args.accumulate,
+                           correction_method=("gp" if args.gp else
+                                              "curve" if args.curve else "bin"),
+                           margin_k=args.margin,
+                           template_path=args.template or DEFAULT_TEMPLATE,
+                           start=args.start)
+        src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
+        print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
+        if res.new_record is not None:
+            r = res.new_record
+            status = ("✅ 누적 반영됨" if res.reflected else
+                      "⚠ 이미 반영된 날짜 — 건너뜀" if res.duplicate_skipped else
+                      "확인용(미반영)")
+            rh_txt = f"RH {r.rh:.1f}%" if r.rh is not None else "RH 60%(고정)"
+            print(f"신규 취득   : CIT {r.cit:.2f}°C | {rh_txt} | CC실측 {r.cc_meas:.2f} | "
+                  f"이론 {r.theory:.2f} | W {r.w:+.0f} | 보정값 {r.corr:+.2f} MW  [{status}]")
+        print(f"누적 건수   : {res.measurement_count}")
+        if res.output_path:
+            print(f"입찰 파일   : {res.output_path}")
+        _print_status(res.correction_table)
+        store.close()
+        return 0
+
+    if args.cmd == "list":
+        store = MeasurementStore(args.db)
+        rows = store.list_up()
+        print(f"누적 {len(rows)}건:")
+        for rec in rows:
+            print(f"  [{rec['id']:>3}] {str(rec.get('date') or '-'):>12} | "
+                  f"CIT {rec['cit']:>5.1f}°C | CC {rec['cc_meas']:>7.2f} | "
+                  f"보정 {rec['corr']:+.2f} MW | {rec.get('season') or ''}")
+        _print_status(store.correction_table())
+        store.close()
+        return 0
+
+    if args.cmd == "add":
+        # 자동취득이 틀린 값을 넣었을 때 엑셀4 확정값으로 되돌리거나, 시운전 결과를
+        # 손으로 넣는 경로. --theory 를 주면 엑셀4 I열 값을 그대로 보존한다
+        # (엔진 재계산값과 0.1MW 안쪽으로 다른 경우가 있어 기존 31건과 기준을 맞춘다).
+        from .correction import correction_value
+        from .store import TestRecord
+        from .theory import TheoryEngine, igv_turnup
+
+        store = MeasurementStore(args.db)
+        if store.has_date(args.date) and not args.force:
+            print(f"'{args.date}' 는 이미 누적에 있습니다. 먼저 삭제하거나 --force 를 쓰세요:")
+            print(f"  python -m wirye_capacity delete --date {args.date} --db {args.db}")
+            store.close()
+            return 1
+        w = igv_turnup(args.cit) if args.w is None else args.w
+        if args.theory is None:
+            rec = store.build_record(cit=args.cit, press=args.press, cc_meas=args.cc_meas,
+                                     w=w, rh=args.rh, season=args.season, date=args.date,
+                                     deg=args.deg)
+        else:                     # 엑셀4 이론기준값 고정 — 보정값도 그 값 기준
+            rec = TestRecord(cit=args.cit, press=args.press, cc_meas=args.cc_meas, w=w,
+                             theory=args.theory,
+                             corr=correction_value(args.cc_meas, args.theory, w),
+                             rh=args.rh, season=args.season, date=args.date)
+            eng_theory = TheoryEngine().theory_cc(args.cit, args.press, args.deg, rh=args.rh)
+            print(f"이론기준값 고정 {args.theory:.3f} (엔진 계산값 {eng_theory:.3f}, "
+                  f"차 {args.theory - eng_theory:+.3f} MW)")
+        store.add(rec)
+        print(f"추가: {args.date} | CIT {rec.cit:.1f}°C | CC {rec.cc_meas:.4f} | "
+              f"이론 {rec.theory:.3f} | W {rec.w:+.0f} | 보정 {rec.corr:+.3f} MW")
+        print(f"누적 건수   : {store.count()}")
+        _print_status(store.correction_table())
+        store.close()
+        return 0
+
+    if args.cmd == "delete":
+        if not args.date and args.rec_id is None:
+            print("--date 또는 --id 를 지정하세요 (id 는 list 명령에 표시).")
+            return 1
+        store = MeasurementStore(args.db)
+        if args.rec_id is not None:
+            store.delete(args.rec_id)
+            print(f"id {args.rec_id} 삭제.")
+        else:
+            n = store.delete_by_date(args.date)
+            print(f"'{args.date}' 테스트 {n}건 삭제.")
+        print(f"누적 건수   : {store.count()}")
+        _print_status(store.correction_table())
+        store.close()
+        return 0
+
+    if args.cmd == "check-rims":
+        from .rims.excel_addin import ExcelAddinRimsConnector
+        from .rims.locate import resolve_workbook
+        wb = resolve_workbook(args.workbook)
+        if wb is None or not wb.exists():
+            print("엑셀1을 찾지 못했습니다. --workbook 로 경로를 지정하거나 "
+                  "exe/현재 폴더에 엑셀1(.xlsx)을 두세요.")
+            return 1
+        if not args.workbook:
+            print(f"엑셀1 자동 감지 : {wb.name}  ({wb.parent})")
+        conn = ExcelAddinRimsConnector(str(wb), sheet=args.sheet)
+        acq = conn.acquire(args.date, args.start)
+        print(f"RiMS 취득 ({args.date} {args.start}~):")
+        print(f"  CIT        : {acq.cit} °C")
+        print(f"  대기압     : {acq.pressure} mbar")
+        print(f"  상대습도   : {acq.rh} %")
+        print(f"  GT/ST      : {acq.gt_meas} / {acq.st_meas} MW")
+        print(f"  CC Gross   : {acq.cc_meas} MW")
+        print("→ 엑셀1을 같은 날짜·시각으로 수동 취득한 8행 값과 일치하는지 대조하세요.")
+        return 0
+
+    if args.cmd == "backfill-dates":
+        from .excel4 import list_excel4_sheets, load_excel4_records
+        if args.list_sheets:
+            print(f"[{args.excel4}] 시트 목록·머리글")
+            print(list_excel4_sheets(args.excel4))
+            print("\n실측 기록이 있는 시트를 --sheet \"시트명\" 으로 지정하세요.")
+            return 0
+        recs = load_excel4_records(args.excel4, sheet=args.sheet)
+        src = {r.get("sheet") for r in recs if r.get("sheet")}
+        store = MeasurementStore(args.db)
+        n = store.backfill_dates(recs)
+        blank = sum(1 for r in store.list_up() if not r.get("date"))
+        print(f"엑셀4 {len(recs)}건 읽음{' (시트: ' + ', '.join(src) + ')' if src else ''} "
+              f"→ 날짜 {n}건 채움. 남은 미기입: {blank}건")
+        store.close()
+        return 0
+
+    if args.cmd == "check-bid":
+        import re
+
+        from .correction import table_fingerprint
+        from .excel_io import load_workbook_safe
+        desc = (load_workbook_safe(args.file, read_only=True).properties.description or "")
+        m = re.search(r"보정지문 (\w+)", desc)
+        if not m:
+            print("⚠ 이 파일에는 보정지문이 없습니다(구버전 툴 생성 또는 외부 파일).")
+            return 2
+        store = MeasurementStore(args.db)
+        now_fp = table_fingerprint(store.correction_table())
+        store.close()
+        print(f"파일 도장   : {desc}")
+        print(f"현재 지문   : {now_fp}")
+        if m.group(1) == now_fp:
+            print("✅ 최신 — 현재 누적 보정값 기준으로 생성된 파일입니다.")
+            return 0
+        print("⚠ 구버전 — 생성 이후 누적(반영/삭제)이 변경되었습니다. 입찰파일을 다시 생성하세요.")
+        return 2
+
+    if args.cmd == "verify":
+        from .profile import build_profile
+        from .theory import TheoryEngine
+        from .verify import compare_profile, read_reference_xlsx
+        eng = TheoryEngine()
+        store = MeasurementStore(args.db)
+        corrector = None
+        if args.curve:
+            from .curve import CorrectionCurve
+            corrector = CorrectionCurve(
+                [{"cit": r.cit, "corr": r.corr} for r in store.all()])
+        rows = build_profile(eng, store.correction_table(), pressure=args.pressure,
+                             deg=args.deg, corrector=corrector)
+        ref = read_reference_xlsx(args.ref, layout=args.layout)
+        fields = ["cc_theory", "cc_real_gross"] if args.layout == "excel4" else None
+        rep = compare_profile(rows, ref, tol=args.tol,
+                              fields=fields or ["cc_theory", "cc_real_gross", "cc_real_net"])
+        print(rep.summary())
+        for f in rep.failures[:20]:
+            print(f"  ✗ {f['temp']:>3}°C {f['field']:<14} Tool {f['tool']:.2f} "
+                  f"vs 기준 {f['ref']:.2f}  (차이 {f['diff']:+.2f})")
+        store.close()
+        return 0 if rep.passed else 2
+
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
