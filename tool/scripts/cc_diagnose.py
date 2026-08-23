@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -43,6 +43,19 @@ KNOWN = {
 
 def hr(t):
     print("\n" + "=" * 74 + f"\n{t}\n" + "=" * 74)
+
+
+def _loc(dt):
+    """히스토리안 타임스탬프를 로컬(KST)로 바꿔 표시한다.
+
+    asyncua 는 UTC 로 돌려주므로 그대로 찍으면 17:00~18:00 창이 08:00~09:00 으로
+    보여 '창이 어긋난 것처럼' 읽힌다(2025-10-28 진단 1회차에서 실제로 그랬다).
+    """
+    if dt is None:
+        return "?"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone()
 
 
 def _local(date, hhmm):
@@ -143,7 +156,20 @@ def raw_stats(client, nodeid, s, e):
         "min": min(vs), "max": max(vs),
         "twa": time_weighted_average(pts, s, e),
         "mean": sum(vs) / len(vs),
+        "buckets": _buckets(pts, s, e),
     }
+
+
+def _buckets(pts, s, e, minutes=10):
+    """10분 구간별 시간가중평균 — 창 안에서 값이 어느 방향으로 움직였는지 본다."""
+    out = []
+    t = s
+    while t < e:
+        nxt = min(t + timedelta(minutes=minutes), e)
+        out.append((t, time_weighted_average(
+            [(ts, v) for ts, v in pts if t <= ts < nxt] or pts, t, nxt)))
+        t = nxt
+    return out
 
 
 def main():
@@ -202,12 +228,16 @@ def main():
                 continue
             print(f"  {f:10} {st['n']:>5} {st['bad']:>4} {st['min']:>10.3f} "
                   f"{st['max']:>10.3f} {st['twa']:>12.4f} {st['mean']:>10.4f}  "
-                  f"{st['first']:%H:%M:%S}~{st['last']:%H:%M:%S}")
+                  f"{_loc(st['first']):%H:%M:%S}~{_loc(st['last']):%H:%M:%S}")
             if srv.get(f) is not None and st["twa"] is not None:
                 d = srv[f] - st["twa"]
                 if abs(d) > 0.05:
                     print(f"             ^ 서버집계 − 시간가중평균 = {d:+.4f} "
                           f"<<< 두 계산이 다름")
+            if f == "cc_meas" and st.get("buckets"):
+                seg = "  ".join(f"{t:%H:%M} {v:.2f}" for t, v in st["buckets"]
+                                if v is not None)
+                print(f"             10분 구간별: {seg}")
 
         hr("4. GT + ST 합 vs CC Load 태그")
         gt, st_, cc = srv.get("gt_meas"), srv.get("st_meas"), srv.get("cc_meas")
@@ -227,7 +257,9 @@ def main():
 
         hr("5. 창을 옮겨본 CC 값 (시간창 오정렬 확인)")
         if "cc_meas" in nid:
-            for off in (-60, -10, -5, 0, 5, 10, 60):
+            offsets = list(range(-40, 25, 5)) + [-60, 60]
+            best = None
+            for off in sorted(offsets):
                 s2 = s + timedelta(minutes=off)
                 e2 = s2 + timedelta(minutes=a.window)
                 try:
@@ -241,6 +273,15 @@ def main():
                         mark = "   <<< 엑셀1 값과 일치! 창이 어긋난 것"
                 print(f"  {off:+4d}분  {s2:%H:%M}~{e2:%H:%M}  "
                       f"{('%.4f' % v) if v is not None else '없음':>12}  {sc}{mark}")
+                if v is not None and ref.get("cc_meas") is not None:
+                    gap = abs(v - ref["cc_meas"])
+                    if best is None or gap < best[1]:
+                        best = (off, gap, v)
+            if best is not None:
+                print(f"\n  엑셀1 값({ref['cc_meas']:.4f})에 가장 가까운 창: "
+                      f"{best[0]:+d}분 → {best[2]:.4f} (차 {best[1]:.4f} MW)")
+                if best[1] > 0.05:
+                    print("  어떤 오프셋도 딱 맞지 않음 → 단순한 시간창 밀림이 아니다.")
     finally:
         client.disconnect()
 
