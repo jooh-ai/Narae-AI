@@ -1,28 +1,29 @@
-"""누적 32건을 OPC UA(fnTagStat 기준)로 재취득해 저장값과 대조 — 읽기 전용.
+"""누적 기록을 OPC UA 로 재취득해 저장값과 대조 — 읽기 전용(DB 변경 없음).
 
-배경 (2025-10-28 조사 결론)
-  과거 실적을 정리한 담당자 파일은 eDNA 애드인을 쓴다:
-      =@'…\\eDNA Data Tool.xla'!DNAHistGetSingleValue($AD17,"avg",AG$9,AG$10,"1h")
-      태그: RIMS.WR.10MBY10CE901//XQ01        → CC 452.3669
-  우리가 받은 엑셀1은 RiMS fnTagStat(DataPARC)을 쓴다:
-      =@fnTagStat(AD17, AG9, AG10, "TimeAvg")
-      태그: WR.PB.10MBY10CE901////XQ01        → CC 454.0959
-  Tool(OPC UA)은 엑셀1과 소수점 4자리까지 일치한다. 즉 우리 구현은 정확하고,
-  '누적 32건이 다른 히스토리안에서 나왔다'는 것이 문제다.
+무엇을 확인하는가
+  누적 DB 의 저장값은 담당자가 정리한 엑셀4 실측 기록에서 왔고, 재취득값은
+  Tool 이 OPC UA(DataPARC)로 직접 읽은 값이다. 둘이 맞는지 날짜별로 대조한다.
 
-  같은 날 CC = GT+ST 정합성:
-      fnTagStat : 295.2690 + 158.7982 = 454.0672  vs CC 454.0959  (+0.03)
-      eDNA      : 295.3414 + 158.3559 = 453.6973  vs CC 452.3669  (−1.33)
-  CC Gross 는 정의상 GT+ST 이므로 fnTagStat 쪽이 물리적으로 정합적이다.
+1회차 결과 (2026-08, 32건)
+  30건은 ΔCC 최대 0.17 MW · 표준편차 0.056 MW 로 사실상 일치 → Tool 검증 완료.
+  나머지 2건만 크게 어긋났다(2026-01-08, 2025-04-15). 전체 표준편차 2.104 MW 는
+  이 2건이 전부 만든 값이므로, 평균·표준편차만 보면 오해한다. 중앙값을 함께 본다.
 
-이 스크립트는 아무것도 바꾸지 않는다. 32건 전부의 편차를 재서
-'상수 편차인가(단순 보정 가능) / 날짜마다 다른가(eDNA 압축 잡음)'를 판정한다.
-편차가 날짜마다 다르면, 지금 모델이 물리 산포로 학습하던 것 중 일부가
-히스토리안 압축 오차였다는 뜻이다.
+  참고: 2025-10-28 은 담당자 정리 파일이 eDNA 애드인
+  (DNAHistGetSingleValue, 태그 RIMS.WR.*)을 써서 CC 가 1.73 MW 낮게 기록된
+  예외 건이다. 담당자가 준 다른 5건은 모두 fnTagStat 이고 엑셀1과 일치했다.
+  즉 히스토리안이 갈린 게 아니라 그 한 건만 다른 도구로 정리된 것이다.
+
+이상치가 뜨는 흔한 이유
+  · 날짜 백필 오배정 — backfill-dates 는 값 근사로 매칭하므로 비슷한 값끼리 바뀔 수 있다
+  · 그 날 시험 창이 17:00 이 아니었다 (--start 로 확인)
+  · 히스토리안 보존기간을 넘긴 오래된 날짜
+  CIT 가 크게 어긋나면 이론기준값이 따라 움직여 보정값이 통째로 달라진다
+  (2025-04-15: CIT 25.70→12.70 으로 보정값 -1.51→-30.65).
 
 실행:
-    python scripts/source_compare.py                    # 기본 DB, 17:00 창
-    python scripts/source_compare.py --csv 대조.csv      # 표를 CSV 로도 저장
+    python scripts/source_compare.py --csv 소스대조.csv
+    python scripts/source_compare.py --date 2026-01-08 --start 15:00   # 한 건만 창 바꿔 확인
 """
 from __future__ import annotations
 
@@ -42,9 +43,16 @@ from wirye_capacity.theory import TheoryEngine  # noqa: E402
 DEFAULT_DB = str(Path.home() / "wirye_measurements.db")
 NODEID_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
 
+# 이상치 판정 문턱 — 넘으면 '확인 필요'로 따로 모아 보여준다.
+TOL_CIT, TOL_CC, TOL_CORR = 0.5, 0.5, 0.5
+
 
 def hr(t):
-    print("\n" + "=" * 96 + f"\n{t}\n" + "=" * 96)
+    print("\n" + "=" * 104 + f"\n{t}\n" + "=" * 104)
+
+
+def _f(v, w=8, p=2):
+    return f"{'':>{w}}" if v is None else f"{v:>{w}.{p}f}"
 
 
 def main():
@@ -52,17 +60,18 @@ def main():
     ap.add_argument("--host", default=None, help="생략 시 Tool 설정값 사용")
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--start", default="17:00")
+    ap.add_argument("--date", default=None, help="이 날짜 한 건만 대조")
     ap.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
     ap.add_argument("--csv", default=None, help="결과를 CSV 로 저장할 경로")
-    ap.add_argument("--limit", type=int, default=None, help="앞 N건만 (시험용)")
+    ap.add_argument("--limit", type=int, default=None)
     a = ap.parse_args()
 
     host = a.host or get_config("opcua_host")
     store = MeasurementStore(a.db)
-    recs = [r for r in store.all() if r.date]
-    undated = store.count() - len(recs)
-    print(f"누적 {store.count()}건 중 날짜 있는 {len(recs)}건 대조"
-          + (f" (날짜 없음 {undated}건은 건너뜀 — backfill-dates 필요)" if undated else ""))
+    recs = [r for r in store.all() if r.date and (not a.date or r.date == a.date)]
+    undated = store.count() - len([r for r in store.all() if r.date])
+    print(f"누적 {store.count()}건 / 대조 대상 {len(recs)}건"
+          + (f" (날짜 없음 {undated}건 제외 — backfill-dates 필요)" if undated else ""))
     if a.limit:
         recs = recs[:a.limit]
     if not recs:
@@ -73,69 +82,91 @@ def main():
     conn = OpcUaRimsConnector(host=host, cache_path=NODEID_CACHE)
     eng = TheoryEngine()
 
-    hr("날짜별 대조 (저장값 = eDNA 기준 / 재취득 = fnTagStat 기준)")
-    print(f"  {'날짜':12}{'CIT 저장':>9}{'재취득':>9}{'Δ':>7}"
-          f"{'CC 저장':>10}{'재취득':>10}{'ΔCC':>8}"
-          f"{'보정 저장':>10}{'재계산':>9}{'Δ보정':>8}  경고")
+    hr(f"날짜별 대조 — 저장값(엑셀4 기록)  vs  재취득({a.start} 창, OPC UA/fnTagStat 기준)")
+    print(f"  {'날짜':11}{'CIT저장':>8}{'재취득':>8}{'ΔCIT':>7}"
+          f"{'RH저장':>7}{'재취득':>7}"
+          f"{'CC저장':>9}{'재취득':>9}{'ΔCC':>7}"
+          f"{'이론저장':>9}{'재계산':>9}"
+          f"{'보정저장':>8}{'재계산':>8}{'Δ보정':>7}  플래그")
     rows, fails = [], []
     for r in recs:
         try:
             acq = conn.acquire(r.date, a.start)
         except Exception as e:                                   # noqa: BLE001
-            fails.append((r.date, repr(e)[:60]))
-            print(f"  {r.date:12}  취득 실패 — {repr(e)[:60]}")
+            fails.append((r.date, repr(e)[:70]))
+            print(f"  {r.date:11}  취득 실패 — {repr(e)[:70]}")
             continue
-        rh = acq.rh
-        th2 = eng.theory_cc(acq.cit, acq.pressure, a.deg, rh=rh)
+        th2 = eng.theory_cc(acq.cit, acq.pressure, a.deg, rh=acq.rh)
         corr2 = correction_value(acq.cc_meas, th2, r.w)
-        warn = ";".join(getattr(acq, "warnings", []) or [])
+        dcit, dcc, dcorr = acq.cit - r.cit, acq.cc_meas - r.cc_meas, corr2 - r.corr
+        flag = []
+        if abs(dcit) > TOL_CIT:
+            flag.append("CIT")
+        if abs(dcc) > TOL_CC:
+            flag.append("CC")
+        if abs(dcorr) > TOL_CORR:
+            flag.append("보정")
+        if getattr(acq, "warnings", None):
+            flag.append("취득경고")
         rows.append({
-            "date": r.date,
-            "cit_old": r.cit, "cit_new": acq.cit,
+            "date": r.date, "flag": "/".join(flag),
+            "cit_old": r.cit, "cit_new": acq.cit, "d_cit": dcit,
             "press_old": r.press, "press_new": acq.pressure,
-            "rh_old": r.rh, "rh_new": rh,
-            "cc_old": r.cc_meas, "cc_new": acq.cc_meas,
-            "theory_old": r.theory, "theory_new": th2,
-            "corr_old": r.corr, "corr_new": corr2,
-            "w": r.w, "warn": warn,
+            "rh_old": r.rh, "rh_new": acq.rh,
+            "cc_old": r.cc_meas, "cc_new": acq.cc_meas, "d_cc": dcc,
+            "theory_old": r.theory, "theory_new": th2, "d_theory": th2 - r.theory,
+            "corr_old": r.corr, "corr_new": corr2, "d_corr": dcorr,
+            "w": r.w, "warn": ";".join(getattr(acq, "warnings", []) or []),
         })
-        print(f"  {r.date:12}{r.cit:>9.2f}{acq.cit:>9.2f}{acq.cit - r.cit:>+7.2f}"
-              f"{r.cc_meas:>10.2f}{acq.cc_meas:>10.2f}{acq.cc_meas - r.cc_meas:>+8.2f}"
-              f"{r.corr:>+10.2f}{corr2:>+9.2f}{corr2 - r.corr:>+8.2f}"
-              f"  {warn[:28]}")
+        print(f"  {r.date:11}{r.cit:>8.2f}{acq.cit:>8.2f}{dcit:>+7.2f}"
+              f"{_f(r.rh, 7, 1)}{_f(acq.rh, 7, 1)}"
+              f"{r.cc_meas:>9.2f}{acq.cc_meas:>9.2f}{dcc:>+7.2f}"
+              f"{r.theory:>9.2f}{th2:>9.2f}"
+              f"{r.corr:>+8.2f}{corr2:>+8.2f}{dcorr:>+7.2f}"
+              f"  {'/'.join(flag)}")
 
     if not rows:
-        print("\n전부 취득 실패 — 서버 접속/보존기간을 확인하세요.")
+        print("\n전부 취득 실패 — 서버 접속·보존기간을 확인하세요.")
         return 1
 
-    dcc = [x["cc_new"] - x["cc_old"] for x in rows]
-    dco = [x["corr_new"] - x["corr_old"] for x in rows]
-    dci = [x["cit_new"] - x["cit_old"] for x in rows]
+    ok = [x for x in rows if not x["flag"]]
+    bad = [x for x in rows if x["flag"]]
 
     hr("요약")
-    def stat(name, v, unit="MW"):
-        sd = statistics.stdev(v) if len(v) > 1 else 0.0
-        print(f"  {name:14} 평균 {statistics.mean(v):+7.3f}  중앙 "
-              f"{statistics.median(v):+7.3f}  표준편차 {sd:6.3f}  "
-              f"최소 {min(v):+7.3f}  최대 {max(v):+7.3f}  {unit}")
-    stat("ΔCC 실측", dcc)
-    stat("Δ보정값", dco)
-    stat("ΔCIT", dci, "°C")
 
-    sd_cc = statistics.stdev(dcc) if len(dcc) > 1 else 0.0
+    def block(title, data):
+        if len(data) < 2:
+            print(f"  {title}: {len(data)}건 — 통계 생략")
+            return
+        for name, key, unit in (("ΔCC 실측", "d_cc", "MW"), ("Δ보정값", "d_corr", "MW"),
+                                ("ΔCIT", "d_cit", "°C"), ("Δ이론", "d_theory", "MW")):
+            v = [x[key] for x in data]
+            print(f"  {title:14}{name:10} 평균 {statistics.mean(v):+7.3f}  "
+                  f"중앙 {statistics.median(v):+7.3f}  표준편차 {statistics.stdev(v):6.3f}  "
+                  f"최소 {min(v):+7.3f}  최대 {max(v):+7.3f}  {unit}")
+        print()
+
+    block(f"전체({len(rows)}건)", rows)
+    block(f"정상({len(ok)}건)", ok)
+
     hr("판정")
-    print(f"  대조 성공 {len(rows)}건 / 실패 {len(fails)}건")
-    if sd_cc < 0.3:
-        print(f"  ΔCC 표준편차 {sd_cc:.3f} MW — 거의 일정한 편차다.")
-        print(f"  → 두 히스토리안의 계통 차이. 상수 {statistics.mean(dcc):+.3f} MW 로 "
-              "환산하거나, 소스만 통일하면 산포는 늘지 않는다.")
-    else:
-        print(f"  ΔCC 표준편차 {sd_cc:.3f} MW — 날짜마다 편차가 다르다.")
-        print("  → eDNA 압축 오차가 날짜별로 다르게 섞여 있었다는 뜻이다. 지금까지 모델이")
-        print("     '물리 산포'로 학습해 온 것 중 이만큼이 측정 잡음이었을 수 있다.")
-        print(f"     (참고: 현재 GP 예측오차 1.24 MW, 추정 불가피 잡음 1.20~1.52 MW)")
-    print("\n  ※ 이 스크립트는 DB를 바꾸지 않았다. 소스를 어느 쪽으로 통일할지는")
-    print("     담당자·조교와 합의가 필요한 사안이다(공식 실적 기록이 eDNA 기준).")
+    print(f"  대조 성공 {len(rows)}건 / 실패 {len(fails)}건 / 확인 필요 {len(bad)}건")
+    if ok and len(ok) > 1:
+        v = [abs(x["d_cc"]) for x in ok]
+        print(f"\n  ▸ 정상 {len(ok)}건: |ΔCC| 최대 {max(v):.3f} MW, "
+              f"표준편차 {statistics.stdev([x['d_cc'] for x in ok]):.3f} MW")
+        print("    → 저장값과 재취득값이 사실상 일치한다. Tool 의 OPC UA 취득은 정확하다.")
+    if bad:
+        print(f"\n  ▸ 확인 필요 {len(bad)}건 — 평균·표준편차를 왜곡하므로 개별 확인:")
+        for x in bad:
+            print(f"      {x['date']}  [{x['flag']}]  ΔCIT {x['d_cit']:+.2f}°C  "
+                  f"ΔCC {x['d_cc']:+.2f} MW  Δ보정 {x['d_corr']:+.2f} MW")
+        print("\n    흔한 원인: ① 날짜 백필 오배정(값 근사 매칭이라 비슷한 값끼리 바뀔 수 있음)")
+        print("               ② 그 날 시험 창이 17:00 이 아니었음")
+        print("               ③ 히스토리안 보존기간 초과")
+        print("    확인: python scripts/source_compare.py --date <날짜> --start <다른시각>")
+        print("          python scripts/cc_diagnose.py --date <날짜>")
+    print("\n  ※ 이 스크립트는 DB 를 바꾸지 않았다. 수정은 delete + add 로 직접 한다.")
 
     if a.csv:
         import csv
