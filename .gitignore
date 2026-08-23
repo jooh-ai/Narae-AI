@@ -7,3 +7,7 @@ venv/
 *.egg-info/
 build/
 dist/
+
+# Node (docs/ppt 의 pptxgenjs — 필요할 때 npm install 로 받는다)
+node_modules/
+package-lock.json
