@@ -38,7 +38,7 @@ from wirye_capacity import constants as C  # noqa: E402
 from wirye_capacity.config import get_config  # noqa: E402
 from wirye_capacity.correction import correction_value  # noqa: E402
 from wirye_capacity.store import MeasurementStore  # noqa: E402
-from wirye_capacity.theory import TheoryEngine  # noqa: E402
+from wirye_capacity.theory import TheoryEngine, igv_turnup  # noqa: E402
 
 DEFAULT_DB = str(Path.home() / "wirye_measurements.db")
 NODEID_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
@@ -97,7 +97,10 @@ def main():
             print(f"  {r.date:11}  취득 실패 — {repr(e)[:70]}")
             continue
         th2 = eng.theory_cc(acq.cit, acq.pressure, a.deg, rh=acq.rh)
-        corr2 = correction_value(acq.cc_meas, th2, r.w)
+        # W 는 정책상 온도밴드값이므로 재취득 CIT 로 다시 산정한다. 저장된 W 를 물려쓰면
+        # CIT 가 크게 바뀐 건(2025-04-15: 25.70→13.69)에서 보정값이 엉뚱하게 나온다.
+        w2 = igv_turnup(acq.cit)
+        corr2 = correction_value(acq.cc_meas, th2, w2)
         dcit, dcc, dcorr = acq.cit - r.cit, acq.cc_meas - r.cc_meas, corr2 - r.corr
         flag = []
         if abs(dcit) > TOL_CIT:
@@ -116,7 +119,7 @@ def main():
             "cc_old": r.cc_meas, "cc_new": acq.cc_meas, "d_cc": dcc,
             "theory_old": r.theory, "theory_new": th2, "d_theory": th2 - r.theory,
             "corr_old": r.corr, "corr_new": corr2, "d_corr": dcorr,
-            "w": r.w, "warn": ";".join(getattr(acq, "warnings", []) or []),
+            "w_old": r.w, "w_new": w2, "warn": ";".join(getattr(acq, "warnings", []) or []),
         })
         print(f"  {r.date:11}{r.cit:>8.2f}{acq.cit:>8.2f}{dcit:>+7.2f}"
               f"{_f(r.rh, 7, 1)}{_f(acq.rh, 7, 1)}"
