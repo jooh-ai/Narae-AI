@@ -19,6 +19,9 @@ from .store import MeasurementStore
 from .theory import TheoryEngine
 from .weather import WeatherForecast, applied_pressure, load_excel3_1
 
+# 입찰파일 도장·화면 표기에 쓰는 방법 이름. 키는 correction_method 인자와 같다.
+METHOD_LABEL = {"bin": "구간평균", "curve": "커널회귀", "gp": "GP"}
+
 
 @dataclass
 class PipelineResult:
@@ -34,6 +37,7 @@ class PipelineResult:
     duplicate_skipped: bool = False  # 같은 날짜가 이미 있어 반영을 건너뛰었는지
     fingerprint: str = ""            # 보정 테이블 지문 — 입찰파일 최신 여부 검사용
     acq_warnings: list = field(default_factory=list)  # 취득 품질 경고(커넥터가 올린 것)
+    correction_method: str = "bin"    # 이번 산출에 쓴 보정 방법 (화면·도장 표기용)
 
 
 def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None = None,
@@ -105,8 +109,15 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     rows = build_profile(eng, table, pressure=pressure, deg=deg, corrector=corrector)
     out = None
     if output_path:
+        # 보정방법을 도장에 남긴다. 지문(table_fingerprint)은 구간 테이블만 해싱하므로
+        # 같은 누적이면 방법이 달라도 지문이 같다 — 지문만으로는 어느 방법으로 만든
+        # 파일인지 구분할 수 없다. 지문 알고리즘 자체는 건드리지 않는다(바꾸면 이미
+        # 만들어 둔 입찰파일이 전부 구버전으로 오판된다).
+        note = METHOD_LABEL.get(correction_method, correction_method)
+        if margin_k and margin_k > 0:
+            note += f"+마진{margin_k:g}×"
         stamp = (f"위례입찰툴 | 테스트 {date} | 누적 {store.count()}건 | "
-                 f"보정지문 {fp} | 생성 {datetime.now():%Y-%m-%d %H:%M}")
+                 f"보정방법 {note} | 보정지문 {fp} | 생성 {datetime.now():%Y-%m-%d %H:%M}")
         out = fill_excel3_template(output_path, engine=eng, correction_table=table,
                                    pressure=pressure, deg=deg, forecast=forecast,
                                    template_path=template_path, corrector=corrector,
@@ -116,4 +127,5 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                           measurement_count=store.count(), new_record=new_record,
                           correction_table=table, profile_rows=rows, output_path=out,
                           reflected=reflected, duplicate_skipped=duplicate_skipped,
-                          fingerprint=fp, acq_warnings=acq_warnings)
+                          fingerprint=fp, acq_warnings=acq_warnings,
+                          correction_method=correction_method)

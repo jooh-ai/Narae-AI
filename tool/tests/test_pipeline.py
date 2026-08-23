@@ -126,3 +126,82 @@ def test_default_pressure_without_forecast():
     store.seed()
     res = run_pipeline(date="x", store=store)
     assert res.applied_pressure == C.REF_PRESSURE
+
+
+# ── 보정 방법의 적용 범위 (사용자 확인 사항) ────────────────────────────────
+# "40건을 구간평균으로 쌓고 41번째만 GP 로 돌리면?" → 41건 전체를 GP 로 적합한다.
+# 방법은 기록에 붙는 값이 아니라 산출 시점에 누적 전체에 적용되는 값이다.
+
+def test_method_is_not_stored_per_record(forecast):
+    """어떤 방법으로 돌려도 저장되는 보정값은 같다 (실측에서 나오는 값이므로)."""
+    acq = {"2025-09-12": AcquiredTest(date="2025-09-12", cit=25.5, pressure=1008.0,
+                                      cc_meas=414.5, season="여름")}
+    saved = {}
+    for method in ("bin", "curve", "gp"):
+        store = MeasurementStore(":memory:")
+        store.seed()
+        run_pipeline(date="2025-09-12", store=store, connector=MockRimsConnector(dict(acq)),
+                     forecast=forecast, accumulate=True, correction_method=method)
+        rec = next(r for r in store.all() if r.date == "2025-09-12")
+        saved[method] = (rec.theory, rec.corr)
+        # DB 스키마에 방법을 적는 칸이 없다
+        cols = [c[1] for c in store.conn.execute("PRAGMA table_info(measurements)")]
+        assert "method" not in cols and "correction_method" not in cols
+    assert saved["bin"] == saved["curve"] == saved["gp"]
+
+
+def test_method_applies_to_whole_accumulation(forecast):
+    """마지막 1건만 GP 로 돌려도 Profile 은 누적 전체를 GP 로 적합한 결과다."""
+    from wirye_capacity.gp import GPCorrectionCurve
+    from wirye_capacity.profile import build_profile
+    from wirye_capacity.theory import TheoryEngine
+
+    conn = MockRimsConnector({
+        "2025-09-12": AcquiredTest(date="2025-09-12", cit=25.5, pressure=1008.0,
+                                   cc_meas=414.5, season="여름")})
+    store = MeasurementStore(":memory:")
+    store.seed()
+    res = run_pipeline(date="2025-09-12", store=store, connector=conn,
+                       forecast=forecast, accumulate=True, correction_method="gp")
+    assert res.correction_method == "gp"
+
+    # 같은 누적 전건을 GP 로 적합한 Profile 과 일치해야 한다
+    recs = [{"cit": r.cit, "corr": r.corr} for r in store.all()]
+    expect = build_profile(TheoryEngine(), store.correction_table(),
+                           pressure=res.applied_pressure,
+                           corrector=GPCorrectionCurve(recs))
+    assert [r.correction for r in res.profile_rows] == [r.correction for r in expect]
+
+
+def test_method_changes_bid_across_temperatures(forecast):
+    """방법을 바꾸면 오늘 온도만이 아니라 여러 구간의 신고값이 함께 움직인다."""
+    def run(method):
+        store = MeasurementStore(":memory:")
+        store.seed()
+        return run_pipeline(date="2025-09-12", store=store, forecast=forecast,
+                            correction_method=method).profile_rows
+
+    a, b = run("bin"), run("gp")
+    moved = [x.temp for x, y in zip(a, b) if abs(x.cc_real_net - y.cc_real_net) > 0.005]
+    assert len(moved) > 20, f"{len(moved)}개 구간만 변함 — 전역 재적합이 아닌 듯"
+
+
+def test_stamp_records_method(tmp_path, forecast):
+    """입찰파일 도장에 방법이 남는다 — 지문은 방법을 담지 않으므로 이것이 유일한 단서."""
+    import openpyxl
+
+    from wirye_capacity.correction import table_fingerprint
+    fps = set()
+    for method, label in (("bin", "구간평균"), ("gp", "GP")):
+        store = MeasurementStore(":memory:")
+        store.seed()
+        out = str(tmp_path / f"bid_{method}.xlsx")
+        res = run_pipeline(date="2025-09-12", store=store, output_path=out,
+                           forecast=forecast, correction_method=method, margin_k=0.8)
+        fps.add(table_fingerprint(res.correction_table))
+        props = openpyxl.load_workbook(out).properties
+        stamp = " ".join(str(v) for v in (props.title, props.subject, props.description,
+                                          props.keywords, props.category) if v)
+        assert f"보정방법 {label}" in stamp, stamp
+        assert "마진0.8" in stamp, stamp
+    assert len(fps) == 1, "지문은 방법과 무관해야 한다(기존 입찰파일이 구버전으로 오판되면 안 됨)"

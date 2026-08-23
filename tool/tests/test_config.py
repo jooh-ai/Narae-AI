@@ -41,3 +41,46 @@ def test_env_override_wins(tmp_path, monkeypatch):
     set_config("opcua_host", "from-file", path=p)
     monkeypatch.setenv("WIRYE_OPCUA_HOST", "from-env")
     assert get_config("opcua_host", path=p) == "from-env"
+
+
+# ── 보정 방법 저장 (시운전 중 방법을 바꿔 가며 비교하므로 선택이 남아야 한다) ──
+
+def test_correction_method_default_is_bin(tmp_path):
+    """설정이 없으면 엑셀4 방식(구간평균)으로 시작한다."""
+    from wirye_capacity.config import correction_method
+    assert correction_method(get_config("correction_method", path=tmp_path / "none.json")) == "bin"
+    assert DEFAULTS["correction_method"] == "bin"
+
+
+def test_correction_method_roundtrip(tmp_path, monkeypatch):
+    from wirye_capacity import config as cf
+    monkeypatch.setattr(cf, "HOME_CONFIG_PATH", tmp_path / "home.json")
+    monkeypatch.setattr(cf, "app_config_path", lambda: tmp_path / "tool.json")
+    for m in ("gp", "curve", "bin"):
+        cf.set_config("correction_method", m)
+        assert cf.correction_method() == m
+    # Tool 폴더에 저장된다 — 폴더째 인수인계하면 선택도 함께 간다
+    assert (tmp_path / "tool.json").exists()
+    assert not (tmp_path / "home.json").exists()
+
+
+def test_correction_method_rejects_garbage(tmp_path, monkeypatch):
+    """설정파일이 손으로 편집돼 이상한 값이 들어와도 기본값으로 돌린다."""
+    from wirye_capacity import config as cf
+    monkeypatch.setattr(cf, "HOME_CONFIG_PATH", tmp_path / "home.json")
+    monkeypatch.setattr(cf, "app_config_path", lambda: tmp_path / "tool.json")
+    cf.set_config("correction_method", "무엄한값")
+    assert cf.correction_method() == "bin"
+
+
+def test_tool_folder_wins_over_home(tmp_path, monkeypatch):
+    """예전 홈 설정은 살아 있고, Tool 폴더 값이 있으면 그것이 이긴다."""
+    from wirye_capacity import config as cf
+    home, tool = tmp_path / "home.json", tmp_path / "tool.json"
+    monkeypatch.setattr(cf, "HOME_CONFIG_PATH", home)
+    monkeypatch.setattr(cf, "app_config_path", lambda: tool)
+    cf.set_config("opcua_host", "old-home-server", path=home)   # 예전 위치
+    assert cf.get_config("opcua_host") == "old-home-server"     # 폴백으로 살아 있음
+    cf.set_config("opcua_host", "new-tool-server")              # 기본 저장 = Tool 폴더
+    assert cf.get_config("opcua_host") == "new-tool-server"
+    assert cf.load_config(home)["opcua_host"] == "old-home-server"   # 홈은 그대로

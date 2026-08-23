@@ -4,8 +4,12 @@
 로직은 pipeline.run_pipeline 에 위임하고, 이 모듈은 입력/표시만 담당하는 얇은 셸이다.
 
 자동화 원칙(사용자 확정): 화면 입력은 날짜·시각 중심. RiMS(OPC UA) 서버 호스트는
-설정(~/.wirye_tool.json)에 최초 1회 저장 후 화면에서 숨김. 엑셀3 템플릿은 번들 사용
-(비상시 설정파일 template_path 로 오버라이드).
+설정(Tool 폴더 wirye_tool.json)에 최초 1회 저장 후 화면에서 숨김. 엑셀3 템플릿은
+번들 사용(비상시 설정파일 template_path 로 오버라이드).
+
+보정 방법은 화면에서 고르고, 고른 값이 설정에 저장돼 다음 실행에도 유지된다.
+방법은 기록마다 붙는 값이 아니라 산출 시점에 누적 전체에 적용되는 값이다
+(pipeline.run_pipeline 3단계 참조).
 
 화면:
   [공급가능용량 산정]      날짜·시각 입력 → RiMS 자동취득 → 보정 → 엑셀3 입찰파일
@@ -17,13 +21,17 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from .. import config as _cf
 from .. import constants as C
 from ..config import get_config, set_config
 from ..correction import status_rows, table_fingerprint
-from ..pipeline import run_pipeline
+from ..pipeline import METHOD_LABEL, run_pipeline
 from ..profile import build_profile
 from ..store import MeasurementStore
 from ..theory import TheoryEngine
+
+# 보정방법 콤보박스 순서 → run_pipeline(correction_method=) 키. 저장값과 같은 문자열이다.
+_METHODS = ("bin", "curve", "gp")
 
 # ── SK 브랜드 스타일시트 (행복날개 레드 #EA002C · 오렌지 #F47725, 플랫 · 카드) ──
 QSS = """
@@ -241,11 +249,19 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.method_cb = QtWidgets.QComboBox()
             self.method_cb.addItems(["구간 평균 (기본)", "커널 보정곡선", "GP (가우시안 프로세스)"])
             self.method_cb.setToolTip(
-                "보정값 산출 방법 — 실측 32건 LOOCV 예측오차(MAE)\n"
-                "  구간 평균 1.419 MW : 온도구간별 평균을 계단식 적용(엑셀4 방식)\n"
-                "  커널 보정곡선 1.341 MW : 이웃 실측의 거리가중 평균으로 1°C 단위 적용\n"
-                "  GP 1.243 MW : 커널 + 예측 불확실성 산출. 예측오차 최소\n"
+                "보정값 산출 방법 — 실측 31건 LOOCV 예측오차(MAE)\n"
+                "  구간 평균 1.52 MW : 온도구간별 평균을 계단식 적용(엑셀4 방식)\n"
+                "  커널 보정곡선 1.46 MW : 이웃 실측의 거리가중 평균으로 1°C 단위 적용\n"
+                "  GP 1.33 MW : 커널 + 예측 불확실성 산출. 예측오차 최소\n"
+                "\n"
+                "선택한 방법은 누적 전체에 적용됩니다 — 과거 기록에 방법이 따로\n"
+                "붙지 않습니다. 오늘 GP 로 돌리면 누적 전건을 GP 로 다시 적합합니다.\n"
+                "선택은 저장되어 다음 실행에도 유지되고, 입찰파일 도장에 남습니다.\n"
                 "결과는 [📈 출력곡선 비교] 탭에서 곡선으로 확인할 수 있습니다.")
+            # 저장된 선택 복원 + 바꾸면 즉시 저장 (실행하지 않고 바꿔도 남는다)
+            self.method_cb.setCurrentIndex(_METHODS.index(_cf.correction_method()))
+            self.method_cb.currentIndexChanged.connect(
+                lambda i: _cf.set_config("correction_method", _METHODS[i]))
             self.margin_sb = QtWidgets.QDoubleSpinBox()
             self.margin_sb.setRange(0.0, 3.0)
             self.margin_sb.setSingleStep(0.1)
@@ -253,8 +269,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.margin_sb.setSuffix(" ×")
             self.margin_sb.setToolTip(
                 "미달 방지 안전마진 = 계수 × 구간별 실측변동\n"
-                "  0     : 마진 없음 — 예측오차 최소(MAE 1.243 MW), 시드 기준 미달 2건\n"
-                "  0.8   : 시드 32건 기준 미달 0건 (오차는 커지지만 전부 안전한 방향)\n"
+                "  0     : 마진 없음 — 예측오차 최소(GP 1.33 MW), 시드 31건 미달 2건\n"
+                "  0.8   : 시드 31건 기준 미달 0건 (오차는 커지지만 전부 안전한 방향)\n"
                 "실측이 없는 특수구간(Shaft Limit·보수적 고정)에는 적용되지 않습니다.")
             self.out_in = self._file_row("출력 엑셀3 입찰파일(.xlsx)", save=True)
             f3.addRow("", self.accum_chk)
@@ -345,8 +361,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
                     accumulate=self.accum_chk.isChecked(),
-                    correction_method=("gp" if self.method_cb.currentIndex() == 2 else
-                                       "curve" if self.method_cb.currentIndex() == 1 else "bin"),
+                    correction_method=_METHODS[self.method_cb.currentIndex()],
                     margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
@@ -357,8 +372,11 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             finally:
                 QtGui.QGuiApplication.restoreOverrideCursor()
                 self.run_btn.setEnabled(True)
+            # 보정방법을 항상 보여 준다 — 시운전 중 방법을 바꿔 가며 비교할 때
+            # 이 결과가 어느 방법으로 나온 건지 화면에서 바로 확인돼야 한다.
             msg = [f"적용 대기압 {res.applied_pressure:.1f} mbar",
-                   f"누적 {res.measurement_count}건"]
+                   f"누적 {res.measurement_count}건 전체를 "
+                   f"{METHOD_LABEL.get(res.correction_method, res.correction_method)} 로 보정"]
             if res.new_record is not None:
                 r = res.new_record
                 st = ("✅ 누적 반영됨" if res.reflected else
@@ -505,6 +523,9 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             f3 = QtWidgets.QFormLayout(g3)
             self.sim_method = QtWidgets.QComboBox()
             self.sim_method.addItems(["구간 평균 (기본)", "커널 보정곡선", "GP (가우시안 프로세스)"])
+            # 입찰에 쓰는 방법과 같은 값으로 시작한다 — 예측 vs 실측 대조가 어긋나면
+            # 안 되기 때문이다. 여기서 바꾸는 것은 저장하지 않는다(비교는 자유롭게).
+            self.sim_method.setCurrentIndex(_METHODS.index(_cf.correction_method()))
             self.sim_margin = QtWidgets.QDoubleSpinBox()
             self.sim_margin.setRange(0.0, 3.0)
             self.sim_margin.setSingleStep(0.1)
@@ -596,9 +617,10 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             bar = QtWidgets.QHBoxLayout()
             self.chart_method = QtWidgets.QComboBox()
             self.chart_method.addItems(["구간평균(기본)", "커널회귀", "GP(가우시안 프로세스)"])
+            self.chart_method.setCurrentIndex(_METHODS.index(_cf.correction_method()))
             self.chart_method.setToolTip(
-                "보정값 산출 방법 — 실측 32건 LOOCV 예측오차(MAE)\n"
-                "  구간평균 1.419 / 커널회귀 1.341 / GP 1.243 MW")
+                "보정값 산출 방법 — 실측 31건 LOOCV 예측오차(MAE)\n"
+                "  구간평균 1.52 / 커널회귀 1.46 / GP 1.33 MW")
             self.chart_method.currentIndexChanged.connect(self._refresh_chart)
             self.chart_margin = QtWidgets.QDoubleSpinBox()
             self.chart_margin.setRange(0.0, 3.0)
@@ -940,8 +962,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     output_path=self._last_bid["path"], connector=None,
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
-                    correction_method=("gp" if self.method_cb.currentIndex() == 2 else
-                                       "curve" if self.method_cb.currentIndex() == 1 else "bin"),
+                    correction_method=_METHODS[self.method_cb.currentIndex()],
                     margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,

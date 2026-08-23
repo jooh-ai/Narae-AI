@@ -10,7 +10,8 @@ import argparse
 from pathlib import Path
 
 from . import constants as C
-from .pipeline import run_pipeline
+from .config import correction_method
+from .pipeline import METHOD_LABEL, run_pipeline
 from .rims import MockRimsConnector
 from .store import MeasurementStore
 
@@ -98,9 +99,13 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
     r.add_argument("--bid-day", dest="bid_day", default=None,
                    help="입찰 적용일(엑셀3-1 일자 라벨). 미지정 시 전체 중위 평균")
-    r.add_argument("--curve", action="store_true", help="커널 보정곡선 사용(기본: 구간 평균)")
+    # 플래그를 안 주면 GUI 에서 고른(설정에 저장된) 방법을 따른다 — 같은 PC 에서
+    # GUI 와 CLI 가 서로 다른 방법으로 신고값을 내놓으면 안 된다.
+    r.add_argument("--curve", action="store_true", help="커널 보정곡선 사용")
     r.add_argument("--gp", action="store_true",
-                   help="GP(가우시안 프로세스) 보정곡선 — LOOCV 예측오차 최소(1.243 MW)")
+                   help="GP(가우시안 프로세스) 보정곡선 — LOOCV 예측오차 최소(1.33 MW)")
+    r.add_argument("--bin", dest="bin_", action="store_true",
+                   help="온도 구간평균 사용(엑셀4 방식)")
     r.add_argument("--margin", type=float, default=0.0, metavar="K",
                    help="미달 방지 안전마진 계수(0=미적용, 0.8 권장). 마진=K×구간실측변동")
     r.add_argument("--accumulate", action="store_true",
@@ -172,12 +177,16 @@ def main(argv: list[str] | None = None) -> int:
                            connector=_build_connector(args), forecast_path=args.forecast,
                            deg=args.deg, bid_day=args.bid_day, accumulate=args.accumulate,
                            correction_method=("gp" if args.gp else
-                                              "curve" if args.curve else "bin"),
+                                              "curve" if args.curve else
+                                              "bin" if args.bin_ else
+                                              correction_method()),
                            margin_k=args.margin,
                            template_path=args.template or DEFAULT_TEMPLATE,
                            start=args.start)
         src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
         print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
+        print(f"보정 방법   : {METHOD_LABEL.get(res.correction_method, res.correction_method)}"
+              f"  — 누적 {res.measurement_count}건 전체에 적용")
         if res.new_record is not None:
             r = res.new_record
             status = ("✅ 누적 반영됨" if res.reflected else
