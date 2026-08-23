@@ -70,6 +70,33 @@ def _n(v, w=7, p=1):
     return f"{'-':>{w}}" if v is None else f"{v:>{w}.{p}f}"
 
 
+def timeavg(client, nodeid, s, e, *, _seen=[]):
+    """창 평균 1값. 사내 PC 의 opcua.py 버전에 상관없이 동작해야 한다.
+
+    server_time_average 는 저장소에서 (값, StatusCode) 튜플을 돌려주도록 바뀌었지만,
+    사내 PC 는 git 이 없어 패키지를 못 받은 상태라 예전처럼 값만 돌려준다.
+    두 형태를 모두 받아들이고, 그마저 실패하면 raw 시간가중평균으로 내려간다.
+    (1회차에 이 불일치로 전 항목이 '-' 로 나왔는데, bare except 가 원인을 숨겼다.)
+    """
+    from wirye_capacity.rims.opcua import server_time_average, time_weighted_average
+    try:
+        r = server_time_average(client, nodeid, s, e)
+        v = r[0] if isinstance(r, tuple) else r
+        if v is not None:
+            return float(v)
+    except Exception as ex:                                      # noqa: BLE001
+        if not _seen:
+            _seen.append(1)
+            print(f"  ! 서버 집계 실패 → raw 평균으로 대체: {type(ex).__name__}: {ex}")
+    pts = []
+    for dv in client.get_node(nodeid).read_raw_history(s, e):
+        ts = getattr(dv, "SourceTimestamp", None) or getattr(dv, "ServerTimestamp", None)
+        v = dv.Value.Value if dv.Value is not None else None
+        if ts is not None and v is not None:
+            pts.append((ts, float(v)))
+    return time_weighted_average(pts, s, e)
+
+
 def raw_stats(client, nodeid, s, e):
     pts = []
     for dv in client.get_node(nodeid).read_raw_history(s, e):
@@ -90,7 +117,7 @@ def main():
     ap.add_argument("--csv", default=None)
     a = ap.parse_args()
 
-    from wirye_capacity.rims.opcua import OpcUaRimsConnector, _local, server_time_average
+    from wirye_capacity.rims.opcua import OpcUaRimsConnector, _local
     conn = OpcUaRimsConnector(host=a.host or get_config("opcua_host"),
                               cache_path=None, tag_keys=TAGS)   # 캐시 안 씀(태그 구성 다름)
     store = MeasurementStore(a.db)
@@ -115,7 +142,7 @@ def main():
         print(f"  {'날짜':12}{'MBL':>7}{'CXM':>7}{'차':>7}"
               f"{'원본표':>7}{'|MBL-원본|':>11}{'|CXM-원본|':>11}{'가까운쪽':>9}"
               f"  {'MBL최소':>8}{'CXM최소':>8}  비고")
-        rows = []
+        rows, errors = [], []
         for d in dates:
             s = _local(d, a.start)
             e = s + timedelta(minutes=a.window)
@@ -124,11 +151,11 @@ def main():
                 if k not in nid:
                     continue
                 try:
-                    v, _ = server_time_average(client, nid[k], s, e)
-                    val[k] = v
+                    val[k] = timeavg(client, nid[k], s, e)
                     st_[k] = raw_stats(client, nid[k], s, e)
-                except Exception:                                # noqa: BLE001
+                except Exception as ex:                          # noqa: BLE001
                     val[k], st_[k] = None, None
+                    errors.append(f"{d} {k}: {type(ex).__name__}: {ex}")
             m, c, ref = val.get("mbl"), val.get("cxm"), E4_RH.get(d)
             dm = abs(m - ref) if None not in (m, ref) else None
             dc = abs(c - ref) if None not in (c, ref) else None
@@ -155,6 +182,14 @@ def main():
                   + f"{_n(ref)}{_n(dm, 11, 2)}{_n(dc, 11, 2)}{closer:>9}"
                   + f"  {_n(rows[-1]['mbl_min'], 8)}{_n(rows[-1]['cxm_min'], 8)}  "
                   + "/".join(note))
+
+        if errors:
+            print(f"\n  ! 읽기 실패 {len(errors)}건 — 앞 5건:")
+            for m_ in errors[:5]:
+                print(f"      {m_}")
+        if not any(r["mbl"] is not None or r["cxm"] is not None for r in rows):
+            print("\n  전 항목 읽기 실패 — 위 오류를 확인하세요. 통계를 낼 수 없습니다.")
+            return 1
 
         ok = [r for r in rows if r["gap"] is not None and r["date"] not in DISPUTED]
         dis = [r for r in rows if r["date"] in DISPUTED and r["gap"] is not None]

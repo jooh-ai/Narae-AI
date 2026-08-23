@@ -122,8 +122,11 @@ def main():
         if bad:
             print("  ✗ 원본표와 맞지 않아 반영하지 않습니다: " + " / ".join(bad))
             continue
-        if acq.warnings:
-            print("  ! 취득 경고: " + " / ".join(acq.warnings))
+        # getattr 로 접근한다 — AcquiredTest.warnings 는 저장소에서 추가된 필드이고,
+        # 사내 PC 는 git 이 없어 패키지를 못 받은 상태라 아직 없다.
+        acq_warn = getattr(acq, "warnings", None) or []
+        if acq_warn:
+            print("  ! 취득 경고: " + " / ".join(acq_warn))
         # W 는 정책상 온도밴드값 — 새 CIT 로 다시 산정한다(기존 W 를 물려쓰면 안 된다)
         w = igv_turnup(acq.cit)
         new = store.build_record(cit=acq.cit, press=acq.pressure, cc_meas=acq.cc_meas,
