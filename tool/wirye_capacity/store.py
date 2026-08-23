@@ -125,6 +125,48 @@ class MeasurementStore:
         self.add(rec)
         return rec
 
+    # 사용자가 직접 고칠 수 있는 필드. theory·corr 는 파생값이라 여기 없다.
+    EDITABLE = ("date", "cit", "press", "rh", "cc_meas", "w", "season")
+
+    def update(self, rec_id: int, *, engine: TheoryEngine | None = None,
+               deg: float = C.DEFAULT_DEG, recalc_w: bool = False,
+               **fields) -> TestRecord:
+        """일부 필드를 고치고 이론기준값·보정값을 다시 계산해 저장한다.
+
+        List-up 셀 편집용. 계절 라벨만 바꾸는 경우에도 재계산은 무해하다(같은 값).
+        recalc_w=True 면 W 를 새 CIT 의 온도밴드값으로 다시 산정한다 — CIT 를 크게
+        고칠 때 필요하다(정책상 W 는 온도밴드값이므로).
+        """
+        bad = set(fields) - set(self.EDITABLE)
+        if bad:
+            raise ValueError(f"수정할 수 없는 필드: {sorted(bad)} "
+                             f"(가능: {list(self.EDITABLE)})")
+        row = self.conn.execute(
+            "SELECT * FROM measurements WHERE id=?", (rec_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"id {rec_id} 기록이 없습니다.")
+        cur = dict(row)
+        changed = {k for k, v in fields.items() if cur.get(k) != v}
+        cur.update({k: v for k, v in fields.items()})
+        if recalc_w and "w" not in fields:
+            w2 = igv_turnup(cur["cit"])
+            if w2 != cur["w"]:
+                cur["w"] = w2
+                changed.add("w")
+        # 필요한 것만 다시 계산한다. 날짜·계절만 고쳤는데 이론값이 바뀌면 안 된다 —
+        # 씨앗 32건은 엑셀4 I열 이론값을 그대로 갖고 있고(엔진 재계산값과 최대
+        # 0.19MW 차), 라벨 편집으로 그게 조용히 덮어써지면 기준이 흔들린다.
+        if changed & {"cit", "press", "rh"}:
+            eng = engine or TheoryEngine()
+            cur["theory"] = eng.theory_cc(cur["cit"], cur["press"], deg, rh=cur["rh"])
+        if changed & {"cit", "press", "rh", "cc_meas", "w"}:
+            cur["corr"] = correction_value(cur["cc_meas"], cur["theory"], cur["w"])
+        self.conn.execute(
+            f"UPDATE measurements SET {','.join(c + '=?' for c in _COLS)} WHERE id=?",
+            tuple(cur[c] for c in _COLS) + (rec_id,))
+        self.conn.commit()
+        return TestRecord(**{k: cur[k] for k in _COLS}, id=rec_id)
+
     def delete(self, rec_id: int) -> None:
         self.conn.execute("DELETE FROM measurements WHERE id=?", (rec_id,))
         self.conn.commit()

@@ -633,8 +633,10 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             lay = QtWidgets.QVBoxLayout(w)
             bar = QtWidgets.QHBoxLayout()
             hint = QtWidgets.QLabel(
-                "행을 선택해 [삭제 표시] 후 [💾 저장]을 눌러야 실제로 삭제됩니다. "
-                "저장 전에는 [되돌리기]로 취소할 수 있습니다.")
+                "셀을 더블클릭하면 값을 고칠 수 있습니다(날짜·CIT·대기압·RH·CC실측·W·계절). "
+                "이론기준값·보정값은 저장할 때 자동으로 다시 계산됩니다.\n"
+                "삭제는 행을 선택해 [삭제 표시]. 편집·삭제 모두 [💾 저장]을 눌러야 반영되고, "
+                "그 전에는 [되돌리기]로 취소할 수 있습니다.")
             hint.setWordWrap(True)
             self.del_btn = QtWidgets.QPushButton("🗑 삭제 표시")
             self.del_btn.setObjectName("danger")
@@ -649,44 +651,144 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             bar.addWidget(self.del_btn)
             bar.addWidget(self.undo_btn)
             bar.addWidget(self.save_btn)
-            self.list_tbl = QtWidgets.QTableWidget(0, 6)
-            self.list_tbl.setHorizontalHeaderLabels(
-                ["날짜", "CIT(°C)", "대기압(mbar)", "CC실측", "보정값", "계절"])
+            self.list_tbl = QtWidgets.QTableWidget(0, len(self.LIST_COLS))
+            self.list_tbl.setHorizontalHeaderLabels([c[1] for c in self.LIST_COLS])
             self.list_tbl.setAlternatingRowColors(True)
             self.list_tbl.horizontalHeader().setStretchLastSection(True)
             self.list_tbl.verticalHeader().setVisible(False)
             self.list_tbl.setSelectionBehavior(
                 QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+            # 더블클릭으로만 편집 — 클릭 한 번에 값이 바뀌면 사고가 난다.
             self.list_tbl.setEditTriggers(
-                QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+                QtWidgets.QAbstractItemView.EditTrigger.DoubleClicked
+                | QtWidgets.QAbstractItemView.EditTrigger.EditKeyPressed)
+            self.list_tbl.itemChanged.connect(self._on_cell_edited)
             lay.addLayout(bar)
             lay.addWidget(self.list_tbl)
             self._pending_del = set()          # 삭제 대기 id (저장 시 확정)
+            self._pending_edit = {}            # id → {필드: 새값} (저장 시 확정)
+            self._loading_list = False         # 표 채우는 중 itemChanged 무시용
             self._update_del_buttons()
             return w
 
+        # (필드, 헤더, 소수자리, 편집가능) — 필드 None 은 표시 전용
+        LIST_COLS = (
+            ("date", "날짜", None, True),
+            ("cit", "CIT(°C)", 1, True),
+            ("press", "대기압(mbar)", 1, True),
+            ("rh", "RH(%)", 1, True),
+            ("cc_meas", "CC실측", 2, True),
+            ("w", "W(IGV)", 0, True),
+            ("theory", "이론기준값", 2, False),
+            ("corr", "보정값", 2, False),
+            ("season", "계절", None, True),
+        )
+
+        def _cell_text(self, r, field, dp):
+            v = r.get(field)
+            if v is None:
+                return "" if field in ("season", "rh") else "-"
+            if dp is None:
+                return str(v)
+            return f"{v:+.{dp}f}" if field in ("corr", "w") else f"{v:.{dp}f}"
+
         def _refresh_list(self):
-            from PySide6 import QtGui
-            self._list_rows = self.store.list_up(order="date")   # id 포함(삭제용)
-            self.list_tbl.setRowCount(len(self._list_rows))
-            for i, r in enumerate(self._list_rows):
-                # 표시 자릿수: CIT 1자리·대기압 1자리·CC 2자리 (저장은 풀 정밀도 — 계산용)
-                vals = [r.get("date") or "-", f"{r['cit']:.1f}", f"{r['press']:.1f}",
-                        f"{r['cc_meas']:.2f}", f"{r['corr']:+.2f}", r.get("season") or ""]
-                marked = r["id"] in getattr(self, "_pending_del", set())
-                for j, v in enumerate(vals):
-                    item = QtWidgets.QTableWidgetItem(str(v))
-                    if marked:                     # 삭제 대기 행: 취소선 + 회색
-                        f = item.font(); f.setStrikeOut(True); item.setFont(f)
-                        item.setForeground(QtGui.QColor("#B9AFA9"))
-                    self.list_tbl.setItem(i, j, item)
+            from PySide6 import QtCore, QtGui
+            self._loading_list = True            # 채우는 동안 itemChanged 무시
+            try:
+                self._list_rows = self.store.list_up(order="date")   # id 포함
+                self.list_tbl.setRowCount(len(self._list_rows))
+                for i, r in enumerate(self._list_rows):
+                    edits = self._pending_edit.get(r["id"], {})
+                    marked = r["id"] in self._pending_del
+                    for j, (field, _h, dp, editable) in enumerate(self.LIST_COLS):
+                        # 편집 대기값이 있으면 그걸 보여준다(저장 전 확인용)
+                        src = dict(r, **edits) if edits else r
+                        item = QtWidgets.QTableWidgetItem(self._cell_text(src, field, dp))
+                        if not editable:         # 파생값 — 편집 불가 + 회색 배경
+                            item.setFlags(item.flags()
+                                          & ~QtCore.Qt.ItemFlag.ItemIsEditable)
+                            item.setBackground(QtGui.QColor("#F6F2F0"))
+                            item.setToolTip("이론기준값·보정값은 저장 시 자동 재계산됩니다.")
+                        if field in edits:       # 고친 셀 — 주황 강조
+                            item.setBackground(QtGui.QColor("#FFE8D8"))
+                            f = item.font(); f.setBold(True); item.setFont(f)
+                        if marked:               # 삭제 대기 행 — 취소선 + 회색
+                            f = item.font(); f.setStrikeOut(True); item.setFont(f)
+                            item.setForeground(QtGui.QColor("#B9AFA9"))
+                        self.list_tbl.setItem(i, j, item)
+            finally:
+                self._loading_list = False
             self._update_del_buttons()
 
+        # ---------- 셀 편집 ----------
+        def _on_cell_edited(self, item):
+            """편집된 값을 검증해 _pending_edit 에 담는다. DB 는 저장 시에만 바꾼다."""
+            if self._loading_list:
+                return
+            row, col = item.row(), item.column()
+            if row >= len(self._list_rows):
+                return
+            rec = self._list_rows[row]
+            field, header, dp, editable = self.LIST_COLS[col]
+            if not editable:
+                return
+            text = item.text().strip()
+            old = self._pending_edit.get(rec["id"], {}).get(field, rec.get(field))
+            try:
+                new = self._parse_cell(field, text)
+            except ValueError as e:
+                QtWidgets.QMessageBox.warning(self, "값 확인", f"{header}: {e}")
+                self._refresh_list()             # 원래 값으로 되돌림
+                return
+            # 표시 자릿수 때문에 같은 값이 '변경'으로 잡히지 않게 반올림 비교
+            same = (new == old) or (
+                isinstance(new, float) and isinstance(old, (int, float))
+                and dp is not None and round(new, dp) == round(old, dp))
+            edits = self._pending_edit.setdefault(rec["id"], {})
+            if same:
+                edits.pop(field, None)
+                if not edits:
+                    self._pending_edit.pop(rec["id"], None)
+            else:
+                edits[field] = new
+            self._refresh_list()
+
+        @staticmethod
+        def _parse_cell(field, text):
+            """셀 문자열 → 저장할 값. 물리적으로 불가능한 값은 여기서 막는다."""
+            if field == "season":
+                return text or None
+            if field == "date":
+                if not text or text == "-":
+                    return None
+                from datetime import datetime
+                try:
+                    datetime.strptime(text, "%Y-%m-%d")
+                except ValueError:
+                    raise ValueError("날짜는 YYYY-MM-DD 형식으로 입력하세요 (예: 2026-03-04)")
+                return text
+            if field == "rh" and text in ("", "-"):
+                return None                      # 비우면 이론계산 60% 고정
+            try:
+                v = float(text.replace("+", ""))
+            except ValueError:
+                raise ValueError(f"숫자를 입력하세요 (입력값: '{text}')")
+            limits = {"cit": (-40.0, 60.0, "°C"), "press": (900.0, 1100.0, "mbar"),
+                      "rh": (0.0, 100.0, "%"), "cc_meas": (0.0, 600.0, "MW"),
+                      "w": (-20.0, 20.0, "MW")}
+            lo, hi, unit = limits[field]
+            if not lo <= v <= hi:
+                raise ValueError(f"{lo:g} ~ {hi:g} {unit} 범위로 입력하세요 (입력값: {v:g})")
+            return v
+
         def _update_del_buttons(self):
-            n = len(getattr(self, "_pending_del", set()))
-            self.save_btn.setEnabled(n > 0)
-            self.undo_btn.setEnabled(n > 0)
-            self.save_btn.setText(f"💾 저장 ({n}건 삭제)" if n else "💾 저장")
+            nd = len(getattr(self, "_pending_del", set()))
+            ne = len(getattr(self, "_pending_edit", {}))
+            self.save_btn.setEnabled(nd + ne > 0)
+            self.undo_btn.setEnabled(nd + ne > 0)
+            parts = ([f"{ne}건 수정"] if ne else []) + ([f"{nd}건 삭제"] if nd else [])
+            self.save_btn.setText("💾 저장" + (f" ({' · '.join(parts)})" if parts else ""))
 
         def _on_mark_delete(self):
             sel = sorted({ix.row() for ix in self.list_tbl.selectedIndexes()})
@@ -699,27 +801,51 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
 
         def _on_undo_delete(self):
             self._pending_del.clear()
+            self._pending_edit.clear()
             self._refresh_list()
 
         def _on_save_deletes(self):
+            """편집·삭제를 한 번에 확정한다. 수정 먼저, 그다음 삭제."""
+            edits = {k: dict(v) for k, v in self._pending_edit.items() if v}
             ids = set(self._pending_del)
-            if not ids:
+            if not edits and not ids:
                 return
-            targets = [r for r in self._list_rows if r["id"] in ids]
-            lines = [f"  · {t.get('date') or '-'}  (CIT {t['cit']:.1f}°C, "
-                     f"보정 {t['corr']:+.2f})" for t in targets]
+            by_id = {r["id"]: r for r in self._list_rows}
+            lines = []
+            for rid, ch in edits.items():
+                r = by_id.get(rid, {})
+                what = ", ".join(
+                    f"{h}: {self._cell_text(r, f, dp)} → "
+                    f"{self._cell_text(ch, f, dp) if ch.get(f) is not None else '(비움)'}"
+                    for f, h, dp, _e in self.LIST_COLS if f in ch)
+                lines.append(f"  [수정] {r.get('date') or '-'}  {what}")
+            for t in (by_id[i] for i in ids if i in by_id):
+                lines.append(f"  [삭제] {t.get('date') or '-'}  "
+                             f"(CIT {t['cit']:.1f}°C, 보정 {t['corr']:+.2f})")
             if QtWidgets.QMessageBox.warning(
-                    self, "삭제 저장",
-                    f"다음 {len(targets)}건을 누적에서 삭제합니다.\n"
-                    f"(저장 후 보정값이 재집계되며 되돌릴 수 없습니다)\n\n" + "\n".join(lines),
+                    self, "변경 저장",
+                    f"다음 {len(edits)}건 수정 / {len(ids)}건 삭제를 반영합니다.\n"
+                    "(이론기준값·보정값이 다시 계산되고 보정 테이블이 재집계됩니다. "
+                    "되돌릴 수 없습니다)\n\n" + "\n".join(lines),
                     QtWidgets.QMessageBox.StandardButton.Yes
                     | QtWidgets.QMessageBox.StandardButton.No
                     ) != QtWidgets.QMessageBox.StandardButton.Yes:
                 return
+            failed = []
+            for rid, ch in edits.items():
+                try:
+                    # CIT 를 고쳤고 W 는 손대지 않았다면 W 를 온도밴드로 다시 산정
+                    self.store.update(rid, recalc_w=("cit" in ch and "w" not in ch), **ch)
+                except Exception as e:                       # noqa: BLE001
+                    failed.append(f"id {rid}: {e}")
             for rec_id in ids:
                 self.store.delete(rec_id)
             self._pending_del.clear()
+            self._pending_edit.clear()
             self._refresh_list()
+            if failed:
+                QtWidgets.QMessageBox.critical(
+                    self, "일부 저장 실패", "\n".join(failed))
             self._refresh_status(self.store.correction_table())   # 즉시 재집계 반영
             self._refresh_chart()
             self._check_bid_freshness()                            # 기존 입찰파일 구버전 감지
