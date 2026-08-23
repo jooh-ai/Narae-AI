@@ -165,16 +165,28 @@ for f in rep.failures:        # 불합격 항목(온도·필드·차이)
 
 ---
 
-## 7. 패키징 (.exe, 선택)
+## 7. 패키징 (.exe)
 
-```bat
-pip install pyinstaller
-pyinstaller --noconfirm --windowed --name 위례입찰툴 ^
-    --add-data "wirye_capacity\templates\excel3_profile_template.xlsx;wirye_capacity\templates" ^
-    --add-data "wirye_capacity\data;wirye_capacity\data" ^
-    wirye_capacity\ui\app.py
-:: dist\위례입찰툴\ 에 실행파일 생성. (xlwings·Excel은 PC에 설치돼 있어야 함)
+**spec 파일을 쓴다.** 옵션을 손으로 나열하면 번들 자원·제외 목록이 빠져 조용히 깨진다.
+
+```powershell
+pip install pyinstaller asyncua PySide6 openpyxl
+cd tool
+pyinstaller --noconfirm wirye_tool.spec
+# → dist\WiryeBidTool\WiryeBidTool.exe
 ```
+
+명령은 **한 줄씩** 붙여넣는다. 여러 줄을 한꺼번에 붙이면 PowerShell 이 뒷줄을 PyInstaller
+프롬프트 입력으로 먹어 `Aborted by user request.` 로 끝난다.
+
+빌드 후 번들 확인:
+
+```powershell
+python scripts\check_bundle.py dist\WiryeBidTool
+```
+
+배포는 `dist\WiryeBidTool\` **폴더째** 복사한다. `.exe` 만 옮기면 `_internal\` 이 없어
+실행되지 않는다. 누적 DB·설정도 이 폴더에 생기므로 담당자 교체 시 폴더 전체를 넘긴다.
 
 ---
 
@@ -187,6 +199,43 @@ pyinstaller --noconfirm --windowed --name 위례입찰툴 ^
 | 출력 Profile 값이 옛날 그대로 | **Excel에서 열기**(자동 재계산). 미리보기는 캐시값일 수 있음 |
 | 외부링크 `#REF!` 경고 | 엑셀3 Sheet1의 구(舊) 네트워크 링크 — 입찰 계산엔 무관 |
 | RiMS 취득값이 수동과 다름 | `CELL_MAP` 셀 위치 재확인(3.1), 취득 시각·윈도 확인 |
+| **exe 를 더블클릭했는데 아무 반응 없음** | 아래 8.1 |
+
+### 8.1 더블클릭해도 아무 반응이 없을 때
+
+`console=False` 로 빌드하므로 시작 중 예외가 화면에 남지 않는다. 그래서 런처가 직접
+오류를 기록한다. 순서대로 본다.
+
+**1) `dist\WiryeBidTool\wirye_error.log`**
+
+실행할 때마다 한 줄씩 쌓인다. 어디까지 갔는지가 `[1/3] import` → `[2/3] GUI 시작`
+→ `[3/3] 종료` 로 남고, 예외가 있으면 전체 추적이 함께 들어간다.
+
+**2) 로그가 아예 없으면** 프로세스가 시작조차 못 한 것이다 — 백신 차단이나 파일 손상.
+
+```powershell
+Get-Item .\WiryeBidTool.exe        # 파일이 격리돼 사라졌는지
+Get-Process WiryeBidTool          # 떴다가 죽는지 (실행 직후 바로 확인)
+python scripts\check_bundle.py .  # 번들 자원 손상 여부
+```
+
+**3) 환경 점검** — 번들 자원·DB 폴더 권한·Qt 초기화·PATH 의 다른 Qt DLL 을 한 번에 본다.
+
+```powershell
+.\WiryeBidTool.exe --selftest
+```
+
+결과가 대화상자로 뜨고 `wirye_error.log` 에도 저장된다. `Qt 초기화 실패` 나
+`PATH 의 다른 Qt DLL` 에 ⚠ 가 있으면 그것이 원인이다 — 다른 Qt 프로그램의 DLL 이
+먼저 잡히면 번들 DLL 대신 그것이 로드돼 조용히 죽는다.
+
+**4) 그래도 안 잡히면** `wirye_tool.spec` 의 `console=False` → `True` 로 바꿔 재빌드하고
+PowerShell 에서 실행한다. 콘솔에 그대로 출력된다.
+
+> 과거 사례(2026-08): 첫 실행에서 누적 DB 를 만들고 안내 대화상자를 띄우는데, 그
+> 대화상자가 `win.show()` **전에** 떠서 부모 창이 없었다. 대화상자가 뒤로 가거나 화면
+> 밖에 놓이면 사용자에게는 "반응 없음" 으로만 보인다. **신규 PC 첫 실행에서만** 타는
+> 경로라 재현 조건이 헷갈렸다. 지금은 창이 뜬 뒤에 안내를 띄운다.
 
 ---
 

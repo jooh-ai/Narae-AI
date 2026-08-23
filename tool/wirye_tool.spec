@@ -21,8 +21,21 @@
     쓰인다(constants.logo_path 참조). exe 자체 아이콘만 재빌드가 필요하고,
     .ico 는 scripts/make_logo.py 로 다시 만든다.
 
-디버그(실행 즉시 닫히거나 오류 원인 확인 필요 시):
-    아래 EXE(...) 의 console=False → True 로 바꿔 재빌드 → 콘솔에 오류 출력.
+더블클릭했는데 아무 반응이 없을 때
+    console=False 라 시작 중 예외가 화면에 안 남는다. 그래서 런처(wirye_gui.py)가
+    직접 오류를 남기게 해 두었다. 순서대로 확인한다.
+
+    1) exe 폴더의 wirye_error.log 를 본다 — 어디까지 갔고 무엇이 터졌는지 나온다.
+    2) 로그도 없으면 프로세스가 아예 못 떴다는 뜻이다(백신 차단·파일 손상).
+       PowerShell 에서 환경 점검을 돌린다:
+            .\\WiryeBidTool.exe --selftest
+       번들 자원·DB 폴더 권한·Qt 초기화·PATH 의 다른 Qt DLL 을 한 번에 보여 준다.
+    3) 그래도 원인이 안 잡히면 아래 console=False → True 로 바꿔 재빌드하고
+       PowerShell 에서 실행한다(콘솔에 그대로 출력된다).
+
+    백신 확인: 사내 백신이 서명 없는 exe 를 조용히 격리하는 경우가 있다.
+        Get-Item .\\WiryeBidTool.exe          # 파일이 사라졌는지
+        Get-Process WiryeBidTool             # 떴다가 죽는지
 """
 from PyInstaller.utils.hooks import collect_all
 

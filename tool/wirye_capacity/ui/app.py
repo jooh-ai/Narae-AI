@@ -169,15 +169,27 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             # 누적이 어느 파일에 쌓이는지 항상 보이게 한다 — 배포본을 여러 명이 각자
             # 쓰면 DB 도 각자 생기므로, 지금 보고 있는 게 어느 DB 인지 헷갈리면 안 된다.
             self.statusBar().showMessage(f"누적 DB : {db_default}   ({self.store.count()}건)")
-            if migrate_note:
-                QtWidgets.QMessageBox.information(self, "누적 DB 위치 변경", migrate_note)
-            elif self._seeded:
-                QtWidgets.QMessageBox.information(
-                    self, "누적 DB 생성",
-                    f"이 폴더에 새 누적 DB 를 만들고 기준 실적 {self.store.count()}건을 "
-                    f"적재했습니다.\n\n{db_default}\n\n"
-                    "이 파일에 시험 결과가 쌓입니다. 담당자가 바뀌면 Tool 폴더 전체를 "
-                    "넘기면 데이터도 함께 갑니다.")
+            # 시작 안내는 창이 화면에 뜬 뒤에 띄운다 — __init__ 안에서 모달을 띄우면
+            # show() 가 아직 호출되지 않아 부모 창이 없다. 그 대화상자가 뒤로 가거나
+            # 화면 밖에 놓이면 사용자에게는 '더블클릭했는데 아무 반응 없음' 으로만
+            # 보인다(2026-08 타 PC 사례: 신규 PC 첫 실행은 항상 이 경로를 탄다 —
+            # DB 가 비어 있어 seed 후 안내가 뜨므로).
+            self._startup_notice = (
+                ("누적 DB 위치 변경", migrate_note) if migrate_note else
+                ("누적 DB 생성",
+                 f"이 폴더에 새 누적 DB 를 만들고 기준 실적 {self.store.count()}건을 "
+                 f"적재했습니다.\n\n{db_default}\n\n"
+                 "이 파일에 시험 결과가 쌓입니다. 담당자가 바뀌면 Tool 폴더 전체를 "
+                 "넘기면 데이터도 함께 갑니다.") if self._seeded else None)
+
+        def showEvent(self, ev):
+            """창이 처음 보인 뒤 대기 중인 시작 안내를 띄운다."""
+            super().showEvent(ev)
+            notice, self._startup_notice = getattr(self, "_startup_notice", None), None
+            if notice:
+                from PySide6 import QtCore
+                QtCore.QTimer.singleShot(
+                    0, lambda: QtWidgets.QMessageBox.information(self, *notice))
 
         # ---------- 헤더 ----------
         def _header(self):
