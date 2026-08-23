@@ -64,7 +64,8 @@ DISPUTED = {"2026-02-25", "2026-03-04", "2026-03-18", "2026-03-24", "2026-04-02"
 # 문턱은 창 길이에 비례해야 한다 — 1시간 기준을 하루(1440분)에 그대로 쓰면 전부 정상으로
 # 보인다(표본이 24배 많으니까). --window 에 맞춰 환산한다.
 FLAT_PER_HOUR = 3.0       # 시간당 변동폭이 이보다 작으면 '평평'
-SAMPLES_PER_HOUR = 60     # 시간당 표본이 이보다 적으면 '표본 적음'
+SAMPLES_PER_HOUR = 20     # 시간당 표본 문턱. 1회차에 60 으로 뒀다가 정상일
+                          # 16일을 오검출했다(실측: 985~3788 개/일 = 시간당 41~158).
 FLAT_CAP = 12.0           # 하루 창이라도 이 이상 요구하지는 않는다(일변화 폭 감안)
 
 
@@ -75,6 +76,39 @@ def thresholds(window_min: int):
 
 def hr(t):
     print("\n" + "=" * 100 + f"\n{t}\n" + "=" * 100)
+
+
+def diurnal_check(rows):
+    """17~18시는 하루 중 가장 건조한 시간대다 — 그 물리를 검사로 쓴다.
+
+    1회차(하루 창, 32일) 실측: 태그와 원본표가 일치하는 27일의 (17시값 − 하루평균)은
+    평균 -10.5, 표준편차 5.9 %p 이고 27일 중 26일이 음수였다. 오후에 습도가 내려가는
+    정상 패턴이다. 어느 후보값이 이 분포에서 벗어나는지가 실제 판별력을 가진다.
+    (표본 수·변동폭으로는 갈리지 않았다 — 센서는 32일 전부 살아 있었다.)
+    """
+    base = [r for r in rows if r["e4_rh"] is not None and r["date"] not in DISPUTED]
+    if len(base) < 5:
+        return None
+    off = [r["e4_rh"] - r["rh_mean"] for r in base]
+    m, sd = statistics.fmean(off), statistics.stdev(off)
+    print(f"  기준 {len(base)}일: (17시값 − 하루평균) 평균 {m:+.1f}  표준편차 {sd:.1f} %p")
+    print(f"       음수 비율 {sum(1 for v in off if v < 0)}/{len(off)} (오후가 건조 = 정상)")
+    print(f"\n  {'날짜':12}{'하루최소':>9}{'하루최대':>9}{'하루평균':>9}"
+          f"{'원본표':>8}{'z':>7}  판정")
+    for r in rows:
+        if r["date"] not in DISPUTED or r["e4_rh"] is None:
+            continue
+        z = (r["e4_rh"] - r["rh_mean"] - m) / sd if sd else 0.0
+        v = []
+        if r["e4_rh"] > r["rh_max"]:
+            v.append("원본표가 그날 태그 최대치보다 높음 → 이 태그 값이 아님")
+        elif abs(z) > 3:
+            v.append("일중 패턴과 어긋남")
+        if r["rh_min"] <= 0.5:
+            v.append("태그 일최소 0% → 저역 신뢰 불가")
+        print(f"  {r['date']:12}{r['rh_min']:>9.1f}{r['rh_max']:>9.1f}{r['rh_mean']:>9.1f}"
+              f"{r['e4_rh']:>8.1f}{z:>+7.1f}  {' / '.join(v) or '범위 내'}")
+    return m, sd
 
 
 def stats_for(client, nodeid, s, e):
@@ -188,6 +222,9 @@ def main():
                 print("     그렇다면 담당자가 다른 출처로 바로잡은 원본표 값이 맞다.")
             else:
                 print("  → 산발적이다. 센서 상시 고장이라기보다 그 날들만의 문제일 수 있다.")
+        hr("일중 패턴 대조 — 어느 후보값이 물리에 맞는가")
+        diurnal_check(rows)
+
         dis = [r for r in rows if r["date"] in DISPUTED]
         if dis:
             print(f"\n  원본표와 다른 5일의 신호 성격:")
