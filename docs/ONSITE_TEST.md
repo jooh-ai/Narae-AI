@@ -120,6 +120,11 @@ python -m wirye_capacity run --date 2026-04-15 ^
 
 **목적**: 기존 검증된 엑셀 결과를 "정답"으로 Tool 출력이 ±0.5 MW 내인지 확인.
 
+> 이 STEP 은 **계산 일치**(같은 입력 → 같은 값) 검사다. 아직 누적에 없는 새 테스트
+> 실적이 손에 있다면 **예측 정확도**까지 측정할 수 있다 — 회차별 절차는
+> [`COMMISSIONING.md`](COMMISSIONING.md) 참조. 그쪽은 반영 전에 예측을 기록하므로
+> 실입찰에서 재현되는 숫자가 나온다.
+
 ```bat
 :: 기준 = 기존 방식으로 만든 온도 Profile(엑셀4 또는 엑셀3). 같은 대기압·Deg 조건으로 비교.
 python -m wirye_capacity verify ^
