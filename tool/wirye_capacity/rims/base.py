@@ -22,6 +22,11 @@ class AcquiredTest:
     gt_meas: float | None = None
     st_meas: float | None = None
     season: str | None = None
+    # 습도 원본 2대 + 실제로 쓴 출처('mbl'/'cxm'/'none'). MBL(10MBL11CM001)이 드리프트
+    # 중이라(2026-08 확인) 어느 센서 값을 썼는지 추적할 수 있어야 한다.
+    rh_mbl: float | None = None
+    rh_cxm: float | None = None
+    rh_source: str | None = None
     # 취득 품질 경고 — 값은 돌려주되 사람이 확인해야 하는 사항을 담는다.
     # (예: 서버 집계 StatusCode 가 Good 아님, CC 태그와 GT+ST 합이 크게 벌어짐)
     warnings: list[str] = field(default_factory=list)

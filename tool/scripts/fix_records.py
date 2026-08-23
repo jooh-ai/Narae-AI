@@ -13,11 +13,15 @@
   값은 코드에 박아 넣지 않고 히스토리안에서 다시 읽어 온다. 읽어온 값이 원본표와
   허용범위 안에서 맞는지 검증한 뒤에만 반영한다 — 엉뚱한 값으로 덮어쓰지 않도록.
 
-담당자 확인이 필요해 여기서 다루지 않는 것
-  · RH 5일분(02/25·03/04·03/18·03/24·04/02) — 원본표 RH 가 히스토리안과 다름.
-    우리 DB 는 히스토리안과 일치한다. 어느 출처를 기준으로 할지 결정 후 처리.
+습도 정정 5일 (02/25·03/04·03/18·03/24·04/02)
+  MBL(10MBL11CM001) 이 드리프트 중이어서 담당자가 그 5일만 CXM(10CXM00CM001)
+  값을 실적표에 넣었다. 교차 대조에서 CXM 이 실적표와 소수 둘째자리까지 일치
+  (|CXM-실적표| 0.01~0.05)했고, 정상 27일은 MBL 이 일치했다.
+  CIT·대기압·CC 는 그대로 두고 RH 만 CXM 으로 바꾼다. --skip-rh 로 건너뛸 수 있다.
+
+여기서 다루지 않는 것
   · 2026-01-06 "C/T Cell #2 정지로 미반영" — 학습 제외 여부. --drop-0106 으로 처리 가능.
-  · 2025-10-28 — 원본표가 eDNA 애드인으로 정리된 예외 건.
+  · 2025-10-28 — 원본표가 eDNA 애드인으로 정리된 예외 건. 담당자 확인 중.
 
 실행:
     python scripts/fix_records.py                  # 미리보기만 (DB 변경 없음)
@@ -52,6 +56,60 @@ FIXES = [
 ]
 TOL = {"cit": 0.3, "press": 1.5, "cc": 0.5}     # 원본표는 소수 1자리 표기
 
+# 습도 정정 5일 — MBL(10MBL11CM001) 드리프트로 담당자가 CXM(10CXM00CM001) 값을 쓴 날.
+# 2026-08 교차 대조에서 CXM 이 원본표와 소수 둘째자리까지 일치함을 확인했다
+# (|CXM-원본| 0.01~0.05). 정상 27일은 MBL 이 일치했으므로 이 5일만 대상이다.
+# CIT·대기압·CC 는 그대로 두고 RH 만 교체한다.
+RH_TAG = "10CXM00CM001//XQ01"
+RH_TOL = 0.5
+RH_FIXES = [
+    {"date": "2026-02-25", "start": "17:00", "ref": 18.2, "mbl": 0.1},
+    {"date": "2026-03-04", "start": "17:00", "ref": 35.4, "mbl": 9.7},
+    {"date": "2026-03-18", "start": "17:00", "ref": 67.6, "mbl": 36.8},
+    {"date": "2026-03-24", "start": "17:00", "ref": 41.2, "mbl": 9.1},
+    {"date": "2026-04-02", "start": "17:00", "ref": 27.6, "mbl": 0.0},
+]
+
+
+def read_cxm_rh(conn_cls, host, dates_starts):
+    """CXM 습도를 한 번의 접속으로 여러 날짜분 읽는다. {날짜: 값}.
+
+    acquire() 를 쓰지 않고 태그를 직접 읽는다 — acquire 는 이제 MBL/CXM 중 하나를
+    골라주므로, 여기서 필요한 '가공 안 된 CXM 값'을 얻으려면 직접 읽어야 한다.
+    """
+    from datetime import timedelta
+
+    from wirye_capacity.rims.opcua import _local, server_time_average, time_weighted_average
+    c = conn_cls(host=host, cache_path=None, tag_keys={"rh_alt": RH_TAG})
+    client = c._open_client()
+    out = {}
+    try:
+        c._resolve_nodeids(client)
+        nid = c.nodeid_map.get("rh_alt")
+        if not nid:
+            return out
+        for d, start, minutes in dates_starts:
+            s = _local(d, start)
+            e = s + timedelta(minutes=minutes)
+            try:
+                r = server_time_average(client, nid, s, e)
+                v = r[0] if isinstance(r, tuple) else r
+            except Exception:                                    # noqa: BLE001
+                v = None
+            if v is None:                                        # 서버 집계 실패 → raw 평균
+                pts = []
+                for dv in client.get_node(nid).read_raw_history(s, e):
+                    ts = (getattr(dv, "SourceTimestamp", None)
+                          or getattr(dv, "ServerTimestamp", None))
+                    x = dv.Value.Value if dv.Value is not None else None
+                    if ts is not None and x is not None:
+                        pts.append((ts, float(x)))
+                v = time_weighted_average(pts, s, e)
+            out[d] = None if v is None else float(v)
+    finally:
+        client.disconnect()
+    return out
+
 
 def hr(t):
     print("\n" + "=" * 88 + f"\n{t}\n" + "=" * 88)
@@ -84,16 +142,18 @@ def main():
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--host", default=None)
     ap.add_argument("--apply", action="store_true", help="실제로 DB 를 변경한다")
+    ap.add_argument("--skip-rh", action="store_true",
+                    help="습도 5일 정정을 건너뛴다")
     ap.add_argument("--drop-0106", action="store_true",
                     help="2026-01-06(C/T Cell #2 정지로 미반영) 을 학습에서 제외(삭제)")
     ap.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
     a = ap.parse_args()
 
+    from wirye_capacity.rims.opcua import OpcUaRimsConnector
     store = MeasurementStore(a.db)
     eng = TheoryEngine()
-    from wirye_capacity.rims.opcua import OpcUaRimsConnector
     conn = OpcUaRimsConnector(host=a.host or get_config("opcua_host"),
-                             cache_path=NODEID_CACHE)
+                              cache_path=NODEID_CACHE)
 
     print(f"DB {a.db}   누적 {store.count()}건")
     print("모드: " + ("★ 실제 반영(--apply)" if a.apply else "미리보기 (DB 변경 없음)"))
@@ -139,10 +199,43 @@ def main():
               f"W {new.w:+3.0f}  보정 {new.corr:+7.3f}   (Δ보정 {new.corr - old.corr:+.3f} MW)")
         plan.append((f["date"], old, new))
 
+    hr("2. 습도 정정 5일 — MBL 드리프트 → CXM 값으로 교체 (CIT·대기압·CC 는 유지)")
+    if a.skip_rh:
+        print("  --skip-rh 지정 — 건너뜁니다.")
+    else:
+        cxm = read_cxm_rh(OpcUaRimsConnector, a.host or get_config("opcua_host"),
+                          [(f["date"], f["start"], 60) for f in RH_FIXES])
+        if not cxm:
+            print(f"  CXM 태그({RH_TAG})를 못 찾았습니다 — 건너뜁니다.")
+        for f in RH_FIXES:
+            d = f["date"]
+            old = next((r for r in store.all() if r.date == d), None)
+            got = cxm.get(d)
+            if old is None:
+                print(f"  {d}  DB 에 없음 — 건너뜀")
+                continue
+            if got is None:
+                print(f"  {d}  CXM 읽기 실패 — 건너뜀")
+                continue
+            if abs(got - f["ref"]) > RH_TOL:
+                print(f"  {d}  ✗ CXM {got:.2f}% 가 원본표 {f['ref']:.1f}% 와 "
+                      f"{got - f['ref']:+.2f}%p 차 (허용 ±{RH_TOL}) — 반영하지 않음")
+                continue
+            if old.rh is not None and abs(old.rh - got) < 0.05:
+                print(f"  {d}  이미 CXM 값({got:.2f}%) — 건너뜀")
+                continue
+            new = store.build_record(cit=old.cit, press=old.press, cc_meas=old.cc_meas,
+                                     w=old.w, rh=got, season=old.season, date=d,
+                                     engine=eng, deg=a.deg)
+            print(f"  {d}  ✓ RH {old.rh:.1f}% (MBL) → {got:.2f}% (CXM, 원본표 {f['ref']:.1f})")
+            print(f"        이론 {old.theory:.2f} → {new.theory:.2f}   "
+                  f"보정 {old.corr:+.3f} → {new.corr:+.3f}  (Δ {new.corr - old.corr:+.3f} MW)")
+            plan.append((d, old, new))
+
     drop = None
     if a.drop_0106:
         drop = next((r for r in store.all() if r.date == "2026-01-06"), None)
-        hr("2. 2026-01-06 제외 (C/T Cell #2 정지로 미반영)")
+        hr("3. 2026-01-06 제외 (C/T Cell #2 정지로 미반영)")
         if drop is None:
             print("  해당 날짜 기록이 없습니다 — 건너뜁니다.")
         else:
@@ -153,12 +246,13 @@ def main():
 
     if not a.apply:
         hr("미리보기 종료")
-        print(f"  교체 예정 {len(plan)}건" + (" + 삭제 1건" if drop else ""))
+        print(f"  변경 예정 {len(plan)}건(기록 교체 + 습도 정정)"
+              + (" + 삭제 1건" if drop else ""))
         print("  실제로 반영하려면 같은 명령에 --apply 를 붙이세요.")
         store.close()
         return 0
 
-    hr("3. 반영")
+    hr("4. 반영")
     for date, old, new in plan:
         n = store.delete_by_date(date)
         store.add(new)
@@ -168,7 +262,7 @@ def main():
         print(f"  2026-01-06: {n}건 삭제(학습 제외)")
     print(f"\n  누적 건수 {store.count()}건")
 
-    hr("4. 보정값 현황 — 바뀐 구간")
+    hr("5. 보정값 현황 — 바뀐 구간")
     show_diff(before, snapshot(store))
     print("\n  ※ 입찰파일은 다시 생성해야 반영됩니다(보정지문이 바뀝니다).")
     store.close()

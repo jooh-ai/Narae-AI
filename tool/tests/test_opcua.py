@@ -209,3 +209,93 @@ def test_pipeline_acq_warnings_empty_for_plain_connector():
     st.seed()
     res = run_pipeline(date="2026-05-05", store=st, connector=_mock(), accumulate=False)
     assert res.acq_warnings == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 습도 2대 교차 검증 — MBL(10MBL11CM001) 드리프트 대응 (2026-08 확인)
+#   정상 27일: MBL 이 담당자 실적표와 일치
+#   쟁점  5일: MBL 0.0~36.8% vs CXM=실적표 (|CXM-실적표| 0.01~0.05)
+#   (MBL−CXM) 전반 -7.9 → 후반 -17.9 %p 로 계속 낮아지는 방향
+# ─────────────────────────────────────────────────────────────────────────────
+def test_pick_rh_prefers_mbl_when_valid():
+    from wirye_capacity.rims.opcua import pick_rh
+    assert pick_rh(33.6, 56.8) == (33.6, "mbl")
+    assert pick_rh(5.0, 30.0) == (5.0, "mbl")        # 하한 경계는 유효
+    assert pick_rh(100.0, 30.0) == (100.0, "mbl")    # 상한 경계도 유효
+
+
+def test_pick_rh_falls_back_to_cxm_when_mbl_impossible():
+    """2026-02-25 MBL 0.1% / 2026-04-02 MBL 0.0% — 예전엔 60% 고정으로 갔다."""
+    from wirye_capacity.rims.opcua import pick_rh
+    assert pick_rh(0.1, 18.2) == (18.2, "cxm")
+    assert pick_rh(0.0, 27.6) == (27.6, "cxm")
+    assert pick_rh(None, 40.0) == (40.0, "cxm")
+    assert pick_rh(150.0, 40.0) == (40.0, "cxm")
+
+
+def test_pick_rh_none_when_both_bad():
+    from wirye_capacity.rims.opcua import pick_rh
+    assert pick_rh(0.0, 1.0) == (None, "none")
+    assert pick_rh(None, None) == (None, "none")
+
+
+def test_pick_rh_does_not_switch_on_large_gap_alone():
+    """편차만으로 자동 교체하지 않는다 — 정상 27일과 쟁점 5일의 편차 구간이 겹친다."""
+    from wirye_capacity.rims.opcua import pick_rh
+    assert pick_rh(9.7, 35.4) == (9.7, "mbl")        # -25.7%p 지만 MBL 유효 → 유지
+    assert pick_rh(36.8, 67.6) == (36.8, "mbl")      # -30.8%p 지만 유지
+
+
+def test_acquire_uses_cxm_and_warns(monkeypatch):
+    c = OpcUaRimsConnector(host="h")
+    monkeypatch.setattr(c, "_connect_and_read", lambda s, e: {
+        "cit": 15.1, "pressure": 1011.6, "cc_meas": 445.6,
+        "gt_meas": 290.6, "st_meas": 155.0, "rh": 0.1, "rh_alt": 18.2})
+    acq = c.acquire("2026-02-25")
+    assert acq.rh == 18.2 and acq.rh_source == "cxm"
+    assert acq.rh_mbl == 0.1 and acq.rh_cxm == 18.2
+    assert any("CXM" in w for w in acq.warnings)
+
+
+def test_acquire_warns_on_large_rh_gap_but_keeps_mbl(monkeypatch):
+    c = OpcUaRimsConnector(host="h")
+    monkeypatch.setattr(c, "_connect_and_read", lambda s, e: {
+        "cit": 11.2, "pressure": 1013.0, "cc_meas": 453.1,
+        "gt_meas": 295.6, "st_meas": 157.4, "rh": 9.7, "rh_alt": 35.4})
+    acq = c.acquire("2026-03-04")
+    assert acq.rh == 9.7 and acq.rh_source == "mbl"
+    assert any("벌어짐" in w for w in acq.warnings)
+
+
+def test_acquire_no_warning_when_gap_normal(monkeypatch):
+    """정상 27일의 편차(-23.3~-1.0%p) 안이면 경고 없음."""
+    c = OpcUaRimsConnector(host="h")
+    monkeypatch.setattr(c, "_connect_and_read", lambda s, e: {
+        "cit": 6.0, "pressure": 1014.6, "cc_meas": 459.7,
+        "gt_meas": 301.3, "st_meas": 158.3, "rh": 17.2, "rh_alt": 40.5})
+    acq = c.acquire("2026-02-24")
+    assert acq.rh == 17.2 and acq.rh_source == "mbl"
+    assert acq.warnings == []
+
+
+def test_acquire_works_without_cxm_tag(monkeypatch):
+    """CXM 태그가 없는 서버에서도 종전처럼 동작해야 한다."""
+    c = OpcUaRimsConnector(host="h")
+    monkeypatch.setattr(c, "_connect_and_read", lambda s, e: {
+        "cit": 21.0, "pressure": 1005.6, "cc_meas": 400.2,
+        "gt_meas": 271.7, "st_meas": 128.4, "rh": 44.0})
+    acq = c.acquire("2026-05-05")
+    assert acq.rh == 44.0 and acq.rh_source == "mbl"
+    assert acq.rh_cxm is None and acq.warnings == []
+
+
+def test_optional_tag_absence_does_not_force_rebrowse():
+    """선택 태그(rh_alt)가 미해결이어도 _required() 에는 안 들어간다.
+
+    들어가면 매 취득마다 BFS 재해결(수십만 노드)이 돌아 취득이 크게 느려진다.
+    """
+    from wirye_capacity.rims.opcua import OPTIONAL_TAGS
+    c = OpcUaRimsConnector(host="h")
+    assert "rh_alt" in OPTIONAL_TAGS
+    assert "rh_alt" not in c._required()
+    assert "rh" in c._required() and "cc_meas" in c._required()
