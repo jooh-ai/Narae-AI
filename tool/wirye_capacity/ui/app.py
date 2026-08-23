@@ -30,12 +30,17 @@ QSS = """
 * { font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; font-size: 10pt; }
 QMainWindow, QWidget { background: #FAF7F5; color: #2B2422; }
 
-QLabel#header {
+QWidget#header {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                 stop:0 #EA002C, stop:0.6 #F0431F, stop:1 #F47725);
-    color: #FFFFFF; font-size: 14pt; font-weight: 800;
-    padding: 14px 18px; border: none;
+    border: none;
 }
+QLabel#headertitle {
+    background: transparent; color: #FFFFFF; font-size: 14pt; font-weight: 800;
+}
+/* 로고는 헤더와 같은 레드·오렌지라 그라데이션 위에 그대로 얹으면 묻힌다.
+   흰 칩 안에 넣어 브랜드 색을 살린다. */
+QLabel#headermark { background: #FFFFFF; border-radius: 6px; }
 QLabel#headersub { color: #FFE3D6; font-size: 9pt; }
 
 QTabWidget::pane { border: none; background: transparent; }
@@ -142,8 +147,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             tabs.addTab(self._sim_tab(), "🧪 출력 시뮬레이션")
             tabs.addTab(self._chart_tab(), "📈 출력곡선 비교")
 
-            header = QtWidgets.QLabel("🦋  위례 공급가능용량 입찰 산정")
-            header.setObjectName("header")
+            header = self._header()
             central = QtWidgets.QWidget()
             v = QtWidgets.QVBoxLayout(central)
             v.setContentsMargins(0, 0, 0, 0)
@@ -166,6 +170,41 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     f"적재했습니다.\n\n{db_default}\n\n"
                     "이 파일에 시험 결과가 쌓입니다. 담당자가 바뀌면 Tool 폴더 전체를 "
                     "넘기면 데이터도 함께 갑니다.")
+
+        # ---------- 헤더 ----------
+        def _header(self):
+            """행복날개 로고 + 제목. 로고 파일이 없으면 이모지로 폴백한다."""
+            from PySide6 import QtCore, QtGui
+
+            bar = QtWidgets.QWidget()
+            bar.setObjectName("header")
+            hb = QtWidgets.QHBoxLayout(bar)
+            hb.setContentsMargins(18, 12, 18, 12)
+            hb.setSpacing(12)
+
+            path = _C.logo_path()
+            pm = QtGui.QPixmap(str(path)) if path else QtGui.QPixmap()
+            if pm.isNull():
+                text = "🦋  위례 공급가능용량 입찰 산정"
+            else:
+                text = "위례 공급가능용량 입찰 산정"
+                # 원본은 120px 높이로 두고 여기서 줄인다. 배율 화면(125·150%)에서도
+                # 흐려지지 않게 devicePixelRatio 만큼 크게 만든 뒤 비율을 심어 준다.
+                h, dpr = 30, self.devicePixelRatioF() or 1.0
+                sc = pm.scaledToHeight(round(h * dpr), QtCore.Qt.SmoothTransformation)
+                sc.setDevicePixelRatio(dpr)
+                mark = QtWidgets.QLabel()
+                mark.setObjectName("headermark")
+                mark.setPixmap(sc)
+                mark.setAlignment(QtCore.Qt.AlignCenter)
+                mark.setFixedSize(round(sc.width() / dpr) + 16, h + 12)
+                hb.addWidget(mark)
+
+            title = QtWidgets.QLabel(text)
+            title.setObjectName("headertitle")
+            hb.addWidget(title)
+            hb.addStretch(1)
+            return bar
 
         # ---------- 공급가능용량 산정 탭 ----------
         def _run_tab(self):
@@ -919,6 +958,10 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
 
     app = QtWidgets.QApplication(argv or sys.argv)
     app.setStyleSheet(QSS)
+    _logo = _C.logo_path()
+    if _logo:                       # 작업표시줄·창 좌상단 아이콘도 같은 로고로
+        from PySide6 import QtGui
+        app.setWindowIcon(QtGui.QIcon(str(_logo)))
     win = MainWindow()
     win.show()
     return app.exec()

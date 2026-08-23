@@ -15,15 +15,22 @@
     → Program Files 처럼 쓰기 불가한 곳에 두면 홈 폴더로 물러난다(폴더 복사로
       데이터가 안 따라가므로 권장하지 않는다).
 
+로고 교체
+    헤더 로고와 창 아이콘은 번들 data/logo.png 를 쓴다. 브랜드 자산이 바뀌면
+    dist\\WiryeBidTool\\logo.png 로 새 파일을 넣으면 재빌드 없이 그 파일이 먼저
+    쓰인다(constants.logo_path 참조). exe 자체 아이콘만 재빌드가 필요하고,
+    .ico 는 scripts/make_logo.py 로 다시 만든다.
+
 디버그(실행 즉시 닫히거나 오류 원인 확인 필요 시):
     아래 EXE(...) 의 console=False → True 로 바꿔 재빌드 → 콘솔에 오류 출력.
 """
 from PyInstaller.utils.hooks import collect_all
 
-# 번들 데이터: 엑셀3 템플릿 + 시드/베이스 테이블 (constants.resource 가 _MEIPASS 로 참조)
+# 번들 데이터: 엑셀3 템플릿 + 시드/베이스 테이블 + 로고 (constants.resource 가 _MEIPASS 로 참조)
 datas = [
     # 템플릿 폴더 전체 — .xlsx 와 DRM 회피용 .tpl 사본을 함께 번들
     ("wirye_capacity/templates", "wirye_capacity/templates"),
+    # data/ 안에 base_table.json · measurements_seed.json · logo.png · logo.ico
     ("wirye_capacity/data", "wirye_capacity/data"),
 ]
 binaries = []
@@ -126,7 +133,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,                # SK 아이콘(.ico) 있으면 경로 지정
+    # 행복날개 아이콘 (16~256px 다중 해상도). scripts/make_logo.py 로 생성한다.
+    icon="wirye_capacity/data/logo.ico",
 )
 coll = COLLECT(
     exe,

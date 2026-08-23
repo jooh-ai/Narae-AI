@@ -18,6 +18,20 @@ def resource(*parts) -> Path:
 
 
 DB_NAME = "wirye_measurements.db"
+LOGO_NAME = "logo.png"
+
+
+def logo_path() -> Path | None:
+    """헤더에 붙일 로고(행복날개) 파일. 없으면 None → UI 는 이모지로 폴백한다.
+
+    Tool 폴더의 logo.png 가 번들본보다 우선한다. 브랜드 자산이 갱신되면 재빌드
+    없이 그 파일만 갈아끼우면 된다(scripts/make_logo.py 로 배경 투명 처리).
+    """
+    override = app_dir() / LOGO_NAME
+    if override.is_file():
+        return override
+    bundled = resource("data", LOGO_NAME)
+    return bundled if bundled.is_file() else None
 
 
 def app_dir() -> Path:
