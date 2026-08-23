@@ -54,11 +54,18 @@ def migrate_legacy_db(target: str | Path | None = None) -> str | None:
     import shutil
     dst = Path(target) if target else C.db_path()
     src = C.legacy_db_path()
-    if dst.exists() or not src.exists() or src.resolve() == dst.resolve():
+    # 이관은 폴더당 한 번만. 표식을 남기지 않으면, 사용자가 초기화하려고 DB 를 지웠을 때
+    # 홈 폴더 파일이 계속 되살아난다(2026-08 현장에서 실제로 그랬다 — 31건을 기대했는데
+    # 32건이 다시 들어왔다). '대상이 없으면 복사' 만으로는 의도를 구분할 수 없다.
+    marker = dst.parent / ".wirye_db_migrated"
+    if dst.exists() or marker.exists() or not src.exists():
+        return None
+    if src.resolve() == dst.resolve():
         return None
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+        marker.write_text(f"migrated from {src}\n", encoding="utf-8")
     except OSError as e:                                    # noqa: BLE001
         return f"기존 DB 를 옮기지 못했습니다: {e}"
     return (f"기존 누적 DB 를 Tool 폴더로 옮겼습니다.\n"
