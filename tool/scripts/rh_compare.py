@@ -33,10 +33,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from wirye_capacity import constants as C  # noqa: E402
 from wirye_capacity.config import get_config  # noqa: E402
 from wirye_capacity.store import MeasurementStore  # noqa: E402
 
-DEFAULT_DB = str(Path.home() / "wirye_measurements.db")
+DEFAULT_DB = str(C.db_path())   # Tool 폴더 기준(공용 해석)
 NODEID_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
 
 TAGS = {

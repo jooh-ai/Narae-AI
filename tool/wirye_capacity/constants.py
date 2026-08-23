@@ -16,6 +16,57 @@ def resource(*parts) -> Path:
     root = (Path(meipass) / "wirye_capacity") if meipass else Path(__file__).resolve().parent
     return root.joinpath(*parts)
 
+
+DB_NAME = "wirye_measurements.db"
+
+
+def app_dir() -> Path:
+    """Tool 이 놓인 폴더. exe 면 exe 가 있는 폴더, 소스면 tool/ 폴더.
+
+    PyInstaller onedir 에서 sys._MEIPASS 는 _internal/ 을 가리키므로 쓰면 안 된다
+    (재빌드 때 지워지는 폴더다). sys.executable 의 부모가 배포 폴더다.
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
+
+
+def _writable(d: Path) -> bool:
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        probe = d / ".wirye_write_test"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
+def db_path(explicit: str | Path | None = None) -> Path:
+    """누적 DB 경로. GUI·CLI·스크립트가 모두 이 함수를 쓴다(경로가 갈리면 안 된다).
+
+    우선순위
+      1. 명시 인자(--db)
+      2. 설정 WIRYE_DB_PATH / ~/.wirye_tool.json 의 db_path
+      3. Tool 폴더 (기본) — 폴더째 인수인계하면 데이터가 함께 간다
+      4. 홈 폴더 — Tool 폴더에 쓸 수 없을 때(예: Program Files 설치)
+
+    사용자별 독립 누적이 기본이다. 담당자가 바뀌면 Tool 폴더 전체를 넘기면 된다.
+    """
+    if explicit:
+        return Path(explicit).expanduser()
+    from .config import get_config
+    cfg = get_config("db_path")
+    if cfg:
+        return Path(cfg).expanduser()
+    d = app_dir()
+    return (d / DB_NAME) if _writable(d) else (Path.home() / DB_NAME)
+
+
+def legacy_db_path() -> Path:
+    """예전 기본 위치(홈 폴더). Tool 폴더로 옮기기 전 버전이 쓰던 경로."""
+    return Path.home() / DB_NAME
+
 # --- 설계 기준 ---
 CC_ISO = 450.4           # CC Gross @ ISO 15°C/1013mbar (MW)
 REF_PRESSURE = 1013.0    # mbar (ISO 표준 대기압)

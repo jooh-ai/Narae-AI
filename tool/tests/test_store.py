@@ -1,4 +1,7 @@
 """저장소(Phase 2) 검증 — 시드 적재·List-up·누적 보정 집계·신규 등록."""
+import sys
+from pathlib import Path
+
 import pytest
 
 from wirye_capacity import constants as C
@@ -195,3 +198,65 @@ def test_update_date_field():
     st.update(rid, date=None)
     assert not st.has_date("2026-06-30")
     st.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 누적 DB 위치 — Tool 폴더 기준(사용자별 독립). 담당자 교체 시 폴더째 인수인계.
+# ─────────────────────────────────────────────────────────────────────────────
+def test_db_path_priority(tmp_path, monkeypatch):
+    """명시 인자 > 설정(환경변수) > Tool 폴더 > 홈 폴백."""
+    assert C.db_path(tmp_path / "x.db") == tmp_path / "x.db"
+    monkeypatch.setenv("WIRYE_DB_PATH", str(tmp_path / "cfg.db"))
+    assert C.db_path() == tmp_path / "cfg.db"
+    monkeypatch.delenv("WIRYE_DB_PATH")
+    assert C.db_path() == C.app_dir() / C.DB_NAME
+
+
+def test_db_path_falls_back_to_home_when_unwritable(monkeypatch):
+    """Program Files 처럼 쓰기 불가한 곳에 설치되면 홈으로 물러난다."""
+    monkeypatch.setattr(C, "_writable", lambda d: False)
+    assert C.db_path() == Path.home() / C.DB_NAME
+
+
+def test_app_dir_uses_exe_folder_when_frozen(monkeypatch, tmp_path):
+    """exe 는 sys.executable 의 부모. _MEIPASS(_internal)를 쓰면 재빌드 때 지워진다."""
+    exe = tmp_path / "dist" / "WiryeBidTool" / "WiryeBidTool.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("", encoding="utf-8")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe))
+    monkeypatch.setattr(sys, "_MEIPASS", str(exe.parent / "_internal"), raising=False)
+    assert C.app_dir() == exe.parent
+
+
+def test_migrate_legacy_db_copies_once(tmp_path, monkeypatch):
+    """예전 홈 DB 를 새 위치로 1회 복사. 원본은 지우지 않는다."""
+    from wirye_capacity.store import migrate_legacy_db
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    src = home / C.DB_NAME
+    s = MeasurementStore(src)
+    s.seed()
+    s.conn.execute("UPDATE measurements SET season='표식' WHERE id=1")
+    s.conn.commit()
+    n = s.count()
+    s.close()
+
+    dst = tmp_path / "app" / C.DB_NAME
+    note = migrate_legacy_db(dst)
+    assert note and "옮겼습니다" in note
+    d = MeasurementStore(dst)
+    assert d.count() == n
+    assert any(r["season"] == "표식" for r in d.list_up())    # 내용 보존
+    d.close()
+    assert src.exists()                                       # 원본 유지
+    assert migrate_legacy_db(dst) is None                     # 두 번째는 아무것도 안 함
+
+
+def test_migrate_legacy_db_noop_when_no_source(tmp_path, monkeypatch):
+    from wirye_capacity.store import migrate_legacy_db
+    empty = tmp_path / "nohome"
+    empty.mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: empty))
+    assert migrate_legacy_db(tmp_path / "app" / C.DB_NAME) is None

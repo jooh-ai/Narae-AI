@@ -42,6 +42,30 @@ class TestRecord:
     id: int | None = None
 
 
+def migrate_legacy_db(target: str | Path | None = None) -> str | None:
+    """예전 홈 폴더 DB 를 새 위치(Tool 폴더)로 한 번 복사한다.
+
+    기본 DB 위치를 홈 → Tool 폴더로 옮겼기 때문에, 그냥 두면 기존 누적이
+    사라진 것처럼 보인다. 대상이 아직 없고 홈에 파일이 있을 때만 복사하며,
+    원본은 지우지 않는다(사용자가 확인한 뒤 직접 지우면 된다).
+
+    반환: 복사했으면 안내 문구, 아니면 None.
+    """
+    import shutil
+    dst = Path(target) if target else C.db_path()
+    src = C.legacy_db_path()
+    if dst.exists() or not src.exists() or src.resolve() == dst.resolve():
+        return None
+    try:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+    except OSError as e:                                    # noqa: BLE001
+        return f"기존 DB 를 옮기지 못했습니다: {e}"
+    return (f"기존 누적 DB 를 Tool 폴더로 옮겼습니다.\n"
+            f"  이전: {src}\n  현재: {dst}\n"
+            f"(이전 파일은 그대로 두었습니다. 확인 후 지우셔도 됩니다)")
+
+
 class MeasurementStore:
     """SQLite 기반 테스트결과 저장소."""
 

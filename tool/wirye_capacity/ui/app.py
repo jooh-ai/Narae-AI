@@ -115,7 +115,12 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
     _require_qt()
     from PySide6 import QtWidgets
 
-    db_default = str(Path.home() / "wirye_measurements.db")
+    # 누적 DB 는 Tool 폴더에 둔다 — 담당자가 바뀌면 폴더째 인수인계하면 데이터가 함께 간다.
+    # 쓰기 불가(예: Program Files 설치)면 홈 폴더로 폴백. CLI·스크립트와 같은 함수를 쓴다.
+    from .. import constants as _C
+    from ..store import migrate_legacy_db
+    db_default = str(_C.db_path())
+    migrate_note = migrate_legacy_db(db_default)   # 예전 홈 폴더 DB 를 1회 이관
 
     class MainWindow(QtWidgets.QMainWindow):
         def __init__(self):
@@ -124,8 +129,10 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.resize(1020, 720)
             self.engine = TheoryEngine()
             self.store = MeasurementStore(db_default)
+            self._seeded = False
             if self.store.count() == 0:
                 self.store.seed()
+                self._seeded = True
             self._last_bid = None      # 마지막 생성 입찰파일 {path, fp} — 구버전 감지용
 
             tabs = QtWidgets.QTabWidget()
@@ -147,6 +154,18 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self._refresh_list()
             self._refresh_status(self.store.correction_table())   # 시작 시 현재 누적 기준
             self._refresh_chart()
+            # 누적이 어느 파일에 쌓이는지 항상 보이게 한다 — 배포본을 여러 명이 각자
+            # 쓰면 DB 도 각자 생기므로, 지금 보고 있는 게 어느 DB 인지 헷갈리면 안 된다.
+            self.statusBar().showMessage(f"누적 DB : {db_default}   ({self.store.count()}건)")
+            if migrate_note:
+                QtWidgets.QMessageBox.information(self, "누적 DB 위치 변경", migrate_note)
+            elif self._seeded:
+                QtWidgets.QMessageBox.information(
+                    self, "누적 DB 생성",
+                    f"이 폴더에 새 누적 DB 를 만들고 기준 실적 {self.store.count()}건을 "
+                    f"적재했습니다.\n\n{db_default}\n\n"
+                    "이 파일에 시험 결과가 쌓입니다. 담당자가 바뀌면 Tool 폴더 전체를 "
+                    "넘기면 데이터도 함께 갑니다.")
 
         # ---------- 공급가능용량 산정 탭 ----------
         def _run_tab(self):

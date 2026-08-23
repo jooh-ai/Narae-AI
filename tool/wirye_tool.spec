@@ -7,6 +7,14 @@
 결과:
     dist\\WiryeBidTool\\WiryeBidTool.exe
 
+배포·누적 DB
+    누적 DB(wirye_measurements.db)는 번들에 넣지 않는다. 처음 실행할 때 exe 가 있는
+    폴더에 만들어지고 기준 실적이 적재된다(constants.db_path 참조).
+    → dist\\WiryeBidTool\\ 폴더째 복사하면 데이터도 함께 간다. 담당자 교체 시
+      폴더 전체를 인수인계하면 되고, 여러 명이 각자 폴더를 쓰면 누적도 각자 쌓인다.
+    → Program Files 처럼 쓰기 불가한 곳에 두면 홈 폴더로 물러난다(폴더 복사로
+      데이터가 안 따라가므로 권장하지 않는다).
+
 디버그(실행 즉시 닫히거나 오류 원인 확인 필요 시):
     아래 EXE(...) 의 console=False → True 로 바꿔 재빌드 → 콘솔에 오류 출력.
 """

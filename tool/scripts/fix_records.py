@@ -42,7 +42,7 @@ from wirye_capacity.correction import status_rows  # noqa: E402
 from wirye_capacity.store import MeasurementStore  # noqa: E402
 from wirye_capacity.theory import TheoryEngine, igv_turnup  # noqa: E402
 
-DEFAULT_DB = str(Path.home() / "wirye_measurements.db")
+DEFAULT_DB = str(C.db_path())   # Tool 폴더 기준(공용 해석)
 NODEID_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
 
 # 원본표(담당자 실적표) 기준값 — 히스토리안에서 읽은 값이 이것과 맞는지 검증용.

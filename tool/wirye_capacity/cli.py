@@ -14,8 +14,8 @@ from .pipeline import run_pipeline
 from .rims import MockRimsConnector
 from .store import MeasurementStore
 
-# CLI·GUI 공용 기본 누적 DB (홈 디렉터리)
-DEFAULT_DB = str(Path.home() / "wirye_measurements.db")
+# CLI·GUI 공용 기본 누적 DB — Tool 폴더(쓰기 불가면 홈). constants.db_path() 가 유일한 기준.
+DEFAULT_DB = str(C.db_path())
 
 
 def _disp_width(s: str) -> int:
