@@ -207,27 +207,57 @@ def test_stamp_records_method(tmp_path, forecast):
     assert len(fps) == 1, "지문은 방법과 무관해야 한다(기존 입찰파일이 구버전으로 오판되면 안 됨)"
 
 
-# ── IGV turn-up 미실시 처리 (2026-08 시운전에서 8건 중 3건이 미실시였다) ──
+# ── IGV Turn-up 미실시 방침 ────────────────────────────────────────────────
+# 담당자 방침 : IGV 실시 여부에 따라 출력 변동이 너무 커서, 일관성을 위해 IGV 를
+# 실시한 시험만 보정값에 쓴다. 미실시 시험은 취득값만 보고 누적에는 넣지 않는다.
+# 2026-08 시운전에서 8건 중 3건이 미실시였고, W 를 자동 배정해 넣었더니 보정값이
+# 4~6 MW 낮게 기록돼 전부 미달로 오판됐다.
 
-def test_no_igv_records_zero_w(forecast):
-    """W 를 0 으로 주면 보정값이 그만큼 높게(=올바르게) 기록된다.
+def test_no_igv_is_never_accumulated(forecast):
+    """accumulate=True 여도 IGV 미실시면 누적에 들어가지 않는다."""
+    conn = MockRimsConnector({
+        "2025-09-12": AcquiredTest(date="2025-09-12", cit=25.5, pressure=1008.0,
+                                   cc_meas=414.5, season="여름")})
+    store = MeasurementStore(":memory:")
+    store.seed()
+    before = store.count()
+    res = run_pipeline(date="2025-09-12", store=store, connector=conn,
+                       forecast=forecast, accumulate=True, igv=False)
+    assert res.igv_skipped is True
+    assert res.reflected is False
+    assert store.count() == before                 # 누적 불변
+    assert not store.has_date("2025-09-12")
+    assert any("IGV" in w for w in res.acq_warnings)
+    # 취득·계산 결과 자체는 확인용으로 돌려준다 (W=0)
+    assert res.new_record is not None and res.new_record.w == 0.0
 
-    보정값 = CC실측 − 이론 − W 이므로, 실시하지 않은 turn-up 을 빼면 보정값이
-    4~6 MW 낮게 남아 누적 곡선을 끌어내린다. 실제로 그 3건이 미달로 오판됐다.
+
+def test_igv_on_accumulates_with_band_default(forecast):
+    conn = MockRimsConnector({
+        "2025-09-12": AcquiredTest(date="2025-09-12", cit=25.5, pressure=1008.0,
+                                   cc_meas=414.5, season="여름")})
+    store = MeasurementStore(":memory:")
+    store.seed()
+    res = run_pipeline(date="2025-09-12", store=store, connector=conn,
+                       forecast=forecast, accumulate=True, igv=True)
+    assert res.igv_skipped is False and res.reflected is True
+    assert res.new_record.w == 6.0                 # 여름 온도밴드 기본값
+
+
+def test_w_zero_is_not_a_no_igv_marker(forecast):
+    """극저온 구간은 IGV 를 실시해도 W=0 이다 — W 로 미실시를 판별할 수 없다.
+
+    그래서 run_pipeline 이 별도 igv 인자를 받는다. 이 구분이 깨지면 극저온 시험이
+    전부 누적에서 빠져 -14~0°C 구간 근거가 사라진다.
     """
-    acq = {"2025-09-12": AcquiredTest(date="2025-09-12", cit=25.5, pressure=1008.0,
-                                      cc_meas=414.5, season="여름")}
-    out = {}
-    for label, w in (("auto", None), ("no_igv", 0.0)):
-        store = MeasurementStore(":memory:")
-        store.seed()
-        res = run_pipeline(date="2025-09-12", store=store,
-                           connector=MockRimsConnector(dict(acq)),
-                           forecast=forecast, accumulate=True, w=w)
-        out[label] = res.new_record
-
-    assert out["auto"].w == 6.0                    # 여름 온도밴드 기본값
-    assert out["no_igv"].w == 0.0
-    # 이론기준값은 같고, 보정값만 W 만큼 차이난다
-    assert out["auto"].theory == pytest.approx(out["no_igv"].theory)
-    assert out["no_igv"].corr == pytest.approx(out["auto"].corr + 6.0)
+    from wirye_capacity.theory import igv_turnup
+    assert igv_turnup(-1.9) == 0.0                 # 실시했어도 0
+    conn = MockRimsConnector({
+        "2026-01-13": AcquiredTest(date="2026-01-13", cit=-1.9, pressure=1010.7,
+                                   cc_meas=468.76, season="극저온△")})
+    store = MeasurementStore(":memory:")
+    res = run_pipeline(date="2026-01-13", store=store, connector=conn,
+                       forecast=forecast, accumulate=True, igv=True)
+    assert res.new_record.w == 0.0                 # 온도밴드값이 0
+    assert res.reflected is True                   # 그래도 누적된다
+    assert res.igv_skipped is False

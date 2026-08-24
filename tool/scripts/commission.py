@@ -45,7 +45,8 @@ from wirye_capacity.theory import TheoryEngine  # noqa: E402
 METHODS = ("bin", "curve", "gp")
 LABEL = {"bin": "구간평균", "curve": "커널회귀", "gp": "GP"}
 THEORY_TOL = 0.25          # 담당자 표 대조 허용차 (MW)
-FIELDS = ("date", "cit", "press", "rh", "cc_gross", "vac", "w", "ref_theory", "ref_corr")
+FIELDS = ("date", "cit", "press", "rh", "cc_gross", "vac", "igv", "w",
+          "ref_theory", "ref_corr")
 
 TEMPLATE = """\
 # 시운전 입력 — 담당자 실적표에서 옮겨 적는다. '#' 줄은 무시된다.
@@ -55,11 +56,14 @@ TEMPLATE = """\
 #   rh         상대습도 (%)
 #   cc_gross   CC(Gross) 실측 (MW)      ← IGV 반영값
 #   vac        진공도 (mbar, 없으면 비움)
-#   w          W(IGV). 비우면 온도밴드 기본값
+#   igv        IGV Turn-up 실시 여부. O(기본) / X
+#              X 인 회차는 아예 처리하지 않는다 — 담당자 방침이다. IGV 실시 여부에
+#              따라 출력 변동이 너무 커서, 일관성을 위해 실시 시험만 보정값에 쓴다.
+#   w          W(IGV) 직접 지정. 비우면 온도밴드 기본값(+6/+4/0)
 #   ref_theory 담당자 표의 이론기준값 (있으면 계산 일치 검증에 쓴다)
 #   ref_corr   담당자 표의 보정값       (같음)
-date,cit,press,rh,cc_gross,vac,w,ref_theory,ref_corr
-2026-05-12,,,,,,,,
+date,cit,press,rh,cc_gross,vac,igv,w,ref_theory,ref_corr
+2026-05-12,,,,,O,,,,
 """
 
 
@@ -76,13 +80,25 @@ def load_input(path: Path) -> list[dict]:
         for row in csv.DictReader(l for l in f if not l.lstrip().startswith("#")):
             if not (row.get("date") or "").strip():
                 continue
-            r = {k: _f(row.get(k)) for k in FIELDS if k != "date"}
+            r = {k: _f(row.get(k)) for k in FIELDS if k not in ("date", "igv")}
             r["date"] = row["date"].strip()
+            r["igv"] = (row.get("igv") or "O").strip().upper() != "X"
             missing = [k for k in ("cit", "press", "cc_gross") if r[k] is None]
             if missing:
                 raise SystemExit(f"{r['date']}: 필수 항목 누락 {missing}")
             rows.append(r)
     return sorted(rows, key=lambda r: r["date"])
+
+
+def drop_no_igv(rows: list[dict]) -> list[dict]:
+    """IGV 미실시 회차를 걸러낸다(담당자 방침). 걸러낸 것은 화면에 남긴다."""
+    keep = [r for r in rows if r["igv"]]
+    for r in rows:
+        if not r["igv"]:
+            print(f"  [제외] {r['date']}  IGV Turn-up 미실시 — 보정값 산출 대상 아님")
+    if len(keep) != len(rows):
+        print(f"  → 입력 {len(rows)}건 중 {len(keep)}건만 검증합니다.\n")
+    return keep
 
 
 def correctors(recs: list[dict]) -> dict:
@@ -220,7 +236,7 @@ def main() -> None:
         return
 
     eng = TheoryEngine()
-    pending_all = load_input(inp_path)
+    pending_all = drop_no_igv(load_input(inp_path))
 
     if a.walk:
         # 원본을 건드리지 않도록 사본에서 돌린다. 회차마다 예측 → 반영 순서를 지킨다.

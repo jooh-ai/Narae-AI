@@ -109,8 +109,8 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--margin", type=float, default=0.0, metavar="K",
                    help="미달 방지 안전마진 계수(0=미적용, 0.8 권장). 마진=K×구간실측변동")
     r.add_argument("--no-igv", dest="no_igv", action="store_true",
-                   help="IGV Turn-up 미실시 시험 — W=0 으로 보정값을 산출한다. "
-                        "빼먹으면 보정값이 4~6 MW 낮게 기록된다")
+                   help="IGV Turn-up 미실시 시험 — 취득값만 보여 주고 누적에는 넣지 않는다"
+                        "(담당자 방침: IGV 실시 시험만 보정값에 사용)")
     r.add_argument("--accumulate", action="store_true",
                    help="이 테스트를 누적에 반영(저장). 기본은 확인용(미반영)")
     r.add_argument("--seed", action="store_true", help="DB가 비었으면 시드 32건 적재")
@@ -186,14 +186,15 @@ def main(argv: list[str] | None = None) -> int:
                            margin_k=args.margin,
                            template_path=args.template or DEFAULT_TEMPLATE,
                            start=args.start,
-                           w=0.0 if args.no_igv else None)
+                           igv=not args.no_igv)
         src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
         print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
         print(f"보정 방법   : {METHOD_LABEL.get(res.correction_method, res.correction_method)}"
               f"  — 누적 {res.measurement_count}건 전체에 적용")
         if res.new_record is not None:
             r = res.new_record
-            status = ("✅ 누적 반영됨" if res.reflected else
+            status = ("⛔ IGV 미실시 — 누적 제외(방침)" if res.igv_skipped else
+                      "✅ 누적 반영됨" if res.reflected else
                       "⚠ 이미 반영된 날짜 — 건너뜀" if res.duplicate_skipped else
                       "확인용(미반영)")
             rh_txt = f"RH {r.rh:.1f}%" if r.rh is not None else "RH 60%(고정)"

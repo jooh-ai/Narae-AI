@@ -264,10 +264,12 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.igv_chk = QtWidgets.QCheckBox("IGV Turn-up 실시")
             self.igv_chk.setChecked(True)
             self.igv_chk.setToolTip(
-                "체크 : W(IGV) 를 온도밴드 기본값으로 적용 (여름 +6 / 봄·가을 +4 / 극저온 +2·0)\n"
-                "해제 : W = 0 — Turn-up 을 실시하지 않은 시험\n\n"
-                "잘못 두면 보정값이 4~6 MW 어긋나 누적 곡선이 오염됩니다.\n"
-                "값을 직접 넣어야 하면 [Test 결과 List-up] 에서 W 열을 편집하세요.")
+                "체크 : W(IGV) 를 온도밴드 기본값으로 적용 (여름 +6 / 봄·가을 +4 / 극저온 0)\n"
+                "해제 : IGV Turn-up 미실시 시험 — 취득값만 보여 주고\n"
+                "       '누적에 반영' 을 체크해도 누적에는 넣지 않습니다.\n\n"
+                "담당자 방침입니다. IGV 실시 여부에 따라 출력 변동이 너무 커서,\n"
+                "일관성을 위해 IGV 실시 시험만 보정값에 사용합니다.\n"
+                "잘못 두고 반영하면 그 회차만이 아니라 보정곡선 전체가 오염됩니다.")
             f1.addRow("테스트 날짜", self.date_in)
             f1.addRow("시작 시각", self.start_in)
             f1.addRow("Degradation", self.deg_in)
@@ -403,7 +405,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     bid_day=self.bidday_in.text().strip() or None,
                     accumulate=self.accum_chk.isChecked(),
                     correction_method=_METHODS[self.method_cb.currentIndex()],
-                    w=None if self.igv_chk.isChecked() else 0.0,
+                    igv=self.igv_chk.isChecked(),
                     margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
@@ -421,7 +423,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                    f"{METHOD_LABEL.get(res.correction_method, res.correction_method)} 로 보정"]
             if res.new_record is not None:
                 r = res.new_record
-                st = ("✅ 누적 반영됨" if res.reflected else
+                st = ("⛔ IGV 미실시 — 누적 제외(방침)" if res.igv_skipped else
+                      "✅ 누적 반영됨" if res.reflected else
                       "⚠ 중복 — 건너뜀" if res.duplicate_skipped else "확인용(미반영)")
                 rh_txt = f"RH {r.rh:.1f}%" if r.rh is not None else "RH 60%(고정)"
                 msg.append(f"신규 취득  CIT {r.cit:.2f}°C · {rh_txt} · CC실측 {r.cc_meas:.2f}"
@@ -1005,7 +1008,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
                     correction_method=_METHODS[self.method_cb.currentIndex()],
-                    w=None if self.igv_chk.isChecked() else 0.0,
+                    igv=self.igv_chk.isChecked(),
                     margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
