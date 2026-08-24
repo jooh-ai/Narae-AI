@@ -12,7 +12,9 @@
 (pipeline.run_pipeline 3단계 참조).
 
 화면:
-  [공급가능용량 산정]      날짜·시각 입력 → RiMS 자동취득 → 보정 → 엑셀3 입찰파일
+  [공급가능용량 산정]      날짜·시각 입력 → RiMS 자동취득 → 보정 → 온도별 예측 표시.
+                        표 위 [엑셀로 저장] 으로 엑셀3 입찰파일을 만든다(실행은
+                        계산만 하고 파일을 만들지 않는다).
   [온도 구간별 보정값 현황] 엑셀4 '보정값 현황' 재현 (실행 시 자동 갱신)
   [Test List-up]           누적 테스트 목록
 """
@@ -26,12 +28,22 @@ from .. import constants as C
 from ..config import get_config, set_config
 from ..correction import status_rows, table_fingerprint
 from ..pipeline import METHOD_LABEL, run_pipeline
-from ..profile import build_profile
+from ..profile import PROFILE_COLUMNS, build_profile
 from ..store import MeasurementStore
 from ..theory import TheoryEngine
 
 # 보정방법 콤보박스 순서 → run_pipeline(correction_method=) 키. 저장값과 같은 문자열이다.
 _METHODS = ("bin", "curve", "gp")
+
+# 온도 프로파일 표의 짧은 머리글. 어떤 열을 어떤 순서로 보일지는 엑셀3 출력과
+# 같은 목록(profile.PROFILE_COLUMNS)이 정하고, 여기서는 이름만 줄인다 — 9열이
+# 창 폭에 들어가야 읽을 수 있다. 여기에 없는 열은 원래 이름을 그대로 쓴다.
+_SHORT_HEAD = {
+    "temp": "온도(°C)", "gt_theory": "GT 이론", "st_theory": "ST 이론",
+    "cc_theory": "CC 이론", "correction": "보정값",
+    "gt_real": "GT 현실", "st_real": "ST 현실",
+    "cc_real_gross": "CC 현실 Gross", "cc_real_net": "★ CC 현실 Net",
+}
 
 # ── SK 브랜드 스타일시트 (행복날개 레드 #EA002C · 오렌지 #F47725, 플랫 · 카드) ──
 QSS = """
@@ -154,7 +166,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             if self.store.count() == 0:
                 self.store.seed()
                 self._seeded = True
-            self._last_bid = None      # 마지막 생성 입찰파일 {path, fp} — 구버전 감지용
+            self._last_bid = None      # 마지막 저장 입찰파일 {path, fp} — 구버전 감지용
+            self._last_run = None      # 마지막 산정 조건 — [엑셀로 저장] 재계산용
 
             tabs = QtWidgets.QTabWidget()
             tabs.addTab(self._run_tab(), "공급가능용량 산정")
@@ -315,13 +328,15 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 "  0     : 마진 없음 — 예측오차 최소(GP 1.33 MW), 시드 31건 미달 2건\n"
                 "  0.8   : 시드 31건 기준 미달 0건 (오차는 커지지만 전부 안전한 방향)\n"
                 "실측이 없는 특수구간(Shaft Limit·보수적 고정)에는 적용되지 않습니다.")
-            self.out_in = self._file_row("출력 엑셀3 입찰파일(.xlsx)", save=True)
+            # 출력 파일 경로는 여기서 받지 않는다. 실행은 계산·표시만 하고, 저장은
+            # 아래 온도 프로파일 표의 [엑셀로 저장] 으로 그때 경로를 고른다 —
+            # 실행할 때마다 파일이 덮어써지는 것을 막고, 결과를 보고 저장할지
+            # 정할 수 있다.
             f3.addRow("", self.accum_chk)
             f3.addRow("보정 방법", self.method_cb)
             f3.addRow("안전마진 계수", self.margin_sb)
-            f3.addRow("출력 파일", self.out_in["row"])
 
-            self.run_btn = QtWidgets.QPushButton("▶  공급가능용량 산정 · 입찰파일 생성")
+            self.run_btn = QtWidgets.QPushButton("▶  공급가능용량 산정")
             self.run_btn.setObjectName("primary")
             self.run_btn.clicked.connect(self._on_run)
 
@@ -330,12 +345,26 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.summary.setObjectName("summary")
             self.summary.setWordWrap(True)
 
-            self.profile_tbl = QtWidgets.QTableWidget(0, 4)
+            # 표 구성은 엑셀3 출력과 같은 목록(profile.PROFILE_COLUMNS)을 쓴다 —
+            # 화면에서 본 것과 저장한 파일이 어긋나면 안 된다.
+            self.profile_tbl = QtWidgets.QTableWidget(0, len(PROFILE_COLUMNS))
             self.profile_tbl.setHorizontalHeaderLabels(
-                ["온도(°C)", "CC 이론", "보정값", "CC 현실화 Net"])
+                [_SHORT_HEAD.get(attr, h) for h, attr in PROFILE_COLUMNS])
             self.profile_tbl.setAlternatingRowColors(True)
-            self.profile_tbl.horizontalHeader().setStretchLastSection(True)
             self.profile_tbl.verticalHeader().setVisible(False)
+            hh = self.profile_tbl.horizontalHeader()
+            hh.setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
+
+            head = QtWidgets.QHBoxLayout()
+            head.addWidget(QtWidgets.QLabel("온도별 예측 (−20 ~ 40°C, 61구간)"))
+            head.addStretch(1)
+            self.save_btn = QtWidgets.QPushButton("엑셀로 저장")
+            self.save_btn.setEnabled(False)          # 산정 전에는 저장할 것이 없다
+            self.save_btn.setToolTip(
+                "지금 표에 있는 온도 프로파일을 엑셀3 입찰 양식으로 저장합니다.\n"
+                "저장 시점의 누적 보정값 기준으로 다시 계산해 씁니다.")
+            self.save_btn.clicked.connect(self._on_save_profile)
+            head.addWidget(self.save_btn)
 
             lay = QtWidgets.QVBoxLayout(w)
             lay.setSpacing(10)
@@ -344,10 +373,12 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             lay.addWidget(g3)
             lay.addWidget(self.run_btn)
             lay.addWidget(self.summary)
+            lay.addLayout(head)
             lay.addWidget(self.profile_tbl, stretch=1)
             return w
 
-        def _file_row(self, label, save=False):
+        def _file_row(self, label):
+            """파일 열기 입력줄. 저장 경로 입력은 없다 — 저장은 [엑셀로 저장] 버튼에서."""
             edit = QtWidgets.QLineEdit()
             edit.setPlaceholderText(label)
             btn = QtWidgets.QPushButton("찾아보기")
@@ -357,10 +388,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             holder = QtWidgets.QWidget(); holder.setLayout(row)
 
             def pick():
-                if save:
-                    fn, _ = QtWidgets.QFileDialog.getSaveFileName(self, label, "", "Excel (*.xlsx)")
-                else:
-                    fn, _ = QtWidgets.QFileDialog.getOpenFileName(self, label, "", "Excel (*.xlsx)")
+                fn, _ = QtWidgets.QFileDialog.getOpenFileName(self, label, "", "Excel (*.xlsx)")
                 if fn:
                     edit.setText(fn)
             btn.clicked.connect(pick)
@@ -399,7 +427,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             try:
                 res = run_pipeline(
                     date=self.date_in.text().strip(), store=self.store,
-                    output_path=self.out_in["edit"].text().strip() or None,
+                    output_path=None,          # 저장은 [엑셀로 저장] 에서
                     connector=connector,
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
@@ -446,18 +474,79 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self._refresh_status(res.correction_table)
             self._refresh_list()
             self._refresh_chart()
-            if res.output_path:
-                self._last_bid = {"path": res.output_path, "fp": res.fingerprint}
-            elif res.reflected:
-                self._check_bid_freshness()   # 파일 생성 없이 누적만 변경 → 기존 파일 구버전?
+            # [엑셀로 저장] 에서 같은 조건으로 다시 계산해 쓰기 위해 입력을 보관한다.
+            # 결과 행을 그대로 들고 있지 않는 이유 — 엑셀3 양식은 템플릿을 채우는
+            # 방식이라 run_pipeline 을 다시 타는 것이 유일한 정합 경로다.
+            self._last_run = {
+                "date": res.date, "deg": self.deg_in.value(),
+                "bid_day": self.bidday_in.text().strip() or None,
+                "method": _METHODS[self.method_cb.currentIndex()],
+                "margin_k": self.margin_sb.value(),
+                "forecast_path": self.forecast_in["edit"].text().strip() or None,
+                "template": template, "fp": res.fingerprint,
+            }
+            self.save_btn.setEnabled(True)
+            if res.reflected:
+                self._check_bid_freshness()   # 누적이 변했으니 기존 파일은 구버전?
 
         def _fill_profile(self, rows):
+            from PySide6 import QtCore
             self.profile_tbl.setRowCount(len(rows))
             for i, r in enumerate(rows):
-                vals = [r.temp, round(r.cc_theory, 2), round(r.correction, 2),
-                        round(r.cc_real_net, 2)]
-                for j, v in enumerate(vals):
-                    self.profile_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
+                for j, (_, attr) in enumerate(PROFILE_COLUMNS):
+                    v = getattr(r, attr)
+                    txt = str(v) if attr == "temp" else f"{v:.2f}"
+                    it = QtWidgets.QTableWidgetItem(txt)
+                    it.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignRight
+                                        | QtCore.Qt.AlignmentFlag.AlignVCenter)
+                    self.profile_tbl.setItem(i, j, it)
+
+        # ---------- 온도 프로파일 → 엑셀3 입찰파일 저장 ----------
+        def _on_save_profile(self):
+            """표에 있는 프로파일을 엑셀3 양식으로 저장한다.
+
+            결과 행을 그대로 쓰지 않고 run_pipeline 을 다시 탄다 — 엑셀3 는 템플릿
+            셀을 채우는 방식이라 그 경로만이 양식과 정합한다. connector=None ·
+            accumulate 안 함이므로 누적은 건드리지 않는다.
+            """
+            from PySide6 import QtCore, QtGui
+            if not self._last_run:
+                return
+            path, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self, "엑셀3 입찰파일로 저장",
+                f"입찰_온도Profile_{self._last_run['date']}.xlsx",
+                "Excel 파일 (*.xlsx)")
+            if not path:
+                return
+            r = self._last_run
+            # 산정 이후 누적이 바뀌었으면 저장되는 값이 화면과 달라진다. 먼저 알린다.
+            fp_now = table_fingerprint(self.store.correction_table())
+            if fp_now != r["fp"] and QtWidgets.QMessageBox.question(
+                    self, "누적이 변경됨",
+                    "산정 이후 누적 보정값이 바뀌었습니다.\n"
+                    "지금 저장하면 화면의 값이 아니라 현재 누적 기준으로 저장됩니다.\n\n"
+                    "계속할까요? (표도 새 값으로 갱신됩니다)"
+                    ) != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            QtGui.QGuiApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+            try:
+                res = run_pipeline(
+                    date=r["date"], store=self.store, output_path=path, connector=None,
+                    engine=self.engine, deg=r["deg"], bid_day=r["bid_day"],
+                    correction_method=r["method"], margin_k=r["margin_k"],
+                    forecast_path=r["forecast_path"], template_path=r["template"])
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.critical(self, "저장 실패", str(e))
+                return
+            finally:
+                QtGui.QGuiApplication.restoreOverrideCursor()
+            self._fill_profile(res.profile_rows)
+            self._last_run["fp"] = res.fingerprint
+            self._last_bid = {"path": res.output_path, "fp": res.fingerprint}
+            self.summary.setText(f"엑셀3 입찰파일 저장 완료  —  {res.output_path}"
+                                 f"    |    누적 {res.measurement_count}건 · "
+                                 f"{METHOD_LABEL.get(res.correction_method)} · "
+                                 f"적용 대기압 {res.applied_pressure:.1f} mbar")
 
         # ---------- 온도 구간별 보정값 현황 탭 (엑셀4 '보정값 현황' 재현) ----------
         def _status_tab(self):
