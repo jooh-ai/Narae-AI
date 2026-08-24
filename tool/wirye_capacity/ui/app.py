@@ -51,6 +51,9 @@ QLabel#headertitle {
 QLabel#headermark { background: #FFFFFF; border-radius: 6px; }
 QLabel#headersub { color: #FFE3D6; font-size: 9pt; }
 
+QWidget#banner { background: #FFF3EC; border-bottom: 1px solid #FFCDB2; }
+QLabel#bannertext { background: transparent; color: #8A2A00; font-size: 9.5pt; }
+
 QTabWidget::pane { border: none; background: transparent; }
 QTabBar::tab {
     background: transparent; padding: 10px 20px; margin-right: 2px;
@@ -125,6 +128,10 @@ def _require_qt():
 
 
 def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
+    # 시작 단계를 로그에 남긴다. console=False 라 화면에 아무것도 안 남으므로,
+    # 창이 안 뜬다는 신고를 받았을 때 어디까지 갔는지가 유일한 단서다.
+    from ..diag import stage
+    stage("Qt 확인")
     _require_qt()
     from PySide6 import QtWidgets
 
@@ -133,6 +140,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
     from .. import constants as _C
     from ..store import migrate_legacy_db
     db_default = str(_C.db_path())
+    stage(f"누적 DB 결정 : {db_default}")
     migrate_note = migrate_legacy_db(db_default)   # 예전 홈 폴더 DB 를 1회 이관
 
     class MainWindow(QtWidgets.QMainWindow):
@@ -161,6 +169,12 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             v.setContentsMargins(0, 0, 0, 0)
             v.setSpacing(0)
             v.addWidget(header)
+            # 시작 안내는 모달 대화상자로 띄우지 않는다. 모달은 이벤트 루프를 잡고,
+            # 뒤로 가거나 화면 밖에 놓이면 사용자에게는 '더블클릭했는데 아무 반응
+            # 없음' 으로만 보인다(2026-08 타 PC 사례). 창 안 배너면 그럴 일이 없다.
+            banner = self._startup_banner(migrate_note, db_default)
+            if banner is not None:
+                v.addWidget(banner)
             v.addWidget(tabs)
             self.setCentralWidget(central)
             self._refresh_list()
@@ -169,27 +183,31 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             # 누적이 어느 파일에 쌓이는지 항상 보이게 한다 — 배포본을 여러 명이 각자
             # 쓰면 DB 도 각자 생기므로, 지금 보고 있는 게 어느 DB 인지 헷갈리면 안 된다.
             self.statusBar().showMessage(f"누적 DB : {db_default}   ({self.store.count()}건)")
-            # 시작 안내는 창이 화면에 뜬 뒤에 띄운다 — __init__ 안에서 모달을 띄우면
-            # show() 가 아직 호출되지 않아 부모 창이 없다. 그 대화상자가 뒤로 가거나
-            # 화면 밖에 놓이면 사용자에게는 '더블클릭했는데 아무 반응 없음' 으로만
-            # 보인다(2026-08 타 PC 사례: 신규 PC 첫 실행은 항상 이 경로를 탄다 —
-            # DB 가 비어 있어 seed 후 안내가 뜨므로).
-            self._startup_notice = (
-                ("누적 DB 위치 변경", migrate_note) if migrate_note else
-                ("누적 DB 생성",
-                 f"이 폴더에 새 누적 DB 를 만들고 기준 실적 {self.store.count()}건을 "
-                 f"적재했습니다.\n\n{db_default}\n\n"
-                 "이 파일에 시험 결과가 쌓입니다. 담당자가 바뀌면 Tool 폴더 전체를 "
-                 "넘기면 데이터도 함께 갑니다.") if self._seeded else None)
 
-        def showEvent(self, ev):
-            """창이 처음 보인 뒤 대기 중인 시작 안내를 띄운다."""
-            super().showEvent(ev)
-            notice, self._startup_notice = getattr(self, "_startup_notice", None), None
-            if notice:
-                from PySide6 import QtCore
-                QtCore.QTimer.singleShot(
-                    0, lambda: QtWidgets.QMessageBox.information(self, *notice))
+        # ---------- 시작 안내 배너 (모달 아님) ----------
+        def _startup_banner(self, migrate_note, db_default):
+            """첫 실행·DB 이관 안내. 닫기 버튼이 있는 한 줄 배너."""
+            if migrate_note:
+                text = migrate_note.replace("\n", "  ")
+            elif self._seeded:
+                text = (f"이 폴더에 새 누적 DB 를 만들고 기준 실적 {self.store.count()}건을 "
+                        f"적재했습니다 — {db_default}   "
+                        "담당자가 바뀌면 Tool 폴더 전체를 넘기면 데이터도 함께 갑니다.")
+            else:
+                return None
+            bar = QtWidgets.QWidget()
+            bar.setObjectName("banner")
+            h = QtWidgets.QHBoxLayout(bar)
+            h.setContentsMargins(18, 8, 10, 8)
+            lab = QtWidgets.QLabel("ℹ  " + text)
+            lab.setObjectName("bannertext")
+            lab.setWordWrap(True)
+            close = QtWidgets.QPushButton("닫기")
+            close.setFixedWidth(60)
+            close.clicked.connect(bar.hide)
+            h.addWidget(lab, 1)
+            h.addWidget(close)
+            return bar
 
         # ---------- 헤더 ----------
         def _header(self):
@@ -989,15 +1007,30 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                                  f"    |    {res.output_path}")
             self._fill_profile(res.profile_rows)
 
+    stage("QApplication 생성")
     app = QtWidgets.QApplication(argv or sys.argv)
+    stage(f"Qt 플랫폼 '{app.platformName()}' · 화면 "
+          + " / ".join(f"{s.geometry().width()}x{s.geometry().height()}"
+                       f"@({s.geometry().x()},{s.geometry().y()})"
+                       for s in app.screens()))
     app.setStyleSheet(QSS)
     _logo = _C.logo_path()
     if _logo:                       # 작업표시줄·창 좌상단 아이콘도 같은 로고로
         from PySide6 import QtGui
         app.setWindowIcon(QtGui.QIcon(str(_logo)))
+    stage("MainWindow 생성")
     win = MainWindow()
+    stage("show() 호출")
     win.show()
-    return app.exec()
+    # 창이 '보이는 상태' 로 어디에 놓였는지 남긴다. 사용자는 아무것도 못 봤는데
+    # 여기에 visible=True 로 찍히면 표시 문제(화면 밖·다른 모니터·원격세션)다.
+    g = win.geometry()
+    stage(f"창 상태 visible={win.isVisible()} "
+          f"{g.width()}x{g.height()}@({g.x()},{g.y()}) 최소화={win.isMinimized()}")
+    stage("이벤트 루프 진입 — 여기까지 찍히면 시작은 성공이다")
+    rc = app.exec()
+    stage(f"이벤트 루프 종료 (rc={rc})")
+    return rc
 
 
 if __name__ == "__main__":  # pragma: no cover
