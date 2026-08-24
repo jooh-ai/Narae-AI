@@ -17,8 +17,8 @@ def store():
     s.close()
 
 
-def test_seed_loads_31(store):
-    assert store.count() == 31
+def test_seed_loads_36(store):
+    assert store.count() == 36
 
 
 def test_list_up_sorted_by_cit(store):
@@ -33,7 +33,7 @@ def test_correction_table_matches_excel4(store):
     table = store.correction_table()
     expect = {
         (0, 10): (5.62, 7), (10, 15): (6.12, 6), (15, 20): (5.55, 3),
-        (20, 25): (2.62, 1), (25, 30): (-2.69, 3), (30, 41): (-0.32, 9),
+        (20, 25): (2.62, 1), (25, 30): (-2.37, 6), (30, 41): (-0.40, 11),
     }
     for key, (avg, cnt) in expect.items():
         assert table[key]["count"] == cnt
@@ -49,15 +49,15 @@ def test_record_test_computes_and_accumulates(store):
     expect_theory = eng.theory_cc(25.5, 1008.0, C.DEFAULT_DEG)
     assert rec.theory == pytest.approx(expect_theory, abs=1e-9)
     assert rec.corr == pytest.approx(414.5 - expect_theory - 6.0, abs=1e-9)
-    assert store.count() == 32
+    assert store.count() == 37
     # 새 레코드가 25~30 구간 건수에 반영됨 (시드 4건 + 1)
-    assert store.correction_table()[(25, 30)]["count"] == 4
+    assert store.correction_table()[(25, 30)]["count"] == 7
 
 
 def test_delete_and_clear(store):
     rows = store.list_up()
     store.delete(rows[0]["id"])
-    assert store.count() == 30
+    assert store.count() == 35
     store.clear()
     assert store.count() == 0
 

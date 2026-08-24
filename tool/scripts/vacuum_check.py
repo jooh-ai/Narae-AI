@@ -12,26 +12,36 @@
     있는 것은 예보 온도뿐이다 — 내일의 진공은 알 수 없다.
 
 무엇을 보는가
-    ① 온도 기준선 — 진공도가 CIT 로 얼마나 설명되는가
-    ② 진공 잔차 — 같은 온도인데 진공이 기준선보다 나쁜 회차. 이건 계절이 아니라
-       그날의 설비 상태다. 출력 저하로 직결되므로 미달 원인 1순위다.
-           Δ출력 ≈ -0.1721 × 진공잔차   (기존 회귀, r = 0.983)
+    ① 온도 기준선 — 진공도가 CIT 로 얼마나 설명되는가 (r = +0.947, 확실하다)
+    ② 진공 잔차 — 같은 온도인데 진공이 기준선보다 나쁜 회차를 짚는다.
+       이건 계절이 아니라 그날의 설비 상태다. 미달이 나오면 여기를 먼저 본다.
+       다만 **누적 전체에서 진공 잔차가 보정값을 설명하지는 못한다**(아래).
     ③ 연차 비교 — 같은 온도대에서 진공이 해마다 나빠지는가. 계절 기전이라면
        같은 CIT 에서 같은 진공이 나와야 한다. 다르면 복수기 쪽 변화다
        (관 오염 · 냉각탑 성능 · 진공 누설).
+    ④ --split 로 정비 전/후 비교 (복수기 청소 효과 확인)
 
-2026-08 확인 사항
-    · 2026-07-22 의 미달(-2.14 MW)은 진공 잔차 +14.2 mbar 로 설명된다.
-      예상 영향 -2.44 MW 와 거의 일치한다.
-    · 같은 온도대 진공이 1년 만에 나빠졌다 — 25~30°C +8.4 / 30~35°C +5.4 mbar.
-      여름 구간(30~41°C)은 누적 10건이 전부 2025년이므로, 2025 여름 데이터로
-      2026 여름을 예측하면 과대 예측이 될 수 있다. 계속 감시할 항목이다.
+2026-08 확인 사항 — 어디까지 말할 수 있나
+    확실한 것
+      · 진공도 = 33.64 + 1.242 × CIT,  r = +0.947 (분산의 90%). 외기→냉각수→진공.
+      · 같은 온도대 진공이 1년 만에 나빠졌다 — 25~30°C +8.4 / 30~35°C +5.4 mbar.
+        계절로는 설명되지 않으므로 복수기 쪽 변화다.
+      · 2026-07-22 는 진공 잔차 +12.6 mbar 로 누적에서 가장 큰 이탈이고,
+        예상 영향 -2.17 MW 가 그 회차의 보정잔차 -2.47 MW 와 크기가 맞는다.
+
+    확실하지 않은 것 (2026-08-24 정정)
+      · 진공 잔차로 보정값을 예측할 수는 없다. LOOCV 보정잔차와의 상관은
+        전체 r=+0.09, CIT>=20 에서도 r=-0.15(기울기 -0.056 vs 물리 예상 -0.172)로
+        약하다. IGV 실시 5건만 볼 때 나온 r=-0.85 는 표본 5개의 과대해석이었다.
+      · 따라서 07-22 의 크기 일치는 우연일 수 있고, 연차 진공 악화가 출력에
+        얼마나 옮겨지는지도 이 자료로는 확정할 수 없다. 표본이 더 필요하다.
 
 대응은 진공 항 추가가 아니라 안전마진이다. 진공 잔차는 입찰 전날 알 수 없다.
 
 실행:
     python scripts/vacuum_check.py
-    python scripts/vacuum_check.py --add 2026-07-22,28.7,997.5,58.1,395.3,81.9
+    python scripts/vacuum_check.py --split 2026-10-01        # 복수기 청소 전/후
+    python scripts/vacuum_check.py --add 2026-08-12,33.5,998.0,55.0,383.0,81.0
 """
 from __future__ import annotations
 
@@ -50,14 +60,6 @@ from wirye_capacity.theory import TheoryEngine, igv_turnup  # noqa: E402
 # 진공 편차 1 mbar 가 출력에 주는 영향 (기존 회귀 Δ이론 = +0.1721×편차, r=0.983)
 VAC_COEF = 0.1721
 
-# 시운전에서 확인한 IGV 실시 회차 (2026). --add 로 더 넣을 수 있다.
-NEW_2026 = [
-    ("2026-04-15", 25.7, 1000.7, 32.4, 411.5, 61.6),
-    ("2026-05-27", 25.4, 993.4, 74.1, 407.5, 69.3),
-    ("2026-07-07", 32.4, 994.9, 68.5, 384.2, 79.1),
-    ("2026-07-22", 28.7, 997.5, 58.1, 395.3, 81.9),
-    ("2026-07-29", 31.7, 999.8, 62.8, 389.1, 80.4),
-]
 
 
 def ols(xs: list[float], ys: list[float]) -> tuple[float, float, float, float]:
@@ -78,18 +80,28 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--add", action="append", default=[], metavar="CSV",
                     help="회차 추가: 날짜,CIT,대기압,RH,CC_Gross,진공도")
+    ap.add_argument("--split", metavar="YYYY-MM-DD",
+                    help="이 날짜 전/후로 갈라 진공 잔차를 비교한다. 복수기 청소·정비 "
+                         "효과 확인용 (예: --split 2026-10-01)")
     a = ap.parse_args()
-
-    new = list(NEW_2026)
-    for spec in a.add:
-        f = spec.split(",")
-        if len(f) != 6:
-            raise SystemExit(f"--add 형식은 날짜,CIT,대기압,RH,CC,진공 입니다: {spec}")
-        new.append((f[0].strip(), *(float(v) for v in f[1:])))
 
     seed = json.loads(_SEED.read_text(encoding="utf-8"))
     eng = TheoryEngine()
     gp = GPCorrectionCurve([{"cit": r["cit"], "corr": r["corr"]} for r in seed])
+    have = {r.get("date") for r in seed}
+
+    # 누적(씨앗)에 아직 없는 회차만 --add 로 받는다. 이미 있는 날짜를 또 넣으면
+    # 같은 회차가 두 번 세어져 연차 비교·잔차 통계가 어긋난다.
+    new = []
+    for spec in a.add:
+        f = spec.split(",")
+        if len(f) != 6:
+            raise SystemExit(f"--add 형식은 날짜,CIT,대기압,RH,CC,진공 입니다: {spec}")
+        d = f[0].strip()
+        if d in have:
+            print(f"  [건너뜀] {d} 는 이미 누적에 있습니다 (중복 계산 방지)\n")
+            continue
+        new.append((d, *(float(v) for v in f[1:])))
 
     # ── ① 온도 기준선 ────────────────────────────────────────────────────
     cits = [r["cit"] for r in seed]
@@ -101,43 +113,90 @@ def main() -> None:
     print("   → 그래서 보정곡선에 진공 항을 따로 넣지 않는다(같은 정보 이중 계산).")
 
     # ── ② 진공 잔차 vs 보정값 잔차 ───────────────────────────────────────
-    print(f"\n② 회차별 진공 잔차와 보정값 잔차")
-    print(f"   {'일자':11s} {'CIT':>5s} {'진공':>6s} {'기준선':>7s} {'진공잔차':>8s} "
-          f"{'예상영향':>8s} {'보정잔차':>8s}")
-    vr_all, cr_all = [], []
+    # 누적 전체를 보고, 기준선에서 2σ 이상 벗어난 회차를 짚는다. 미달 원인 1순위다.
+    rows = [(r["date"], r["cit"], r["cp_meas"], r["corr"]) for r in seed if r.get("date")]
     for d, cit, p, rh, cc, vac in new:
-        base = a0 + b0 * cit
-        vr = vac - base
-        corr = cc - eng.theory_cc(cit, p, C.DEFAULT_DEG, rh=rh) - igv_turnup(cit)
-        cr = corr - gp._post(cit)[0]
+        rows.append((d, cit, vac,
+                     cc - eng.theory_cc(cit, p, C.DEFAULT_DEG, rh=rh) - igv_turnup(cit)))
+    # 보정잔차는 LOOCV 로 낸다. 그 회차를 포함한 곡선으로 재면 잔차가 곡선에
+    # 흡수돼(in-sample) 관계가 사라진다 — 실제로 그렇게 재면 r 이 +0.13 으로
+    # 나와 물리와 어긋난 것처럼 보인다.
+    pts = [{"cit": c, "corr": q} for _, c, _, q in rows]
+    vr_all, cr_all, odd = [], [], []
+    for i, (d, cit, vac, corr) in enumerate(rows):
+        vr = vac - (a0 + b0 * cit)
+        loo = GPCorrectionCurve([p for j, p in enumerate(pts) if j != i])
+        cr = corr - loo._post(cit)[0]
         vr_all.append(vr)
         cr_all.append(cr)
-        flag = "  ⚠" if abs(vr) > 2 * sd0 else ""
-        print(f"   {d:11s} {cit:5.1f} {vac:6.1f} {base:7.1f} {vr:+8.1f} "
-              f"{-VAC_COEF * vr:+8.2f} {cr:+8.3f}{flag}")
-    if len(vr_all) > 2:
-        _, _, rr, _ = ols(vr_all, cr_all)
-        print(f"\n   r(진공잔차, 보정잔차) = {rr:+.3f}  (n={len(vr_all)})")
-        print(f"   음의 상관이면 물리와 맞다 — 진공이 나쁠수록 출력이 낮다.")
-    print(f"   ⚠ 표시 = 기준선에서 2σ({2 * sd0:.1f} mbar) 이상 벗어난 회차. 미달 원인 1순위다.")
+        if abs(vr) > 2 * sd0:
+            odd.append((d, cit, vac, a0 + b0 * cit, vr, cr))
+    print(f"\n② 진공 잔차가 출력을 설명하는가 (누적 {len(rows)}건, 보정잔차는 LOOCV)")
+    print(f"   물리 예상 기울기 {-VAC_COEF:+.3f} MW/mbar")
+    print(f"   {'구간':30s} {'n':>3s} {'r':>7s} {'기울기':>9s}")
+    cits_r = [r[1] for r in rows]
+    for lo, hi, lab in ((-99, 99, "전체"),
+                        (20, 99, "CIT>=20 (출력이 진공에 민감)"),
+                        (-99, 20, "CIT<20 (상한·저온 — 영향 작음)")):
+        idx = [i for i, t in enumerate(cits_r) if lo <= t < hi]
+        if len(idx) < 4:
+            continue
+        _, bb, rr, _ = ols([vr_all[i] for i in idx], [cr_all[i] for i in idx])
+        print(f"   {lab:30s} {len(idx):3d} {rr:+7.3f} {bb:+9.3f}")
+    print("   → 관계가 약하다. 개별 회차는 크기가 맞아도(아래), 누적 전체에서는")
+    print("      진공 잔차로 보정값을 예측할 수 없다. 표본이 더 쌓여야 판정된다.")
+    print(f"\n   기준선에서 2σ({2 * sd0:.1f} mbar) 이상 벗어난 회차 — 미달 원인 1순위")
+    if not odd:
+        print("     없음")
+    else:
+        print(f"   {'일자':11s} {'CIT':>5s} {'진공':>6s} {'기준선':>7s} {'진공잔차':>8s} "
+              f"{'예상영향':>8s} {'보정잔차':>8s}")
+        for d, cit, vac, base, vr, cr in sorted(odd, key=lambda x: -abs(x[4])):
+            print(f"   {d:11s} {cit:5.1f} {vac:6.1f} {base:7.1f} {vr:+8.1f} "
+                  f"{-VAC_COEF * vr:+8.2f} {cr:+8.3f}")
+    print("   ※ 저온 구간(CIT<5)은 출력이 상한(Net 462)에 걸려 진공 편차가 출력에")
+    print("      거의 영향을 주지 않는다. 그 구간의 진공 잔차는 참고만 한다.")
 
     # ── ③ 연차 비교 ──────────────────────────────────────────────────────
     print("\n③ 같은 온도대 진공도 — 연차 비교")
     print("   계절 기전이라면 같은 CIT 에서 같은 진공이 나와야 한다.")
     print("   다르면 복수기 쪽 변화다(관 오염 · 냉각탑 성능 · 진공 누설).")
     for lo, hi in ((20, 25), (25, 30), (30, 35), (35, 41)):
-        old = [(r["date"], r["cit"], r["cp_meas"]) for r in seed if lo <= r["cit"] < hi]
-        add = [(d, cit, vac) for d, cit, _p, _rh, _cc, vac in new if lo <= cit < hi]
-        if not old or not add:
+        sub = [(d, c, v) for d, c, v, _ in rows if lo <= c < hi]
+        y25 = [x for x in sub if x[0][:4] == "2025"]
+        y26 = [x for x in sub if x[0][:4] == "2026"]
+        if not y25 or not y26:
             continue
-        mo = sum(v for _, _, v in old) / len(old)
-        mn = sum(v for _, _, v in add) / len(add)
-        print(f"\n   CIT {lo}~{hi}°C   누적 평균 {mo:5.1f} (n={len(old)})   "
-              f"신규 평균 {mn:5.1f} (n={len(add)})   차 {mn - mo:+5.1f} mbar"
-              f"   → 출력 {-VAC_COEF * (mn - mo):+.2f} MW")
-        for d, c, v in sorted(old + add, key=lambda x: x[1]):
-            tag = "  ← 신규" if any(d == x[0] for x in add) else ""
-            print(f"       {d}  CIT {c:5.1f}  진공 {v:5.1f}{tag}")
+        m5 = sum(v for _, _, v in y25) / len(y25)
+        m6 = sum(v for _, _, v in y26) / len(y26)
+        print(f"\n   CIT {lo}~{hi}°C   2025 평균 {m5:5.1f} (n={len(y25)})   "
+              f"2026 평균 {m6:5.1f} (n={len(y26)})   차 {m6 - m5:+5.1f} mbar"
+              f"   → 출력 {-VAC_COEF * (m6 - m5):+.2f} MW")
+        for d, c, v in sorted(sub, key=lambda x: x[1]):
+            print(f"       {d}  CIT {c:5.1f}  진공 {v:5.1f}")
+
+    # ── ④ 정비 전/후 비교 (복수기 청소 효과) ─────────────────────────────
+    if a.split:
+        pre = [(d, c, v - (a0 + b0 * c)) for d, c, v, _ in rows if d < a.split]
+        post = [(d, c, v - (a0 + b0 * c)) for d, c, v, _ in rows if d >= a.split]
+        print(f"\n④ {a.split} 전/후 진공 잔차 (온도 기준선 대비)")
+        if not post:
+            print(f"   {a.split} 이후 회차가 없습니다 — 청소 후 시험이 쌓이면 다시 돌리세요.")
+        else:
+            for label, sub in (("이전", pre), ("이후", post)):
+                if not sub:
+                    continue
+                n = len(sub)
+                mu = sum(v for _, _, v in sub) / n
+                sd = ((sum((v - mu) ** 2 for _, _, v in sub) / (n - 1)) ** 0.5
+                      if n > 1 else float("nan"))
+                print(f"   {label}  n={n:2d}  평균 잔차 {mu:+6.2f} mbar  sd {sd:5.2f}")
+            mp = sum(v for _, _, v in pre) / len(pre) if pre else 0.0
+            mq = sum(v for _, _, v in post) / len(post)
+            print(f"   변화 {mq - mp:+.2f} mbar  →  출력 {-VAC_COEF * (mq - mp):+.2f} MW")
+            print("   음(-)으로 내려가면 진공이 회복된 것이다. 그러면 청소 이전 데이터로")
+            print("   이후를 예측하면 과소 예측(기회손실)이 되므로, 이후 회차를 쌓아")
+            print("   곡선을 되올려야 한다. 반대라면 오염이 더 진행된 것이다.")
 
 
 if __name__ == "__main__":
