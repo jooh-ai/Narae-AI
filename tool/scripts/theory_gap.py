@@ -24,6 +24,19 @@
     ④ 복수기 청소 효과 환산 — 계수가 나오면 진공 개선 mbar → MW 로 옮긴다.
        2026-10 청소 전후 비교의 근거가 된다.
 
+IGV Turn-up 실시 여부와 무관하다
+    이 분석은 **이론값 대 이론값** 비교다. 두 컬럼 모두 CC실측을 쓰지 않고
+    W(IGV) 도 들어가지 않는다 — IGV 는 실측 출력을 바꾸는 운전 행위일 뿐,
+    이론 계산식에는 없다. 그래서 **모든 날짜를 쓸 수 있다.**
+
+        누적 DB(보정값 산출)  : IGV 실시분만 — `보정값 = CC실측 − 이론 − W` 이므로
+        이 분석(계수 역산)     : IGV 무관 — 실측 출력을 아예 참조하지 않으므로
+
+    2025-04-15, 2026-04-21 · 05-06 · 05-12 처럼 누적에서 영구 제외한 날짜도
+    표본으로 넣는 게 맞다. 표본이 커지면 계수가 그만큼 단단해진다. 다만 이
+    날짜들은 누적 DB 에 없으므로 6열 형식(CIT·대기압·RH·복수기압실측 포함)으로
+    줘야 한다 — 엑셀4 이론기준값은 이 스크립트가 직접 계산한다(검증 오차 0.19 MW).
+
 왜 우리 Tool 은 ①을 쓰는가 (설계 의도, 버그 아님)
     · base_table 이 이미 엑셀2 5중보정(온도·대기압·습도·복수기·열화)의 설계 진공
       기준 산출물이다. 실측 진공을 또 곱하면 이중 보정이다.
@@ -38,7 +51,9 @@
 실행:
     python scripts/theory_gap.py                       # ①②만 (담당자 값 불필요)
     python scripts/theory_gap.py --row 2026-04-15=408.3 --row 2026-03-04=441.6
-    python scripts/theory_gap.py --mgr baseload.csv     # 날짜,담당자이론값
+    python scripts/theory_gap.py --mgr baseload.csv
+        # 2열: 2026-04-15,408.3
+        # 6열: 2026-04-21,17.3,1006.2,41.0,49.8,430.1   ← 누적 DB 밖의 날짜
 """
 from __future__ import annotations
 
@@ -100,24 +115,42 @@ def poly_fit(xs: list[float], ys: list[float], deg: int) -> list[float]:
     return [v[i] / N[i][i] for i in range(m)]
 
 
-def load_mgr(paths: list[str], rows: list[str]) -> dict[str, float]:
-    """담당자 Base load 이론값 → {날짜: MW}. CSV 는 '날짜,값' (# 주석 허용)."""
-    out: dict[str, float] = {}
+def load_mgr(paths: list[str], rows: list[str]) -> dict[str, list[float]]:
+    """담당자 Base load 이론값 → {날짜: [값]} 또는 {날짜: [CIT,대기압,RH,실측,값]}.
+
+    이 분석은 **이론값 대 이론값** 비교라 CC실측을 쓰지 않는다. 그래서 IGV
+    Turn-up 실시 여부와 무관하고, 누적 DB 에 없는 날짜(IGV 미실시분 포함)도
+    5열 형식으로 주면 그대로 쓸 수 있다.
+
+        2열: 날짜, 담당자값                      → 나머지는 누적 DB 에서 조회
+        6열: 날짜, CIT, 대기압, RH, 복수기압실측, 담당자값
+    """
+    out: dict[str, list[float]] = {}
+
+    def put(date: str, vals: list[str]) -> None:
+        nums = [float(v) for v in vals]
+        if len(nums) not in (1, 5):
+            raise SystemExit(
+                f"{date}: 값이 1개(담당자값) 또는 5개(CIT,대기압,RH,실측,담당자값)"
+                f" 여야 합니다 — 받은 개수 {len(nums)}")
+        out[date] = nums
+
     for spec in rows:
         if "=" not in spec:
-            raise SystemExit(f"--row 형식은 날짜=값 입니다: {spec}")
+            raise SystemExit(f"--row 형식은 날짜=값[,...] 입니다: {spec}")
         d, v = spec.split("=", 1)
-        out[d.strip()] = float(v)
+        put(d.strip(), [c.strip() for c in v.split(",") if c.strip()])
     for p in paths:
         for ln in Path(p).read_text(encoding="utf-8").splitlines():
             ln = ln.split("#", 1)[0].strip()
             if not ln:
                 continue
             parts = [c.strip() for c in ln.replace("\t", ",").split(",")]
-            if len(parts) < 2 or not parts[1]:
+            parts = [c for c in parts if c]
+            if len(parts) < 2:
                 continue
             try:
-                out[parts[0]] = float(parts[1])
+                put(parts[0], parts[1:])
             except ValueError:      # 헤더 행
                 continue
     return out
@@ -126,9 +159,11 @@ def load_mgr(paths: list[str], rows: list[str]) -> dict[str, float]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mgr", action="append", default=[], metavar="CSV",
-                    help="담당자 Base load 이론값 CSV (날짜,공급가능용량)")
+                    help="담당자 Base load 이론값 CSV. 2열(날짜,공급가능용량) 또는 "
+                         "6열(날짜,CIT,대기압,RH,복수기압실측,공급가능용량)")
     ap.add_argument("--row", action="append", default=[], metavar="날짜=MW",
-                    help="담당자 값 직접 입력 (예: 2026-04-15=408.3)")
+                    help="직접 입력. 2026-04-15=408.3 또는 "
+                         "2026-04-21=17.3,1006.2,41.0,49.8,430.1")
     args = ap.parse_args()
 
     seed = {r["date"]: r
@@ -171,32 +206,49 @@ def main() -> None:
 
     mgr = load_mgr(args.mgr, args.row)
     if not mgr:
-        print("\n   담당자 값을 주시면 ③ 계수 역산까지 진행합니다:")
-        print("      python scripts/theory_gap.py --row 2026-04-15=408.3 ...")
+        print("\n   담당자 값을 주시면 ③ 계수 역산까지 진행합니다.")
+        print("   IGV 실시 여부는 무관합니다 — 이론값 대 이론값 비교라 CC실측을")
+        print("   쓰지 않습니다. 누적에서 제외한 IGV 미실시 날짜도 표본에 넣습니다.")
+        print("      누적 DB 안:  --row 2026-04-15=408.3")
+        print("      누적 DB 밖:  --row 2026-04-21=CIT,대기압,RH,복수기압실측,담당자값")
         return
 
     print()
     print("=" * 78)
     print("③ 계수 역산 — Δ(담당자 − 엑셀4) vs Δv(설계 − 실측 복수기압)")
     print("=" * 78)
+    def design_cp(cit: float) -> float:
+        return sum(c * cit ** k for k, c in enumerate(co))
+
     print(f"   {'날짜':12}{'CIT':>6}{'Δv':>7}{'엑셀4':>9}{'담당자':>9}"
-          f"{'Δ':>8}{'MW/mbar':>9}  구분")
+          f"{'Δ':>8}{'MW/mbar':>9}  구분   출처")
     pts: list[tuple[float, float, float]] = []      # (Δv, Δ, CIT)
-    for d, mv in sorted(mgr.items()):
-        r = seed.get(d)
-        if r is None:
-            print(f"   {d:12}  누적 DB 에 없는 날짜 — 건너뜀")
-            continue
-        if r.get("cp_design") is None or r.get("cp_meas") is None:
-            print(f"   {d:12}  복수기압 결측 — 건너뜀")
-            continue
-        dv = r["cp_design"] - r["cp_meas"]
-        dd = mv - r["theory"]
-        band = "난방기" if r["cit"] < HEAT_CIT else "비난방기"
+    for d, vals in sorted(mgr.items()):
+        if len(vals) == 5:                          # 6열 — 누적 DB 밖의 날짜
+            cit, press, rh, cpm, mv = vals
+            theory = eng.theory_cc(cit, press, rh=rh)
+            cpd, src = design_cp(cit), "직접입력(설계는 곡선)"
+        else:                                       # 2열 — 누적 DB 조회
+            r = seed.get(d)
+            if r is None:
+                print(f"   {d:12}  누적 DB 에 없는 날짜 — CIT·대기압·RH·복수기압"
+                      f"실측까지 6열로 주십시오")
+                continue
+            if r.get("cp_meas") is None:
+                print(f"   {d:12}  복수기압 실측 결측 — 건너뜀")
+                continue
+            cit, mv, theory, cpm = r["cit"], vals[0], r["theory"], r["cp_meas"]
+            if r.get("cp_design") is not None:
+                cpd, src = r["cp_design"], "누적DB"
+            else:
+                cpd, src = design_cp(cit), "누적DB(설계는 곡선)"
+        dv = cpd - cpm
+        dd = mv - theory
+        band = "난방기" if cit < HEAT_CIT else "비난방기"
         per = f"{dd / dv:9.3f}" if abs(dv) > 0.05 else "        —"
-        print(f"   {d:12}{r['cit']:6.1f}{dv:+7.1f}{r['theory']:9.2f}"
-              f"{mv:9.2f}{dd:+8.2f}{per}  {band}")
-        pts.append((dv, dd, r["cit"]))
+        print(f"   {d:12}{cit:6.1f}{dv:+7.1f}{theory:9.2f}"
+              f"{mv:9.2f}{dd:+8.2f}{per}  {band:5} {src}")
+        pts.append((dv, dd, cit))
 
     if len(pts) < 2:
         print("\n   표본이 2건 미만입니다 — 회귀 생략.")
