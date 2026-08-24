@@ -1,59 +1,57 @@
-"""엑셀4 이론기준값 vs Base load 실적표 공급가능용량 — 왜 다른가, 계수는 얼마인가.
+"""엑셀4 이론기준값 vs Base load 실적표 공급가능용량 — 왜 다른가.
 
-문제
-    담당자 엑셀에는 이론값 성격의 컬럼이 두 개 있고, 같은 날짜에서 값이 다르다.
+담당자 엑셀에는 이론값 성격의 컬럼이 두 개 있고, 같은 날짜에서 값이 다르다.
 
-      ① 엑셀4 '실측데이터' 시트 → **이론기준값(MW)**
-         온도 · 대기압 · Actual RH · 열화(Deg)  — 복수기는 **설계값 고정**
-         `보정값 = CC실측 − 이론기준값 − W(IGV)` 의 기준선. 우리 Tool 이 재현하는 값.
+  ① 엑셀4 '실측데이터' → **이론기준값(MW)**
+     `보정값 = CC실측 − 이론기준값 − W(IGV)` 의 기준선. 우리 Tool 이 재현하는 값.
+  ② Base load 실적표 → **공급가능용량(온도+Actual RH+mbar+진공)**
+     사후 실적 분석용. Dev.(MW) = CC실측(Net) − 이 컬럼(Net).
 
-      ② Base load 실적표 → **공급가능용량(온도+Actual RH+mbar+진공)**
-         ① + 그날 **실측 복수기압**까지 반영. 사후 실적 분석용.
+결론 (2026-08-24, 실적표 58건 전수 대조)
+    차이는 **진공 항이 아니다. 온도에 따라 벌어지는 곡선 차이다.**
 
-    두 시트의 CIT · 대기압 · RH · 복수기압 실측이 모두 동일함이 확인됐으므로
-    (2026-08 부장님 대조), 남은 차이는 **진공 항을 쓰는지 여부** 하나뿐이다.
+        Δ(담당자 − 우리) = -2.196 + 0.1183 × CIT     r = +0.751, 잔차 sd 1.16
 
-이 스크립트가 하는 일
-    ① 재현 검증 — 우리 Tool 이 엑셀4 이론기준값을 재현하는지 (기준선 정합 확인)
-    ② 결정적 검증 — 실측 복수기압이 설계와 거의 같은 날짜를 골라낸다.
-       진공 항 하나가 원인이라면 **그 날짜에서는 두 컬럼이 일치해야 한다.**
-       담당자 값 없이도 부장님이 엑셀 두 개만 열어 1분에 확인할 수 있다.
-    ③ 계수 역산 — 담당자 컬럼 값을 주면
-          Δ(= ②컬럼 − ①컬럼)  vs  Δv(= 복수기압 설계 − 실측)
-       를 회귀해 담당자 진공 보정계수(MW/mbar)를 되찾는다.
-    ④ 복수기 청소 효과 환산 — 계수가 나오면 진공 개선 mbar → MW 로 옮긴다.
-       2026-10 청소 전후 비교의 근거가 된다.
+    CIT 0°C 에서 -2.2 MW, 36°C 에서 +2.1 MW — 온도 전 구간에 걸쳐 4.3 MW 벌어진다.
+    즉 담당자 Base load 시트가 쓰는 곡선은 우리가 동결한 엑셉4 온도 Profile
+    테이블과 **모양이 다르다**(저온에서 낮고 고온에서 높다).
 
-IGV Turn-up 실시 여부와 무관하다
-    이 분석은 **이론값 대 이론값** 비교다. 두 컬럼 모두 CC실측을 쓰지 않고
-    W(IGV) 도 들어가지 않는다 — IGV 는 실측 출력을 바꾸는 운전 행위일 뿐,
-    이론 계산식에는 없다. 그래서 **모든 날짜를 쓸 수 있다.**
+    진공은 있어도 부차적이다. CIT 추세를 뺀 잔차와 진공잔차의 상관은
+    r = -0.344, 기울기 -0.060 MW/mbar (부호는 물리와 맞지만 크기가 작다).
+    남은 흩어짐 sd 1.09 MW 를 설명하지 못한다.
 
-        누적 DB(보정값 산출)  : IGV 실시분만 — `보정값 = CC실측 − 이론 − W` 이므로
-        이 분석(계수 역산)     : IGV 무관 — 실측 출력을 아예 참조하지 않으므로
+기각된 가설과 그 이유 — 같은 함정을 다시 밟지 않기 위해 남긴다
+    가설 A "컬럼 이름에 +진공 이 있으니 진공 항 하나 차이다"
+        표본 2건(2026-03-04, 04-15)에서 부호가 맞아 그럴듯해 보였다. 58건으로
+        늘리자 무너졌다. 2건으로 세운 가설은 2건짜리 가설이다.
+    가설 B "GT 도 같은 비율로 움직이니 진공(ST 전용)이 아니다"
+        **이 검증 자체가 무효다.** 담당자 이론 GT/CC 비는 우리 base 테이블의
+        GT비와 sd 0.00008(기계정밀도)로 일치한다 — 즉 담당자 이론 GT 는 CC 를
+        곡선 GT비로 나눈 값이고 독립 정보가 아니다. ΔGT 의 비례는 원인과 무관하다.
+        (실측 GT/CC 비는 sd 0.0032 로 흩어진다. 실측은 독립이고 이론은 아니다.)
 
-    2025-04-15, 2026-04-21 · 05-06 · 05-12 처럼 누적에서 영구 제외한 날짜도
-    표본으로 넣는 게 맞다. 표본이 커지면 계수가 그만큼 단단해진다. 다만 이
-    날짜들은 누적 DB 에 없으므로 6열 형식(CIT·대기압·RH·복수기압실측 포함)으로
-    줘야 한다 — 엑셀4 이론기준값은 이 스크립트가 직접 계산한다(검증 오차 0.19 MW).
+우리 Tool 은 ①을 쓰는 게 맞다 — 그리고 곡선 차이는 최종 입찰값에서 상쇄된다
+    `보정값 = CC실측 − 이론기준값` 이므로 기준선을 바꾸면 보정값이 같은 크기만큼
+    반대로 움직인다. 프로파일 생성 때 다시 더하므로 서로 지워진다. 실제로
+    기준선을 담당자 곡선으로 바꿔 36건을 다시 쌓고 GP 로 프로파일을 만들면
 
-왜 우리 Tool 은 ①을 쓰는가 (설계 의도, 버그 아님)
-    · base_table 이 이미 엑셀2 5중보정(온도·대기압·습도·복수기·열화)의 설계 진공
-      기준 산출물이다. 실측 진공을 또 곱하면 이중 보정이다.
-    · 입찰은 D+1~D+7 예측이다. 내일의 복수기 진공은 알 수 없다.
-    · 진공도 ≈ 33.64 + 1.242 × CIT (r=+0.947). 평균적인 진공 효과는 이미 온도
-      곡선에 실려 있고, 설계 대비 편차는 보정값이 흡수한다.
+        CIT  3 ~ 36°C (시험 33건)     |최대| 0.12 MW   ← 사실상 완전 상쇄
+        CIT -5 ~  2°C (시험  3건)     |최대| 2.79 MW
+        CIT ≤ -6, ≥ 37°C (시험 없음)  |최대| 4.56 MW
 
-주의 — vacuum_check.py 의 VAC_COEF = 0.1721 은 출처가 문서로 남아 있지 않은
-    유산 값이다. 이 스크립트로 역산한 계수가 나오면 그쪽을 갱신할 근거가 된다.
-    (2026-08 표본 2건은 0.242 / 0.438 MW/mbar 로 둘 다 0.1721 보다 크다.)
+    저온에서 상쇄가 깨지는 것은 GP 가 데이터 희박한 곳에서 사전평균으로
+    수축하기 때문이다 — 기준선에 더한 직선이 그대로 빠져나오지 않는다.
+    극저온 입찰이 실제로 나가는 구간이면 (a) 담당자에게 어느 곡선이 최신인지
+    확인하고 (b) 저온 시험 이력을 쌓아야 한다. 지금 저온 시험은 3건뿐이다.
+
+입력값 정합 (2026-08 대조)
+    누적 DB(엑셀4 출처)와 실적표의 CIT·대기압·RH·진공도·CC실측을 36건 대조한
+    결과 불일치는 소수점 반올림 4건(0.1)뿐이다. **진공도는 전 건 일치한다** —
+    2026-01-08 도 양쪽 모두 32.6 mbar 로 기록돼 있다.
 
 실행:
-    python scripts/theory_gap.py                       # ①②만 (담당자 값 불필요)
-    python scripts/theory_gap.py --row 2026-04-15=408.3 --row 2026-03-04=441.6
-    python scripts/theory_gap.py --mgr baseload.csv
-        # 2열: 2026-04-15,408.3
-        # 6열: 2026-04-21,17.3,1006.2,41.0,49.8,430.1   ← 누적 DB 밖의 날짜
+    python scripts/theory_gap.py
+    python scripts/theory_gap.py --csv other.csv
 """
 from __future__ import annotations
 
@@ -64,227 +62,160 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from wirye_capacity import constants as C  # noqa: E402
+from wirye_capacity.gp import GPCorrectionCurve  # noqa: E402
 from wirye_capacity.store import _SEED  # noqa: E402
-from wirye_capacity.theory import TheoryEngine  # noqa: E402
+from wirye_capacity.theory import (TheoryEngine, igv_turnup,  # noqa: E402
+                                   rh_corr)
 
-FLAT = 1.0          # |Δv| <= 이 값이면 '설계와 사실상 같다' → 결정적 검증 대상
-HEAT_CIT = 16.0     # 이 아래는 지역난방 추기가 있는 시기로 본다(복수기 유량 적음)
+DATA = Path(__file__).resolve().parent / "data" / "baseload.csv"
+# 진공 기준선 (vacuum_check.py 와 동일): 진공도 = 33.64 + 1.242 × CIT, r=+0.947
+VAC_A, VAC_B = 33.64, 1.242
 
 
-def ols(xs: list[float], ys: list[float]) -> dict:
-    """단순회귀 + 원점통과 회귀. 표본이 모자라면 None 항목으로 돌려준다."""
+def stat(v: list[float]) -> tuple[float, float, float]:
+    n = len(v)
+    mu = sum(v) / n
+    sd = (sum((x - mu) ** 2 for x in v) / (n - 1)) ** 0.5 if n > 1 else float("nan")
+    return mu, sd, max(abs(x) for x in v)
+
+
+def ols(xs: list[float], ys: list[float]) -> tuple[float, float, float, float]:
+    """단순회귀 → (절편, 기울기, r, 잔차 sd)."""
     n = len(xs)
-    out: dict = {"n": n}
-    sxx0 = sum(x * x for x in xs)
-    out["slope0"] = sum(x * y for x, y in zip(xs, ys)) / sxx0 if sxx0 else None
-    if n < 3:
-        out.update(a=None, b=None, r=None, sd=None)
-        return out
     mx, my = sum(xs) / n, sum(ys) / n
     sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
     sxx = sum((x - mx) ** 2 for x in xs)
     syy = sum((y - my) ** 2 for y in ys)
-    if sxx == 0 or syy == 0:
-        out.update(a=None, b=None, r=None, sd=None)
-        return out
     b = sxy / sxx
     a = my - b * mx
     res = [y - (a + b * x) for x, y in zip(xs, ys)]
-    out.update(a=a, b=b, r=sxy / (sxx * syy) ** 0.5,
-               sd=(sum(v * v for v in res) / (n - 2)) ** 0.5 if n > 2 else None)
-    return out
+    sd = (sum(v * v for v in res) / (n - 2)) ** 0.5 if n > 2 else float("nan")
+    return a, b, sxy / (sxx * syy) ** 0.5, sd
 
 
-def poly_fit(xs: list[float], ys: list[float], deg: int) -> list[float]:
-    """최소제곱 다항식 계수 [c0, c1, ...]. 설계 복수기압 곡선 복원용."""
-    m = deg + 1
-    A = [[x ** k for k in range(m)] for x in xs]
-    N = [[sum(A[i][a] * A[i][b] for i in range(len(xs))) for b in range(m)]
-         for a in range(m)]
-    v = [sum(A[i][a] * ys[i] for i in range(len(xs))) for a in range(m)]
-    for c in range(m):
-        p = max(range(c, m), key=lambda r: abs(N[r][c]))
-        N[c], N[p] = N[p], N[c]
-        v[c], v[p] = v[p], v[c]
-        for r in range(m):
-            if r != c and N[r][c]:
-                f = N[r][c] / N[c][c]
-                for k in range(c, m):
-                    N[r][k] -= f * N[c][k]
-                v[r] -= f * v[c]
-    return [v[i] / N[i][i] for i in range(m)]
-
-
-def load_mgr(paths: list[str], rows: list[str]) -> dict[str, list[float]]:
-    """담당자 Base load 이론값 → {날짜: [값]} 또는 {날짜: [CIT,대기압,RH,실측,값]}.
-
-    이 분석은 **이론값 대 이론값** 비교라 CC실측을 쓰지 않는다. 그래서 IGV
-    Turn-up 실시 여부와 무관하고, 누적 DB 에 없는 날짜(IGV 미실시분 포함)도
-    5열 형식으로 주면 그대로 쓸 수 있다.
-
-        2열: 날짜, 담당자값                      → 나머지는 누적 DB 에서 조회
-        6열: 날짜, CIT, 대기압, RH, 복수기압실측, 담당자값
-    """
-    out: dict[str, list[float]] = {}
-
-    def put(date: str, vals: list[str]) -> None:
-        nums = [float(v) for v in vals]
-        if len(nums) not in (1, 5):
-            raise SystemExit(
-                f"{date}: 값이 1개(담당자값) 또는 5개(CIT,대기압,RH,실측,담당자값)"
-                f" 여야 합니다 — 받은 개수 {len(nums)}")
-        out[date] = nums
-
-    for spec in rows:
-        if "=" not in spec:
-            raise SystemExit(f"--row 형식은 날짜=값[,...] 입니다: {spec}")
-        d, v = spec.split("=", 1)
-        put(d.strip(), [c.strip() for c in v.split(",") if c.strip()])
-    for p in paths:
-        for ln in Path(p).read_text(encoding="utf-8").splitlines():
-            ln = ln.split("#", 1)[0].strip()
-            if not ln:
-                continue
-            parts = [c.strip() for c in ln.replace("\t", ",").split(",")]
-            parts = [c for c in parts if c]
-            if len(parts) < 2:
-                continue
-            try:
-                put(parts[0], parts[1:])
-            except ValueError:      # 헤더 행
-                continue
+def load(path: Path) -> list[dict]:
+    """담당자 Base Load 실적표 CSV 로드."""
+    cols = ("date", "cit", "cip", "press", "rh", "vac",
+            "a_gt", "a_st", "a_cc_g", "a_cc_n", "s_gt", "s_st", "s_cc_g", "s_cc_n")
+    out = []
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        ln = ln.split("#", 1)[0].strip()
+        if not ln:
+            continue
+        p = [c.strip() for c in ln.split(",")]
+        if len(p) != len(cols):
+            raise SystemExit(f"{path.name}: 열 개수가 {len(cols)} 이어야 합니다 — {ln[:40]}")
+        try:
+            out.append({"date": p[0],
+                        **{k: float(v) for k, v in zip(cols[1:], p[1:])}})
+        except ValueError:              # 헤더 행
+            continue
     return out
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mgr", action="append", default=[], metavar="CSV",
-                    help="담당자 Base load 이론값 CSV. 2열(날짜,공급가능용량) 또는 "
-                         "6열(날짜,CIT,대기압,RH,복수기압실측,공급가능용량)")
-    ap.add_argument("--row", action="append", default=[], metavar="날짜=MW",
-                    help="직접 입력. 2026-04-15=408.3 또는 "
-                         "2026-04-21=17.3,1006.2,41.0,49.8,430.1")
+    ap.add_argument("--csv", default=str(DATA), help="Base load 실적표 CSV")
     args = ap.parse_args()
 
-    seed = {r["date"]: r
-            for r in json.loads(_SEED.read_text(encoding="utf-8"))}
+    rows = load(Path(args.csv))
     eng = TheoryEngine()
+    seed = {r["date"]: r for r in json.loads(_SEED.read_text(encoding="utf-8"))}
+    kf = (C.REF_DEG / C.DEFAULT_DEG)
 
-    print("=" * 78)
-    print("① 재현 검증 — 우리 Tool 이 엑셀4 '이론기준값' 을 재현하는가")
-    print("=" * 78)
-    worst = (0.0, "")
-    for d, r in sorted(seed.items()):
-        mine = eng.theory_cc(r["cit"], r["press"], rh=r.get("rh"))
-        e = abs(mine - r["theory"])
-        if e > worst[0]:
-            worst = (e, d)
-    print(f"   누적 {len(seed)}건 최대오차 {worst[0]:.3f} MW ({worst[1]})")
-    print("   → 기준선은 정합. 담당자 Base load 컬럼과의 차이는 정의 차이다.")
+    def ours(r: dict) -> float:
+        """우리 이론기준값 = 엑셀4 이론기준값 (검증 오차 0.19 MW)."""
+        return (eng.base_cc(r["cit"]) * kf / eng.p_corr(r["press"])
+                / rh_corr(r["rh"], r["cit"]))
 
-    have = [r for r in seed.values() if r.get("cp_design") is not None]
-    have.sort(key=lambda r: r["cit"])
-    co = poly_fit([r["cit"] for r in have], [r["cp_design"] for r in have], 3)
-    print(f"\n   설계 복수기압 곡선(3차, n={len(have)}): "
-          + " + ".join(f"{c:+.6g}·CIT^{k}" for k, c in enumerate(co)))
-    print("   → 설계 진공은 CIT 만의 함수다(날짜별 판단이 아니다).")
+    print("=" * 74)
+    print(f"① 재현 검증 — 우리 Tool 이 엑셀4 '이론기준값' 을 재현하는가 ({len(seed)}건)")
+    print("=" * 74)
+    e = [(abs(eng.theory_cc(r["cit"], r["press"], rh=r.get("rh")) - r["theory"]), d)
+         for d, r in seed.items()]
+    mx = max(e)
+    print(f"   최대오차 {mx[0]:.3f} MW ({mx[1]})  → 기준선은 정합하다.")
 
     print()
-    print("=" * 78)
-    print(f"② 결정적 검증 — 실측 복수기압이 설계와 거의 같은 날짜 (|Δv| ≤ {FLAT} mbar)")
-    print("=" * 78)
-    print("   진공 항 하나가 원인이라면 이 날짜들에서는 두 컬럼이 일치해야 한다.")
-    print(f"\n   {'날짜':12}{'CIT':>6}{'실측':>7}{'설계':>7}{'Δv':>7}   엑셀4 이론기준값")
-    flat = [r for r in have if abs(r["cp_design"] - r["cp_meas"]) <= FLAT]
-    for r in sorted(flat, key=lambda r: abs(r["cp_design"] - r["cp_meas"])):
-        dv = r["cp_design"] - r["cp_meas"]
-        print(f"   {r['date']:12}{r['cit']:6.1f}{r['cp_meas']:7.1f}"
-              f"{r['cp_design']:7.1f}{dv:+7.1f}{r['theory']:19.2f}")
-    print(f"\n   → 위 {len(flat)}건의 Base load '공급가능용량' 을 확인해 주십시오.")
-    print("      거의 같다  → 진공 항 차이로 확정. 계수만 역산하면 끝난다.")
-    print("      크게 다르다 → 진공 외에 다른 항(Deg 등)이 하나 더 다르다.")
+    print("=" * 74)
+    print(f"② Base load '공급가능용량' 과의 차이는 무엇의 함수인가 (n={len(rows)})")
+    print("=" * 74)
+    d = [r["s_cc_g"] - ours(r) for r in rows]
+    mu, sd, m = stat(d)
+    print(f"   Δ = 담당자 − 우리 : 평균 {mu:+.3f}  sd {sd:.3f}  |최대| {m:.2f} MW")
+    print(f"\n   {'변수':10}{'r':>8}{'기울기':>11}")
+    cand = {"CIT": [r["cit"] for r in rows],
+            "대기압": [r["press"] for r in rows],
+            "RH": [r["rh"] for r in rows],
+            "진공도": [r["vac"] for r in rows],
+            "진공잔차": [r["vac"] - (VAC_A + VAC_B * r["cit"]) for r in rows]}
+    for name, xs in cand.items():
+        _, b, r_, _ = ols(xs, d)
+        print(f"   {name:10}{r_:+8.3f}{b:+11.4f}")
 
-    mgr = load_mgr(args.mgr, args.row)
-    if not mgr:
-        print("\n   담당자 값을 주시면 ③ 계수 역산까지 진행합니다.")
-        print("   IGV 실시 여부는 무관합니다 — 이론값 대 이론값 비교라 CC실측을")
-        print("   쓰지 않습니다. 누적에서 제외한 IGV 미실시 날짜도 표본에 넣습니다.")
-        print("      누적 DB 안:  --row 2026-04-15=408.3")
-        print("      누적 DB 밖:  --row 2026-04-21=CIT,대기압,RH,복수기압실측,담당자값")
-        return
+    a, b, r_, sdr = ols(cand["CIT"], d)
+    lo, hi = min(cand["CIT"]), max(cand["CIT"])
+    print(f"\n   Δ = {a:+.3f} {b:+.4f} × CIT     r={r_:+.3f}  잔차sd {sdr:.3f}")
+    print(f"   → CIT {lo:.1f}°C {a + b * lo:+.1f} MW,  {hi:.1f}°C {a + b * hi:+.1f} MW"
+          f" — 관측 구간에서 {b * (hi - lo):.1f} MW 벌어지는 곡선 모양 차이다.")
 
-    print()
-    print("=" * 78)
-    print("③ 계수 역산 — Δ(담당자 − 엑셀4) vs Δv(설계 − 실측 복수기압)")
-    print("=" * 78)
-    def design_cp(cit: float) -> float:
-        return sum(c * cit ** k for k, c in enumerate(co))
-
-    print(f"   {'날짜':12}{'CIT':>6}{'Δv':>7}{'엑셀4':>9}{'담당자':>9}"
-          f"{'Δ':>8}{'MW/mbar':>9}  구분   출처")
-    pts: list[tuple[float, float, float]] = []      # (Δv, Δ, CIT)
-    for d, vals in sorted(mgr.items()):
-        if len(vals) == 5:                          # 6열 — 누적 DB 밖의 날짜
-            cit, press, rh, cpm, mv = vals
-            theory = eng.theory_cc(cit, press, rh=rh)
-            cpd, src = design_cp(cit), "직접입력(설계는 곡선)"
-        else:                                       # 2열 — 누적 DB 조회
-            r = seed.get(d)
-            if r is None:
-                print(f"   {d:12}  누적 DB 에 없는 날짜 — CIT·대기압·RH·복수기압"
-                      f"실측까지 6열로 주십시오")
-                continue
-            if r.get("cp_meas") is None:
-                print(f"   {d:12}  복수기압 실측 결측 — 건너뜀")
-                continue
-            cit, mv, theory, cpm = r["cit"], vals[0], r["theory"], r["cp_meas"]
-            if r.get("cp_design") is not None:
-                cpd, src = r["cp_design"], "누적DB"
-            else:
-                cpd, src = design_cp(cit), "누적DB(설계는 곡선)"
-        dv = cpd - cpm
-        dd = mv - theory
-        band = "난방기" if cit < HEAT_CIT else "비난방기"
-        per = f"{dd / dv:9.3f}" if abs(dv) > 0.05 else "        —"
-        print(f"   {d:12}{cit:6.1f}{dv:+7.1f}{theory:9.2f}"
-              f"{mv:9.2f}{dd:+8.2f}{per}  {band:5} {src}")
-        pts.append((dv, dd, cit))
-
-    if len(pts) < 2:
-        print("\n   표본이 2건 미만입니다 — 회귀 생략.")
-        return
-
-    def show(label: str, sub: list[tuple[float, float, float]]) -> None:
-        if len(sub) < 2:
-            print(f"   {label:10} n={len(sub)} — 표본 부족")
-            return
-        f = ols([p[0] for p in sub], [p[1] for p in sub])
-        line = f"   {label:10} n={f['n']:2}  원점통과 {f['slope0']:+.3f} MW/mbar"
-        if f["b"] is not None:
-            line += (f"   |  절편 {f['a']:+.2f}  기울기 {f['b']:+.3f}"
-                     f"  r={f['r']:+.3f}  잔차sd {f['sd']:.2f}")
-        print(line)
+    res = [y - (a + b * x) for x, y in zip(cand["CIT"], d)]
+    _, b2, r2, sd2 = ols(cand["진공잔차"], res)
+    print(f"\n   CIT 추세 제거 후 잔차 vs 진공잔차 : r={r2:+.3f}"
+          f"  {b2:+.4f} MW/mbar  잔차sd {sd2:.3f}")
+    print("   → 진공은 있어도 부차적이다. 남은 흩어짐을 설명하지 못한다.")
 
     print()
-    show("전체", pts)
-    show("난방기", [p for p in pts if p[2] < HEAT_CIT])
-    show("비난방기", [p for p in pts if p[2] >= HEAT_CIT])
-    print("\n   난방기·비난방기 기울기가 다르면 정상이다 — 열병합이라 지역난방")
-    print("   추기량에 따라 복수기로 내려가는 증기량이 달라, mbar 당 민감도가 바뀐다.")
+    print("=" * 74)
+    print("③ 왜 GT 검증으로는 판정할 수 없는가 (가설 B 기각)")
+    print("=" * 74)
+    g1 = [r["s_gt"] / r["s_cc_g"] - eng.base_gt(r["cit"]) / eng.base_cc(r["cit"])
+          for r in rows]
+    g2 = [r["a_gt"] / r["a_cc_g"] - eng.base_gt(r["cit"]) / eng.base_cc(r["cit"])
+          for r in rows]
+    print(f"   GT/CC 비 − base 테이블 GT비")
+    print(f"      담당자 이론값 : sd {stat(g1)[1]:.5f}   |최대| {stat(g1)[2]:.5f}")
+    print(f"      실측(Actual) : sd {stat(g2)[1]:.5f}   |최대| {stat(g2)[2]:.5f}")
+    print("   → 담당자 이론 GT 는 CC 를 곡선 GT비로 나눈 값(기계정밀도로 일치).")
+    print("      독립 정보가 아니므로 ΔGT 의 비례는 원인을 가리지 못한다.")
 
-    f = ols([p[0] for p in pts], [p[1] for p in pts])
-    k = f["slope0"]
-    if k:
-        print()
-        print("=" * 78)
-        print("④ 복수기 청소 효과 환산 (2026-10 예정)")
-        print("=" * 78)
-        print(f"   역산 계수 {k:+.3f} MW/mbar 기준")
-        for imp in (3, 5, 8, 10):
-            print(f"      진공 {imp:2}mbar 개선 → 출력 {k * imp:+.2f} MW")
-        print("\n   ※ 이 계수는 담당자 '이론값' 컬럼의 보정계수다. 실제 출력이")
-        print("      그만큼 올라간다는 보증은 아니다 — 청소 후 실측으로 확인해야 한다.")
-        print("      (vacuum_check.py --split 2026-10-01)")
+    print()
+    print("=" * 74)
+    print("④ 최종 입찰값에 영향이 있는가 — 기준선을 담당자 곡선으로 바꿔 재계산")
+    print("=" * 74)
+    use = [r for r in seed.values() if r["date"] in {x["date"] for x in rows}]
+
+    def bid(shift) -> dict[int, float]:
+        gp = GPCorrectionCurve([{"cit": r["cit"],
+                                 "corr": r["cc_meas"] - (r["theory"] + shift(r["cit"]))
+                                 - r["w"]} for r in use])
+        return {t: eng.base_cc(t) * kf + shift(t) + igv_turnup(t) + gp(t)
+                for t in range(-20, 41)}
+
+    p0, p1 = bid(lambda t: 0.0), bid(lambda t: a + b * t)
+    cits = sorted(r["cit"] for r in use)
+    n_dense = sum(1 for c in cits if c >= 3)
+    print(f"   누적 {len(use)}건 재적층. 시험 CIT {cits[0]:.1f} ~ {cits[-1]:.1f}°C "
+          f"— 3°C 이상에 {n_dense}건, 그 아래는 {len(cits) - n_dense}건뿐이다.")
+    print(f"\n   {'CIT':>5}{'우리 기준선':>13}{'담당자 기준선':>15}{'차이':>9}")
+    for t in range(-20, 41, 5):
+        print(f"   {t:5}{p0[t]:13.2f}{p1[t]:15.2f}{p1[t] - p0[t]:+9.3f}")
+
+    bands = [("시험 촘촘 (CIT 3~36)", range(3, 37)),
+             ("저온 경계 (CIT -5~2, 시험 2건)", range(-5, 3)),
+             ("완전 외삽 (CIT ≤ -6, ≥ 37)",
+              [t for t in range(-20, 41) if t <= -6 or t >= 37])]
+    print()
+    for lab, rng in bands:
+        v = [abs(p1[t] - p0[t]) for t in rng]
+        print(f"   {lab:32} |최대| {max(v):6.3f} MW")
+    print("\n   → 시험이 촘촘한 구간에서는 곡선 차이가 보정값에 흡수되어 사실상")
+    print("      완전히 상쇄된다. 우리 입찰값은 그 구간에서 안전하다.")
+    print("   → 저온으로 갈수록 상쇄가 깨진다. GP 가 데이터 희박한 곳에서 평균으로")
+    print("      수축하기 때문에, 기준선에 더한 직선이 그대로 빠져나오지 않는다.")
+    print("      극저온 입찰이 실제로 나가는 구간이면 담당자에게 어느 곡선이")
+    print("      최신인지 확인하고, 저온 시험 이력을 쌓아야 한다.")
 
 
 if __name__ == "__main__":
