@@ -258,9 +258,20 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.deg_in = QtWidgets.QDoubleSpinBox()
             self.deg_in.setRange(1.0, 1.2); self.deg_in.setSingleStep(0.001)
             self.deg_in.setDecimals(3); self.deg_in.setValue(C.DEFAULT_DEG)
+            # IGV turn-up 실시 여부 — 보정값 = CC실측 − 이론 − W(IGV) 이므로, 안 한
+            # turn-up 을 빼면 보정값이 4~6 MW 낮게 기록된다. 2026-08 시운전에서 8건 중
+            # 3건이 미실시였고 그것이 미달로 오판됐다. 기본은 실시(체크).
+            self.igv_chk = QtWidgets.QCheckBox("IGV Turn-up 실시")
+            self.igv_chk.setChecked(True)
+            self.igv_chk.setToolTip(
+                "체크 : W(IGV) 를 온도밴드 기본값으로 적용 (여름 +6 / 봄·가을 +4 / 극저온 +2·0)\n"
+                "해제 : W = 0 — Turn-up 을 실시하지 않은 시험\n\n"
+                "잘못 두면 보정값이 4~6 MW 어긋나 누적 곡선이 오염됩니다.\n"
+                "값을 직접 넣어야 하면 [Test 결과 List-up] 에서 W 열을 편집하세요.")
             f1.addRow("테스트 날짜", self.date_in)
             f1.addRow("시작 시각", self.start_in)
             f1.addRow("Degradation", self.deg_in)
+            f1.addRow("", self.igv_chk)
 
             # ② 입찰 조건
             g2 = QtWidgets.QGroupBox("입찰 조건")
@@ -392,6 +403,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     bid_day=self.bidday_in.text().strip() or None,
                     accumulate=self.accum_chk.isChecked(),
                     correction_method=_METHODS[self.method_cb.currentIndex()],
+                    w=None if self.igv_chk.isChecked() else 0.0,
                     margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
@@ -993,6 +1005,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     engine=self.engine, deg=self.deg_in.value(),
                     bid_day=self.bidday_in.text().strip() or None,
                     correction_method=_METHODS[self.method_cb.currentIndex()],
+                    w=None if self.igv_chk.isChecked() else 0.0,
                     margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,

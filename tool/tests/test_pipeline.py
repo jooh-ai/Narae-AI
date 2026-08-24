@@ -205,3 +205,29 @@ def test_stamp_records_method(tmp_path, forecast):
         assert f"보정방법 {label}" in stamp, stamp
         assert "마진0.8" in stamp, stamp
     assert len(fps) == 1, "지문은 방법과 무관해야 한다(기존 입찰파일이 구버전으로 오판되면 안 됨)"
+
+
+# ── IGV turn-up 미실시 처리 (2026-08 시운전에서 8건 중 3건이 미실시였다) ──
+
+def test_no_igv_records_zero_w(forecast):
+    """W 를 0 으로 주면 보정값이 그만큼 높게(=올바르게) 기록된다.
+
+    보정값 = CC실측 − 이론 − W 이므로, 실시하지 않은 turn-up 을 빼면 보정값이
+    4~6 MW 낮게 남아 누적 곡선을 끌어내린다. 실제로 그 3건이 미달로 오판됐다.
+    """
+    acq = {"2025-09-12": AcquiredTest(date="2025-09-12", cit=25.5, pressure=1008.0,
+                                      cc_meas=414.5, season="여름")}
+    out = {}
+    for label, w in (("auto", None), ("no_igv", 0.0)):
+        store = MeasurementStore(":memory:")
+        store.seed()
+        res = run_pipeline(date="2025-09-12", store=store,
+                           connector=MockRimsConnector(dict(acq)),
+                           forecast=forecast, accumulate=True, w=w)
+        out[label] = res.new_record
+
+    assert out["auto"].w == 6.0                    # 여름 온도밴드 기본값
+    assert out["no_igv"].w == 0.0
+    # 이론기준값은 같고, 보정값만 W 만큼 차이난다
+    assert out["auto"].theory == pytest.approx(out["no_igv"].theory)
+    assert out["no_igv"].corr == pytest.approx(out["auto"].corr + 6.0)

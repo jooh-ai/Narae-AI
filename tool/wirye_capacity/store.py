@@ -137,14 +137,19 @@ class MeasurementStore:
 
     def compute_from_rims(self, connector, date: str, *, start: str = "17:00",
                           engine: TheoryEngine | None = None, deg: float = C.DEFAULT_DEG,
-                          season: str | None = None) -> TestRecord:
+                          season: str | None = None, w: float | None = None) -> TestRecord:
         """RiMS에서 테스트 1건 자동취득 → 보정값 계산 (저장은 하지 않음 = 확인용).
 
         connector 는 .acquire(date, start)→AcquiredTest 인터페이스(mock/실제 동일).
+
+        w: IGV turn-up. None 이면 온도밴드 기본값(+6/+4/+2/0). IGV turn-up 을 실시하지
+           않은 시험은 반드시 0 을 준다 — 보정값 = CC실측 − 이론 − W 이므로, 안 한
+           turn-up 을 빼면 보정값이 그만큼 낮게 기록된다(2026-08 시운전에서 8건 중
+           3건이 미실시였고, 그 3건이 4~6 MW 낮게 나와 미달로 오판됐다).
         """
         acq = connector.acquire(date, start)
         return self.build_record(
-            cit=acq.cit, press=acq.pressure, cc_meas=acq.cc_meas, w=None,
+            cit=acq.cit, press=acq.pressure, cc_meas=acq.cc_meas, w=w,
             rh=getattr(acq, "rh", None), cp_meas=getattr(acq, "cp_meas", None),
             cp_design=getattr(acq, "cp_design", None),
             season=season or getattr(acq, "season", None), date=date,

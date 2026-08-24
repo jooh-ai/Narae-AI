@@ -47,7 +47,7 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                  bid_day: str | None = None, template_path: str | Path = DEFAULT_TEMPLATE,
                  accumulate: bool = False, correction_method: str = "bin",
                  bandwidth: float = 3.5, margin_k: float = 0.0,
-                 start: str = "17:00") -> PipelineResult:
+                 start: str = "17:00", w: float | None = None) -> PipelineResult:
     """전 단계 실행. connector 가 있으면 RiMS 자동취득.
 
     accumulate=False(기본): 취득·보정값 계산만(확인용) — 누적에 저장 안 함.
@@ -59,6 +59,7 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
       k=0.8 이면 시드 32건에서 미달 0건(오차는 커지지만 전부 안전한 방향).
     output_path 가 있으면 엑셀3 양식 입찰 파일 생성.
     start: 테스트 시작 시각(기본 17:00, 1시간 창). 다른 시각에 수행된 테스트 취득용.
+    w: IGV turn-up. None 이면 온도밴드 기본값. IGV 를 실시하지 않은 시험은 0 을 준다.
     """
     eng = engine or TheoryEngine()
 
@@ -74,7 +75,8 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     duplicate_skipped = False
     acq_warnings: list = []
     if connector is not None:
-        new_record = store.compute_from_rims(connector, date, start=start, engine=eng, deg=deg)
+        new_record = store.compute_from_rims(connector, date, start=start, engine=eng,
+                                             deg=deg, w=w)
         # 취득 품질 경고(집계 상태·CC vs GT+ST 불일치 등). 지원하는 커넥터만 채운다.
         acq_warnings = list(getattr(connector, "last_warnings", None) or [])
         if accumulate:

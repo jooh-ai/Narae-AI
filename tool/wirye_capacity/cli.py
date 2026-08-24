@@ -108,6 +108,9 @@ def main(argv: list[str] | None = None) -> int:
                    help="온도 구간평균 사용(엑셀4 방식)")
     r.add_argument("--margin", type=float, default=0.0, metavar="K",
                    help="미달 방지 안전마진 계수(0=미적용, 0.8 권장). 마진=K×구간실측변동")
+    r.add_argument("--no-igv", dest="no_igv", action="store_true",
+                   help="IGV Turn-up 미실시 시험 — W=0 으로 보정값을 산출한다. "
+                        "빼먹으면 보정값이 4~6 MW 낮게 기록된다")
     r.add_argument("--accumulate", action="store_true",
                    help="이 테스트를 누적에 반영(저장). 기본은 확인용(미반영)")
     r.add_argument("--seed", action="store_true", help="DB가 비었으면 시드 32건 적재")
@@ -182,7 +185,8 @@ def main(argv: list[str] | None = None) -> int:
                                               correction_method()),
                            margin_k=args.margin,
                            template_path=args.template or DEFAULT_TEMPLATE,
-                           start=args.start)
+                           start=args.start,
+                           w=0.0 if args.no_igv else None)
         src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
         print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
         print(f"보정 방법   : {METHOD_LABEL.get(res.correction_method, res.correction_method)}"
