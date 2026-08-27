@@ -283,9 +283,29 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 "담당자 방침입니다. IGV 실시 여부에 따라 출력 변동이 너무 커서,\n"
                 "일관성을 위해 IGV 실시 시험만 보정값에 사용합니다.\n"
                 "잘못 두고 반영하면 그 회차만이 아니라 보정곡선 전체가 오염됩니다.")
+            # 상대습도 재정의 — MBL 습도 센서가 드리프트 중이라(10개월에 10%p) 취득값이
+            # 담당자 표와 크게 어긋나는 회차가 있다(2026-05-27: MBL 32.5% vs 표 74.1%).
+            # 습도 1개가 이론기준값과 보정값을 2.14 MW 움직이므로 손으로 고칠 수 있어야
+            # 한다. 자동 대체는 하지 않는다 — 편차만으로는 정상·고장을 못 가른다.
+            self.rh_in = QtWidgets.QDoubleSpinBox()
+            self.rh_in.setRange(0.0, 100.0); self.rh_in.setDecimals(1)
+            self.rh_in.setSingleStep(0.1); self.rh_in.setSuffix(" %")
+            self.rh_in.setValue(60.0); self.rh_in.setEnabled(False)
+            self.rh_auto = QtWidgets.QCheckBox("취득값 사용(RiMS)")
+            self.rh_auto.setChecked(True)
+            self.rh_auto.toggled.connect(
+                lambda: self.rh_in.setEnabled(not self.rh_auto.isChecked()))
+            self.rh_auto.setToolTip(
+                "체크 : RiMS 취득 습도를 그대로 사용 (기본)\n"
+                "해제 : 왼쪽 값으로 계산 — 취득 습도가 담당자 표와 크게 다를 때\n\n"
+                "MBL 습도 센서가 드리프트 중입니다(10개월에 10%p).\n"
+                "습도 1개가 보정값을 2 MW 넘게 움직이므로, 취득값이 의심되면\n"
+                "담당자 표 값을 직접 넣으십시오. 수동 지정은 경고창에 기록됩니다.")
             f1.addRow("테스트 날짜", self.date_in)
             f1.addRow("시작 시각", self.start_in)
             f1.addRow("Degradation", self.deg_in)
+            f1.addRow("상대습도 RH", self.rh_in)
+            f1.addRow("", self.rh_auto)
             f1.addRow("", self.igv_chk)
 
             # ② 입찰 조건
@@ -434,6 +454,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     accumulate=self.accum_chk.isChecked(),
                     correction_method=_METHODS[self.method_cb.currentIndex()],
                     igv=self.igv_chk.isChecked(),
+                    rh=None if self.rh_auto.isChecked() else self.rh_in.value(),
                     margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
@@ -454,7 +475,16 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 st = ("⛔ IGV 미실시 — 누적 제외(방침)" if res.igv_skipped else
                       "✅ 누적 반영됨" if res.reflected else
                       "⚠ 중복 — 건너뜀" if res.duplicate_skipped else "확인용(미반영)")
-                rh_txt = f"RH {r.rh:.1f}%" if r.rh is not None else "RH 60%(고정)"
+                if r.rh is None:
+                    rh_txt = "RH 60%(고정)"
+                else:
+                    rh_txt = f"RH {r.rh:.1f}%"
+                    if not self.rh_auto.isChecked():
+                        rh_txt += "(수동)"
+                    else:
+                        # 취득 습도를 입력칸에 채워 둔다 — 값이 의심스러울 때
+                        # 체크만 풀고 바로 고칠 수 있게(다시 입력하지 않도록).
+                        self.rh_in.setValue(r.rh)
                 # 취득 대기압을 반드시 같이 보여 준다 — 이론기준값은 대기압에
                 # 0.4 MW/mbar 로 민감해서, 이 값이 없으면 담당자 표와 대조할 때
                 # 0.1 MW 차이의 원인을 짚을 수 없다(2026-08 시운전 1회차에서 확인).

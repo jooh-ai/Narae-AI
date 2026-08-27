@@ -261,3 +261,42 @@ def test_w_zero_is_not_a_no_igv_marker(forecast):
     assert res.new_record.w == 0.0                 # 온도밴드값이 0
     assert res.reflected is True                   # 그래도 누적된다
     assert res.igv_skipped is False
+
+
+def test_rh_override_changes_theory_and_correction(forecast):
+    """습도 재정의 — MBL 센서 드리프트 회차를 사람이 고칠 수 있어야 한다.
+
+    2026-05-27 실제 사례: MBL 취득 32.5% vs 담당자 표 74.1%. 습도 하나가
+    이론기준값과 보정값을 2.14 MW 움직인다. 재정의가 안 되면 그 오차가 그대로
+    누적에 들어가 25~30°C 구간 곡선을 끌어내린다.
+    """
+    acq = AcquiredTest(date="2026-05-27", cit=25.41, pressure=993.4,
+                       cc_meas=407.54, rh=32.5, season="여름")
+    base = run_pipeline(date="2026-05-27", store=MeasurementStore(":memory:"),
+                        connector=MockRimsConnector({"2026-05-27": acq}),
+                        forecast=forecast)
+    fixed = run_pipeline(date="2026-05-27", store=MeasurementStore(":memory:"),
+                         connector=MockRimsConnector({"2026-05-27": acq}),
+                         forecast=forecast, rh=74.1)
+    assert base.new_record.rh == 32.5              # 기본은 취득값 그대로
+    assert fixed.new_record.rh == 74.1             # 재정의가 먹는다
+    # 습도만 바꿨는데 이론·보정이 2 MW 넘게 움직인다 — 그래서 이 기능이 필요하다
+    assert fixed.new_record.theory < base.new_record.theory - 2.0
+    assert fixed.new_record.corr > base.new_record.corr + 2.0
+    # 손으로 바꾼 것은 반드시 화면에 남는다
+    assert any("수동 지정" in m for m in fixed.acq_warnings)
+    assert not any("수동 지정" in m for m in base.acq_warnings)
+
+
+def test_rh_override_survives_accumulation(forecast):
+    """재정의한 습도가 누적 DB 에 그대로 저장되는가 — 저장 후 재계산에도 남아야 한다."""
+    acq = AcquiredTest(date="2026-05-27", cit=25.41, pressure=993.4,
+                       cc_meas=407.54, rh=32.5, season="여름")
+    store = MeasurementStore(":memory:")
+    res = run_pipeline(date="2026-05-27", store=store,
+                       connector=MockRimsConnector({"2026-05-27": acq}),
+                       forecast=forecast, accumulate=True, rh=74.1)
+    assert res.reflected is True
+    saved = [r for r in store.all() if r.date == "2026-05-27"][0]
+    assert saved.rh == 74.1
+    assert abs(saved.corr - res.new_record.corr) < 1e-9

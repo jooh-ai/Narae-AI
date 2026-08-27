@@ -49,7 +49,8 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                  bid_day: str | None = None, template_path: str | Path = DEFAULT_TEMPLATE,
                  accumulate: bool = False, correction_method: str = "bin",
                  bandwidth: float = 3.5, margin_k: float = 0.0,
-                 start: str = "17:00", igv: bool = True) -> PipelineResult:
+                 start: str = "17:00", igv: bool = True,
+                 rh: float | None = None) -> PipelineResult:
     """전 단계 실행. connector 가 있으면 RiMS 자동취득.
 
     accumulate=False(기본): 취득·보정값 계산만(확인용) — 누적에 저장 안 함.
@@ -69,6 +70,9 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
 
       W=0 을 미실시 표식으로 쓸 수 없다는 점에 주의. igv_turnup() 은 극저온
       구간(CIT<0)에서도 0 을 돌려주므로 둘을 구분할 수 없다. 그래서 별도 인자다.
+    rh: 상대습도 재정의(%). None 이면 취득값을 쓴다. MBL 센서 드리프트로 취득 습도가
+      담당자 표와 크게 어긋날 때 사람이 옳은 값을 넣는다 — 습도 1개가 보정값을
+      2 MW 이상 움직인다(2026-05-27: MBL 32.5% vs 표 74.1% → 보정값 -2.65 vs -0.50).
     """
     eng = engine or TheoryEngine()
 
@@ -86,9 +90,15 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     igv_skipped = False
     if connector is not None:
         new_record = store.compute_from_rims(connector, date, start=start, engine=eng,
-                                             deg=deg, w=None if igv else 0.0)
+                                             deg=deg, w=None if igv else 0.0, rh=rh)
         # 취득 품질 경고(집계 상태·CC vs GT+ST 불일치 등). 지원하는 커넥터만 채운다.
         acq_warnings = list(getattr(connector, "last_warnings", None) or [])
+        if rh is not None:
+            # 습도를 손으로 바꾼 것은 반드시 기록에 남는다 — 보정값을 2 MW 넘게
+            # 움직이는 개입이라 나중에 "왜 이 값이지" 를 되짚을 수 있어야 한다.
+            acq_rh = getattr(getattr(connector, "last_acquired", None), "rh", None)
+            src = f"취득 {acq_rh:.1f}% → " if isinstance(acq_rh, (int, float)) else ""
+            acq_warnings.append(f"상대습도 수동 지정: {src}{rh:.1f}% 로 계산했습니다")
         if accumulate:
             if not igv:
                 # 담당자 방침: IGV 미실시 시험은 보정값에 쓰지 않는다. 반영 요청이

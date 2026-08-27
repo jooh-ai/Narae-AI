@@ -214,11 +214,15 @@ class OpcUaRimsConnector:
         rh, rh_src = pick_rh(vals.get("rh"), vals.get("rh_alt"))
         # 파이프라인이 화면에 띄울 수 있게 커넥터에도 남긴다(store 는 AcquiredTest 를 버린다).
         self.last_warnings = self._quality_warnings(vals, rh_src)
-        return AcquiredTest(
+        acq = AcquiredTest(
             date=date, cit=vals["cit"], pressure=vals["pressure"], cc_meas=vals["cc_meas"],
             gt_meas=vals.get("gt_meas"), st_meas=vals.get("st_meas"), rh=rh,
             rh_mbl=_num(vals.get("rh")), rh_cxm=_num(vals.get("rh_alt")), rh_source=rh_src,
             warnings=list(self.last_warnings))
+        # 습도를 손으로 바꾼 경우 '무엇을 무엇으로 바꿨는지' 를 화면에 남기려면
+        # 원래 취득값이 필요하다. store 는 AcquiredTest 를 버리므로 여기 보관한다.
+        self.last_acquired = acq
+        return acq
 
     def _quality_warnings(self, vals: dict, rh_src: str = "mbl") -> list[str]:
         """취득값을 그대로 쓰되, 사람이 확인해야 할 사항을 문장으로 모은다.
