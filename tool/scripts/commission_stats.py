@@ -22,6 +22,20 @@ R² 를 조심할 것
 
     n<10 에서는 R² 를 판단 근거로 쓰지 않는다. MAE·RMSE·편차와 미달 건수를 본다.
 
+R² 대신 무엇을 보는가 — 스킬 점수
+    R² 가 안 맞는 근본 원인은 **상대가 잘못됐다**는 것이다. R² 의 상대는 '실측값의
+    사후평균'인데, 그 값은 입찰 시점에 알 수 없고 표본이 뭉쳐 있으면 사실상 정답이
+    된다. 우리가 실제로 이겨야 하는 상대는 **담당자가 쓰던 일괄 보정**이다.
+
+        스킬 = 1 − SSE(우리 방법) / SSE(일괄 보정)
+
+    해석은 R² 와 같다 — 1.0 완벽, 0 종전과 동등, 음수면 종전보다 나쁘다.
+    3회차 결과: 커널 +0.968 · GP +0.919 · 구간평균 +0.865
+    (= 일괄 대비 오차제곱을 각각 96.8% · 91.9% · 86.5% 줄였다)
+
+    이 지표는 분모가 '입찰 시점에 실제로 쓸 수 있었던 대안'이므로 표본이 작아도
+    해석이 무너지지 않는다. R² 와 달리 순서·크기 모두 그대로 읽을 수 있다.
+
 실행:
     python scripts/commission_stats.py
     python scripts/commission_stats.py --input scripts/data/commission_2026.csv --upto 3
@@ -30,18 +44,17 @@ from __future__ import annotations
 
 import argparse
 import csv
-import json
-import shutil
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from wirye_capacity import constants as C  # noqa: E402
 from wirye_capacity.curve import CorrectionCurve  # noqa: E402
 from wirye_capacity.gp import GPCorrectionCurve  # noqa: E402
 from wirye_capacity.simulate import SimInput, simulate  # noqa: E402
-from wirye_capacity.store import _SEED, MeasurementStore  # noqa: E402
+from wirye_capacity.store import MeasurementStore  # noqa: E402
 from wirye_capacity.theory import TheoryEngine  # noqa: E402
 
 DATA = Path(__file__).resolve().parent / "data" / "commission_2026.csv"
@@ -62,10 +75,27 @@ def stats(err: list[float]) -> dict:
 
 
 def r2(actual: list[float], pred: list[float]) -> float:
+    """R² — '사후평균을 찍는 것' 대비 성적. 상대(사후평균)가 이 표본에서 너무 강하다."""
     mu = sum(actual) / len(actual)
     sst = sum((a - mu) ** 2 for a in actual)
     sse = sum((a - p) ** 2 for a, p in zip(actual, pred))
     return float("nan") if sst == 0 else 1 - sse / sst
+
+
+def skill(actual: list[float], pred: list[float], ref: list[float]) -> float:
+    """스킬 점수 — '종전 방식(일괄 보정)' 대비 오차제곱 감소율.
+
+    R² 가 이 문제에 맞지 않는 이유는 상대가 잘못됐기 때문이다. R² 의 상대는
+    '실측값의 사후평균'인데, 그건 입찰 시점에 알 수 없는 값이고 표본이 뭉쳐
+    있으면 사실상 정답이 된다(3회차 실측 보정값 sd 0.062 MW).
+
+    우리가 실제로 이겨야 하는 상대는 **담당자가 쓰던 일괄 보정**이다. 그래서
+    분모를 사후평균이 아니라 일괄 보정의 오차제곱합으로 바꾼다. 해석은 같다 —
+    1.0 이면 완벽, 0 이면 종전과 동등, 음수면 종전보다 나쁘다.
+    """
+    sse = sum((a - p) ** 2 for a, p in zip(actual, pred))
+    ref_sse = sum((a - r) ** 2 for a, r in zip(actual, ref))
+    return float("nan") if ref_sse == 0 else 1 - sse / ref_sse
 
 
 def build_baseline(path: Path) -> MeasurementStore:
@@ -104,7 +134,10 @@ def main() -> None:
         inp = SimInput(cit=cit, pressure=press, rh=rh, w=None, cp_meas=vac, cc_meas=cc)
         R = {m: simulate(inp, engine=eng, records=recs, correction_table=tbl,
                          corrector=corr[m]) for m, _ in METHODS}
-        per.append({"i": i, "date": r["date"], "cit": cit, "n_train": len(recs), "R": R})
+        # 종전 방식(일괄 보정 = 누적 전체 평균) 도 같은 조건으로 계산해 기준선으로 쓴다
+        blanket = sum(x["corr"] for x in recs) / len(recs)
+        per.append({"i": i, "date": r["date"], "cit": cit, "n_train": len(recs),
+                    "R": R, "blanket": blanket})
         st.add(st.build_record(cit=cit, press=press, cc_meas=cc, w=None, rh=rh,
                               cp_meas=vac, date=r["date"], engine=eng))
 
@@ -112,7 +145,6 @@ def main() -> None:
     print(f"시운전 성적표 — {len(per)}회차  (학습 출발 {n0}건, ~{BASELINE_DATE})")
     print("=" * 76)
 
-    a0 = per[0]["R"]["bin"]
     print("\n① 계산 일치 (결정론적 — 틀리면 버그)")
     print(f"   {'#':>2} {'날짜':12}{'CIT':>6}{'이론기준값':>11}{'실측 보정값':>12}")
     for p in per:
@@ -144,16 +176,34 @@ def main() -> None:
             ("보정값 기준 (모델 관점)", lambda r: r.meas_corr, lambda r: r.correction, "MW")):
         print(f"\n③ 종합 — {basis}")
         print(f"   {'방법':<10}{'편차ME':>9}{'MAE':>8}{'RMSE':>8}{'최대':>8}"
-              f"{'R²':>9}{'밴드내':>8}{'미달':>7}   LOOCV 기대")
-        for m, lab in METHODS:
-            act = [get_a(p["R"][m]) for p in per]
-            prd = [get_p(p["R"][m]) for p in per]
+              f"{'R²':>11}{'스킬':>8}{'밴드내':>8}{'미달':>7}  LOOCV")
+        # 일괄 보정 기준선 — 같은 회차·같은 조건. 스킬 점수의 분모다.
+        ref = [(min(p["R"]["bin"].theory_cc + p["blanket"], C.BID_CAP_GROSS) - C.CC_AUX)
+               if basis.startswith("Net") else p["blanket"] for p in per]
+        for m, lab in list(METHODS) + [("__ref", "일괄(종전)")]:
+            if m == "__ref":
+                act = [get_a(p["R"]["bin"]) for p in per]
+                prd, sk = ref, "기준선"
+            else:
+                act = [get_a(p["R"][m]) for p in per]
+                prd = [get_p(p["R"][m]) for p in per]
+                sk = f"{skill(act, prd, ref):+.3f}"
             s = stats([x - y for x, y in zip(act, prd)])
-            inb = sum(1 for p in per if p["R"][m].in_band)
-            sh = sum(1 for p in per if p["R"][m].shortfall)
+            # 밴드·미달 판정은 언제나 Net 기준이다(입찰 허용밴드 ±0.5%). 보정값 기준
+            # 행에서도 같은 판정을 그대로 쓴다 — 오차가 동일하므로 결과가 같다.
+            nets = [x.meas_net for x in (p["R"]["bin"] for p in per)]
+            if m == "__ref":
+                nref = [(min(p["R"]["bin"].theory_cc + p["blanket"], C.BID_CAP_GROSS)
+                         - C.CC_AUX) for p in per]
+                inb = sum(1 for a, r_ in zip(nets, nref) if abs(a - r_) <= 0.005 * a)
+                sh = sum(1 for a, r_ in zip(nets, nref) if a - r_ < -0.005 * a)
+            else:
+                inb = sum(1 for p in per if p["R"][m].in_band)
+                sh = sum(1 for p in per if p["R"][m].shortfall)
+            loo = f"{LOOCV_REF[m]:.3f}" if m in LOOCV_REF else "3.833"
             print(f"   {lab:<10}{s['me']:+9.3f}{s['mae']:8.3f}{s['rmse']:8.3f}"
-                  f"{s['max']:8.3f}{r2(act, prd):9.3f}{inb:5d}/{len(per)}{sh:6d}건"
-                  f"   {LOOCV_REF[m]:.3f} MAE")
+                  f"{s['max']:8.3f}{r2(act, prd):11.3f}{sk:>8}{inb:5d}/{len(per)}"
+                  f"{sh:6d}건  {loo}")
 
     sd = stats([p["R"]["bin"].meas_corr - 0 for p in per])
     print(f"\n   ※ 실측 보정값의 산포 sd {sd['sd']:.3f} MW — 이 표본은 거의 일정하다.")
