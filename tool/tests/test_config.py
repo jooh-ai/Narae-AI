@@ -46,10 +46,26 @@ def test_env_override_wins(tmp_path, monkeypatch):
 # ── 보정 방법 저장 (시운전 중 방법을 바꿔 가며 비교하므로 선택이 남아야 한다) ──
 
 def test_correction_method_default_is_bin(tmp_path):
-    """설정이 없으면 엑셀4 방식(구간평균)으로 시작한다."""
+    """설정이 없으면 엑셀4 방식(구간평균)으로 시작한다.
+
+    path 를 반드시 넘긴다 — 안 넘기면 개발 PC 의 실제 설정 파일을 읽어서,
+    누군가 GUI 에서 방법을 바꿔 둔 것만으로 이 테스트가 깨진다.
+    """
     from wirye_capacity.config import correction_method
-    assert correction_method(get_config("correction_method", path=tmp_path / "none.json")) == "bin"
+    assert correction_method(path=tmp_path / "none.json") == "bin"
     assert DEFAULTS["correction_method"] == "bin"
+
+
+def test_correction_method_rejects_unknown_value(tmp_path):
+    """설정에 이상한 값이 들어 있으면 조용히 기본값으로 돌아간다."""
+    import json
+
+    from wirye_capacity.config import correction_method
+    cfg = tmp_path / "c.json"
+    cfg.write_text(json.dumps({"correction_method": "gp:nope"}), encoding="utf-8")
+    assert correction_method(path=cfg) == "bin"
+    cfg.write_text(json.dumps({"correction_method": "gp:matern52"}), encoding="utf-8")
+    assert correction_method(path=cfg) == "gp:matern52"    # 커널별 키는 유효하다
 
 
 def test_correction_method_roundtrip(tmp_path, monkeypatch):

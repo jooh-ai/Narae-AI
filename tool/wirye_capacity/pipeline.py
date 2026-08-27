@@ -20,7 +20,18 @@ from .theory import TheoryEngine
 from .weather import WeatherForecast, applied_pressure, load_excel3_1
 
 # 입찰파일 도장·화면 표기에 쓰는 방법 이름. 키는 correction_method 인자와 같다.
-METHOD_LABEL = {"bin": "구간평균", "curve": "커널회귀", "gp": "GP"}
+# select.METHOD_LABEL 이 'bin'/'curve'/'gp:<커널>' 을 모두 담는다. 'gp' 는 예전
+# 설정·CLI·입찰파일 도장에서 쓰던 키라 'gp:rbf' 별칭으로 남긴다(하위호환).
+from .select import METHOD_LABEL as _SEL_LABEL  # noqa: E402
+from .select import make_corrector as _make_corrector  # noqa: E402
+
+METHOD_LABEL = {"gp": "GP", **_SEL_LABEL}
+GP_DEFAULT = "gp:rbf"
+
+
+def resolve_method(name: str) -> str:
+    """'gp' → 'gp:rbf'. 그 외는 그대로."""
+    return GP_DEFAULT if name == "gp" else name
 
 
 @dataclass
@@ -128,13 +139,11 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     # 3. 보정 테이블 재집계 (+ 보정 방법 · 안전마진)
     table = store.correction_table()
     recs = [{"cit": r.cit, "corr": r.corr} for r in store.all()]
-    corrector = None
     if correction_method == "curve":
         from .curve import CorrectionCurve
-        corrector = CorrectionCurve(recs, bandwidth=bandwidth)
-    elif correction_method == "gp":
-        from .gp import GPCorrectionCurve
-        corrector = GPCorrectionCurve(recs)
+        corrector = CorrectionCurve(recs, bandwidth=bandwidth)   # bandwidth 는 커널회귀 전용
+    else:
+        corrector = _make_corrector(resolve_method(correction_method), recs)
     if margin_k and margin_k > 0:          # 미달 방지 안전마진(실측 변동 비례)
         from .correction import applied_correction
         from .margin import MarginCorrector

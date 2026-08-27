@@ -31,7 +31,11 @@ DEFAULTS = {
     "correction_method": "bin",       # 'bin' | 'curve' | 'gp' — 화면에서 고른 값이 남는다
 }
 
-CORRECTION_METHODS = ("bin", "curve", "gp")
+# 선택 가능한 보정 방법 — 'bin'/'curve' + GP 커널별. 'gp' 는 예전 설정 파일에
+# 저장돼 있을 수 있어 별칭으로 계속 허용한다(읽을 때 gp:rbf 로 해석된다).
+from .select import METHODS as _SEL_METHODS  # noqa: E402
+
+CORRECTION_METHODS = ("gp", *_SEL_METHODS)
 
 
 def app_config_path() -> Path:
@@ -81,7 +85,12 @@ def set_config(key: str, value, path: str | Path | None = None) -> None:
             continue
 
 
-def correction_method(default: str | None = None) -> str:
-    """저장된 보정 방법. 값이 깨져 있으면 기본값('bin')으로 돌린다."""
-    v = get_config("correction_method", default)
+def correction_method(default: str | None = None,
+                      path: str | Path | None = None) -> str:
+    """저장된 보정 방법. 값이 깨져 있으면 기본값('bin')으로 돌린다.
+
+    path 는 설정 파일을 직접 지정할 때 쓴다 — 없으면 실제 설정 파일을 읽으므로
+    테스트가 개발 PC 의 설정에 오염된다(2026-08-25에 실제로 겪었다).
+    """
+    v = get_config("correction_method", default, path=path)
     return v if v in CORRECTION_METHODS else DEFAULTS["correction_method"]

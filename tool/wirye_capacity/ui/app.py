@@ -26,6 +26,7 @@ from pathlib import Path
 from .. import config as _cf
 from .. import constants as C
 from ..config import get_config, set_config
+from .. import select as _sel
 from ..correction import status_rows, table_fingerprint
 from ..pipeline import METHOD_LABEL, run_pipeline
 from ..profile import PROFILE_COLUMNS, build_profile
@@ -33,7 +34,18 @@ from ..store import MeasurementStore
 from ..theory import TheoryEngine
 
 # 보정방법 콤보박스 순서 → run_pipeline(correction_method=) 키. 저장값과 같은 문자열이다.
-_METHODS = ("bin", "curve", "gp")
+# 'gp:<커널>' 이 커널별로 하나씩 들어간다 — 어느 커널을 쓸지는 사용자가 고르고,
+# 하이퍼파라미터는 커널마다 주변우도로 자동 적합한다(선택 편향 없음).
+# LOOCV 로 후보를 채점하는 것은 [🔬 모델 선정] 탭이고, 실제 산정에 쓸 방법은
+# 여기서 사람이 고른다 — 자동으로 바뀌지 않는다(부장님 방침).
+_METHODS = _sel.METHODS
+_METHOD_ITEMS = [_sel.METHOD_LABEL[m] for m in _METHODS]
+
+
+def _method_index(key: str) -> int:
+    """저장된 방법 키 → 콤보 인덱스. 예전 'gp' 는 'gp:rbf' 로 해석한다."""
+    k = "gp:rbf" if key == "gp" else key
+    return _METHODS.index(k) if k in _METHODS else 0
 
 # 온도 프로파일 표의 짧은 머리글. 어떤 열을 어떤 순서로 보일지는 엑셀3 출력과
 # 같은 목록(profile.PROFILE_COLUMNS)이 정하고, 여기서는 이름만 줄인다 — 9열이
@@ -175,6 +187,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             tabs.addTab(self._list_tab(), "Test 결과 List-up")
             tabs.addTab(self._sim_tab(), "🧪 출력 시뮬레이션")
             tabs.addTab(self._chart_tab(), "📈 출력곡선 비교")
+            tabs.addTab(self._select_tab(), "🔬 모델 선정")
 
             header = self._header()
             central = QtWidgets.QWidget()
@@ -196,6 +209,207 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             # 누적이 어느 파일에 쌓이는지 항상 보이게 한다 — 배포본을 여러 명이 각자
             # 쓰면 DB 도 각자 생기므로, 지금 보고 있는 게 어느 DB 인지 헷갈리면 안 된다.
             self.statusBar().showMessage(f"누적 DB : {db_default}   ({self.store.count()}건)")
+
+
+        # ---------- 🔬 모델 선정 (테스트셋 분리 → 학습셋 LOOCV → 테스트셋 검증) ----------
+        def _select_tab(self):
+            from PySide6 import QtCore
+            """모델 선정 탭.
+
+            여기서 고른 결과가 산정 탭에 자동으로 반영되지는 않는다(부장님 방침).
+            LOOCV 는 후보를 비교해 '수치를 확인' 하는 용도이고, 실제 산정에 쓸
+            방법은 산정 탭에서 사람이 고른다. 모델이 조용히 바뀌면 안 된다.
+            """
+            w = QtWidgets.QWidget()
+
+            g1 = QtWidgets.QGroupBox("데이터 분할")
+            f1 = QtWidgets.QFormLayout(g1)
+            self.sel_frac = QtWidgets.QDoubleSpinBox()
+            self.sel_frac.setRange(0.0, 40.0); self.sel_frac.setDecimals(0)
+            self.sel_frac.setSingleStep(5.0); self.sel_frac.setValue(20.0)
+            self.sel_frac.setSuffix(" %")
+            self.sel_frac.setToolTip(
+                "전체 누적에서 테스트셋으로 떼어낼 비율.\n"
+                "0 으로 두면 테스트셋 없이 LOOCV 만 봅니다.")
+            self.sel_seed = QtWidgets.QSpinBox()
+            self.sel_seed.setRange(0, 999999); self.sel_seed.setValue(42)
+            self.sel_seed.setToolTip(
+                "난수 시드. 같은 설정이면 같은 분할이 나옵니다.\n"
+                "시드를 고정하지 않으면 누를 때마다 답이 달라져\n"
+                "'왜 이 모델을 골랐나' 를 나중에 재현할 수 없습니다.")
+            self.sel_strat = QtWidgets.QCheckBox("온도구간 층화 추출")
+            self.sel_strat.setChecked(True)
+            self.sel_strat.setToolTip(
+                "온도구간별로 같은 비율씩 뽑아 학습셋에 빈 구간이 생기지 않게 합니다.\n"
+                "층화 계층은 15~25°C 를 하나로 합칩니다 — 20~25°C 실측이 1건뿐이라\n"
+                "완전 랜덤이면 그 구간 학습 데이터가 0건이 될 수 있습니다.\n"
+                "(이 병합은 추출에만 적용되고 실제 보정 테이블은 바뀌지 않습니다.)")
+            self.sel_crit = QtWidgets.QComboBox()
+            self.sel_crit.addItems([_sel.CRITERION_LABEL[c] for c in _sel.CRITERIA])
+            self.sel_crit.setToolTip(
+                "최종 모델 선정 기준.\n"
+                "R² 순위는 RMSE 순위와 수학적으로 항상 같습니다(SST 가 후보 전체에\n"
+                "동일하므로). 다른 관점을 보려면 MAE 를 쓰십시오.")
+            f1.addRow("테스트셋 비율", self.sel_frac)
+            f1.addRow("랜덤 시드", self.sel_seed)
+            f1.addRow("", self.sel_strat)
+            f1.addRow("선정 기준", self.sel_crit)
+
+            g2 = QtWidgets.QGroupBox("후보 모델")
+            f2 = QtWidgets.QVBoxLayout(g2)
+            self.sel_chks = {}
+            for m in _METHODS:
+                cb = QtWidgets.QCheckBox(_sel.METHOD_LABEL[m])
+                cb.setChecked(True)
+                self.sel_chks[m] = cb
+                f2.addWidget(cb)
+            f2.addStretch(1)
+
+            self.sel_btn = QtWidgets.QPushButton("▶  모델 선정 실행")
+            self.sel_btn.setObjectName("primary")
+            self.sel_btn.clicked.connect(self._on_select)
+
+            self.sel_head = QtWidgets.QLabel(
+                "테스트셋 비율·시드·기준을 정하고 실행하세요. "
+                "결과는 산정 탭에 자동 반영되지 않습니다 — 보고 직접 고르십시오.")
+            self.sel_head.setObjectName("summary")
+            self.sel_head.setWordWrap(True)
+
+            self.sel_loocv = QtWidgets.QTableWidget(0, 8)
+            self.sel_loocv.setHorizontalHeaderLabels(
+                ["방법", "n", "MAE", "RMSE", "R²", "편차", "과대(미달위험)", "판정"])
+            self.sel_test = QtWidgets.QTableWidget(0, 5)
+            self.sel_test.setHorizontalHeaderLabels(
+                ["CIT(°C)", "실측 보정값", "예측", "오차", "방향"])
+            for tb in (self.sel_loocv, self.sel_test):
+                tb.setAlternatingRowColors(True)
+                tb.verticalHeader().setVisible(False)
+                tb.horizontalHeader().setSectionResizeMode(
+                    QtWidgets.QHeaderView.ResizeMode.Stretch)
+                tb.setMinimumHeight(60)
+            self.sel_test_head = QtWidgets.QLabel("② 테스트셋 검증 — 아직 실행하지 않았습니다")
+            self.sel_test_head.setWordWrap(True)
+
+            top = QtWidgets.QHBoxLayout()
+            top.addWidget(g1, stretch=3)
+            top.addWidget(g2, stretch=2)
+
+            inner = QtWidgets.QWidget()
+            iv = QtWidgets.QVBoxLayout(inner)
+            iv.setContentsMargins(0, 0, 0, 0)
+            iv.setSpacing(8)
+            iv.addLayout(top)
+            iv.addWidget(self.sel_btn)
+            iv.addWidget(self.sel_head)
+            scroll = QtWidgets.QScrollArea()
+            scroll.setWidget(inner)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(
+                QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setMinimumHeight(120)
+
+            below = QtWidgets.QWidget()
+            bv = QtWidgets.QVBoxLayout(below)
+            bv.setContentsMargins(0, 0, 0, 0)
+            bv.setSpacing(6)
+            bv.addWidget(QtWidgets.QLabel("① 학습셋 LOOCV — 테스트셋은 쓰이지 않습니다"))
+            bv.addWidget(self.sel_loocv, stretch=3)
+            bv.addWidget(self.sel_test_head)
+            bv.addWidget(self.sel_test, stretch=2)
+
+            split = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
+            split.addWidget(scroll)
+            split.addWidget(below)
+            split.setStretchFactor(0, 0)
+            split.setStretchFactor(1, 1)
+            split.setSizes([300, 420])
+            split.setChildrenCollapsible(False)
+
+            lay = QtWidgets.QVBoxLayout(w)
+            lay.setContentsMargins(8, 8, 8, 8)
+            lay.addWidget(split)
+            return w
+
+        def _on_select(self):
+            from PySide6 import QtCore, QtGui
+            cand = [m for m, cb in self.sel_chks.items() if cb.isChecked()]
+            if not cand:
+                QtWidgets.QMessageBox.warning(self, "후보 없음", "후보 모델을 하나 이상 고르세요.")
+                return
+            recs = [{"cit": r["cit"], "corr": r["corr"]} for r in self.store.list_up()]
+            if len(recs) < 6:
+                QtWidgets.QMessageBox.warning(
+                    self, "데이터 부족", f"누적이 {len(recs)}건입니다. 최소 6건은 필요합니다.")
+                return
+            self.sel_btn.setEnabled(False)
+            QtGui.QGuiApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+            try:
+                res = _sel.run(recs, test_frac=self.sel_frac.value() / 100.0,
+                               seed=self.sel_seed.value(),
+                               stratified=self.sel_strat.isChecked(),
+                               criterion=_sel.CRITERIA[self.sel_crit.currentIndex()],
+                               methods=cand)
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.critical(self, "모델 선정 오류", str(e))
+                return
+            finally:
+                QtGui.QGuiApplication.restoreOverrideCursor()
+                self.sel_btn.setEnabled(True)
+            self._fill_select(res)
+
+        def _fill_select(self, res):
+            from PySide6 import QtCore
+            crit = _sel.CRITERION_LABEL[res.criterion]
+            head = [f"학습 {res.n_train}건 / 테스트 {res.n_test}건",
+                    f"시드 {res.seed}", ("층화" if res.stratified else "완전 랜덤"),
+                    f"기준 {crit}"]
+            if res.best:
+                head.append(f"선정 → {_sel.METHOD_LABEL[res.best]}")
+            self.sel_head.setText("    |    ".join(head))
+
+            rows = sorted(res.loocv, key=lambda s: s.value(res.criterion))
+            self.sel_loocv.setRowCount(len(rows))
+            for i, s in enumerate(rows):
+                cells = [_sel.METHOD_LABEL[s.method], str(s.n), f"{s.mae:.3f}",
+                         f"{s.rmse:.3f}", f"{s.r2:.3f}", f"{s.me:+.3f}",
+                         f"{s.over}건",
+                         "★ 선정" if s.method == res.best else ""]
+                for c, txt in enumerate(cells):
+                    it = QtWidgets.QTableWidgetItem(txt)
+                    if c:
+                        it.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignRight
+                                            | QtCore.Qt.AlignmentFlag.AlignVCenter)
+                    self.sel_loocv.setItem(i, c, it)
+
+            h = res.holdout
+            if h is None:
+                self.sel_test_head.setText(
+                    "② 테스트셋 검증 — 테스트셋이 없습니다(비율 0% 또는 예측 불가)")
+                self.sel_test.setRowCount(0)
+            else:
+                self.sel_test_head.setText(
+                    f"② 테스트셋 검증 — {_sel.METHOD_LABEL[res.best]} · 학습에 쓰이지 않은 "
+                    f"{h.n}건    MAE {h.mae:.3f}  RMSE {h.rmse:.3f}  R² {h.r2:.3f}  "
+                    f"편차 {h.me:+.3f}  과대 {h.over}건")
+                vis = [r for r in res.holdout_rows]
+                self.sel_test.setRowCount(len(vis))
+                for i, r in enumerate(vis):
+                    if r["pred"] is None:
+                        cells = [f"{r['cit']:.1f}", f"{r['corr']:+.3f}", "예측 불가", "", ""]
+                    else:
+                        cells = [f"{r['cit']:.1f}", f"{r['corr']:+.3f}",
+                                 f"{r['pred']:+.3f}", f"{r['err']:+.3f}",
+                                 "안전(낮게)" if r["err"] > 0 else "미달 위험(높게)"]
+                    for c, txt in enumerate(cells):
+                        it = QtWidgets.QTableWidgetItem(txt)
+                        if 0 < c < 4:
+                            it.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignRight
+                                                | QtCore.Qt.AlignmentFlag.AlignVCenter)
+                        self.sel_test.setItem(i, c, it)
+            if res.warnings:
+                QtWidgets.QMessageBox.information(
+                    self, "확인 사항", "\n\n".join(f"· {x}" for x in res.warnings))
 
         # ---------- 시작 안내 배너 (모달 아님) ----------
         def _startup_banner(self, migrate_note, db_default):
@@ -259,6 +473,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
 
         # ---------- 공급가능용량 산정 탭 ----------
         def _run_tab(self):
+            from PySide6 import QtCore
             w = QtWidgets.QWidget()
 
             # ① 테스트 정보
@@ -323,38 +538,33 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.accum_chk = QtWidgets.QCheckBox("이 테스트를 누적에 반영(저장)")
             self.accum_chk.setToolTip("체크 안 하면 확인용 — 보정값만 표시하고 누적에 저장하지 않습니다")
             self.method_cb = QtWidgets.QComboBox()
-            self.method_cb.addItems(["구간 평균 (기본)", "커널 보정곡선", "GP (가우시안 프로세스)"])
+            self.method_cb.addItems(_METHOD_ITEMS)
             self.method_cb.setToolTip(
-                "보정값 산출 방법 — 실측 31건 LOOCV 예측오차(MAE)\n"
-                "  구간 평균 1.52 MW : 온도구간별 평균을 계단식 적용(엑셀4 방식)\n"
-                "  커널 보정곡선 1.46 MW : 이웃 실측의 거리가중 평균으로 1°C 단위 적용\n"
-                "  GP 1.33 MW : 커널 + 예측 불확실성 산출. 예측오차 최소\n"
+                "보정값 산출 방법\n"
+                "  구간 평균     : 온도구간별 평균을 계단식 적용(엑셀4 방식)\n"
+                "  커널회귀      : 이웃 실측의 거리가중 평균으로 1°C 단위 적용\n"
+                "  GP · <커널>   : 가우시안 프로세스. 커널이 곡선의 성격을 정한다\n"
+                "     RBF/Matérn 5/2/Matérn 3/2/지수 순으로 거칠어진다.\n"
+                "     거친 커널은 실측을 잘 따라가지만 외삽·잡음에 약하다.\n"
+                "     하이퍼파라미터는 커널마다 주변우도로 자동 적합한다.\n"
+                "\n"
+                "어느 방법이 나은지는 [🔬 모델 선정] 탭에서 LOOCV 로 확인하고,\n"
+                "여기서 직접 고르십시오 — 자동으로 바뀌지 않습니다.\n"
                 "\n"
                 "선택한 방법은 누적 전체에 적용됩니다 — 과거 기록에 방법이 따로\n"
                 "붙지 않습니다. 오늘 GP 로 돌리면 누적 전건을 GP 로 다시 적합합니다.\n"
                 "선택은 저장되어 다음 실행에도 유지되고, 입찰파일 도장에 남습니다.\n"
                 "결과는 [📈 출력곡선 비교] 탭에서 곡선으로 확인할 수 있습니다.")
             # 저장된 선택 복원 + 바꾸면 즉시 저장 (실행하지 않고 바꿔도 남는다)
-            self.method_cb.setCurrentIndex(_METHODS.index(_cf.correction_method()))
+            self.method_cb.setCurrentIndex(_method_index(_cf.correction_method()))
             self.method_cb.currentIndexChanged.connect(
                 lambda i: _cf.set_config("correction_method", _METHODS[i]))
-            self.margin_sb = QtWidgets.QDoubleSpinBox()
-            self.margin_sb.setRange(0.0, 3.0)
-            self.margin_sb.setSingleStep(0.1)
-            self.margin_sb.setValue(0.0)
-            self.margin_sb.setSuffix(" ×")
-            self.margin_sb.setToolTip(
-                "미달 방지 안전마진 = 계수 × 구간별 실측변동\n"
-                "  0     : 마진 없음 — 예측오차 최소(GP 1.33 MW), 시드 31건 미달 2건\n"
-                "  0.8   : 시드 31건 기준 미달 0건 (오차는 커지지만 전부 안전한 방향)\n"
-                "실측이 없는 특수구간(Shaft Limit·보수적 고정)에는 적용되지 않습니다.")
             # 출력 파일 경로는 여기서 받지 않는다. 실행은 계산·표시만 하고, 저장은
             # 아래 온도 프로파일 표의 [엑셀로 저장] 으로 그때 경로를 고른다 —
             # 실행할 때마다 파일이 덮어써지는 것을 막고, 결과를 보고 저장할지
             # 정할 수 있다.
             f3.addRow("", self.accum_chk)
             f3.addRow("보정 방법", self.method_cb)
-            f3.addRow("안전마진 계수", self.margin_sb)
 
             self.run_btn = QtWidgets.QPushButton("▶  공급가능용량 산정")
             self.run_btn.setObjectName("primary")
@@ -386,15 +596,68 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.save_btn.clicked.connect(self._on_save_profile)
             head.addWidget(self.save_btn)
 
+            # 레이아웃 — 두 가지 문제를 함께 고친다(2026-08 부장님 지적)
+            #
+            #  ⑦ 전체화면에서 입력부가 세로로 눌려 보인다
+            #     세로로 쌓으면 입력 그룹은 최소 높이에 고정되고 표만 커져서,
+            #     화면이 클수록 위쪽이 상대적으로 납작해 보인다.
+            #     → 입력 그룹을 가로로 배치한다(테스트 정보 | 입찰 조건 + 실행 옵션).
+            #
+            #  ⑧ 창을 위에서 세로로 줄일 수 없다
+            #     세로 최소 높이가 954px 이었다 — 270+132+153(입력) + 43+43+33+70.
+            #     1080p 실사용 높이(~1040px)와 거의 같아 사실상 못 줄였다.
+            #     → 입력부를 스크롤 영역에 담아 최소 높이를 풀고, 입력부와 표를
+            #       QSplitter 로 나눠 비율을 사용자가 직접 잡게 한다.
+            right = QtWidgets.QVBoxLayout()
+            right.setContentsMargins(0, 0, 0, 0)
+            right.addWidget(g2)
+            right.addWidget(g3)
+            right.addStretch(1)
+            rw = QtWidgets.QWidget(); rw.setLayout(right)
+
+            topw = QtWidgets.QWidget()
+            top = QtWidgets.QHBoxLayout(topw)
+            top.setContentsMargins(0, 0, 0, 0)
+            top.setSpacing(10)
+            top.addWidget(g1, stretch=1)
+            top.addWidget(rw, stretch=1)
+
+            inner = QtWidgets.QWidget()
+            iv = QtWidgets.QVBoxLayout(inner)
+            iv.setContentsMargins(0, 0, 0, 0)
+            iv.setSpacing(8)
+            iv.addWidget(topw)
+            iv.addWidget(self.run_btn)
+            iv.addWidget(self.summary)
+
+            scroll = QtWidgets.QScrollArea()
+            scroll.setWidget(inner)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(
+                QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            # 스크롤 영역 자체의 최소 높이를 작게 잡아야 창이 줄어든다.
+            scroll.setMinimumHeight(120)
+
+            below = QtWidgets.QWidget()
+            bv = QtWidgets.QVBoxLayout(below)
+            bv.setContentsMargins(0, 0, 0, 0)
+            bv.setSpacing(6)
+            bv.addLayout(head)
+            bv.addWidget(self.profile_tbl, stretch=1)
+
+            self.profile_tbl.setMinimumHeight(80)
+            split = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
+            split.addWidget(scroll)
+            split.addWidget(below)
+            split.setStretchFactor(0, 0)
+            split.setStretchFactor(1, 1)
+            split.setSizes([330, 400])
+            split.setChildrenCollapsible(False)
+
             lay = QtWidgets.QVBoxLayout(w)
-            lay.setSpacing(10)
-            lay.addWidget(g1)
-            lay.addWidget(g2)
-            lay.addWidget(g3)
-            lay.addWidget(self.run_btn)
-            lay.addWidget(self.summary)
-            lay.addLayout(head)
-            lay.addWidget(self.profile_tbl, stretch=1)
+            lay.setContentsMargins(8, 8, 8, 8)
+            lay.addWidget(split)
             return w
 
         def _file_row(self, label):
@@ -455,7 +718,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     correction_method=_METHODS[self.method_cb.currentIndex()],
                     igv=self.igv_chk.isChecked(),
                     rh=None if self.rh_auto.isChecked() else self.rh_in.value(),
-                    margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
                     start=self.start_in.text().strip() or "17:00")
@@ -516,7 +778,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 "date": res.date, "deg": self.deg_in.value(),
                 "bid_day": self.bidday_in.text().strip() or None,
                 "method": _METHODS[self.method_cb.currentIndex()],
-                "margin_k": self.margin_sb.value(),
+                "margin_k": 0.0,          # 안전마진은 화면에서 제거됨(CLI 전용)
                 "forecast_path": self.forecast_in["edit"].text().strip() or None,
                 "template": template, "fp": res.fingerprint,
             }
@@ -615,6 +877,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
         # ---------- Test 결과 List-up 탭 ----------
         # ---------- 출력 시뮬레이션 탭 ----------
         def _sim_tab(self):
+            from PySide6 import QtCore
             w = QtWidgets.QWidget()
             outer = QtWidgets.QHBoxLayout(w)
 
@@ -691,17 +954,11 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             g3 = QtWidgets.QGroupBox("보정 옵션")
             f3 = QtWidgets.QFormLayout(g3)
             self.sim_method = QtWidgets.QComboBox()
-            self.sim_method.addItems(["구간 평균 (기본)", "커널 보정곡선", "GP (가우시안 프로세스)"])
+            self.sim_method.addItems(_METHOD_ITEMS)
             # 입찰에 쓰는 방법과 같은 값으로 시작한다 — 예측 vs 실측 대조가 어긋나면
             # 안 되기 때문이다. 여기서 바꾸는 것은 저장하지 않는다(비교는 자유롭게).
-            self.sim_method.setCurrentIndex(_METHODS.index(_cf.correction_method()))
-            self.sim_margin = QtWidgets.QDoubleSpinBox()
-            self.sim_margin.setRange(0.0, 3.0)
-            self.sim_margin.setSingleStep(0.1)
-            self.sim_margin.setValue(0.0)
-            self.sim_margin.setSuffix(" ×")
+            self.sim_method.setCurrentIndex(_method_index(_cf.correction_method()))
             f3.addRow("보정 방법", self.sim_method)
-            f3.addRow("안전마진 계수", self.sim_margin)
 
             self.sim_btn = QtWidgets.QPushButton("🧪  시뮬레이션 실행")
             self.sim_btn.setObjectName("primary")
@@ -726,7 +983,19 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             right.addWidget(self.sim_big)
             right.addWidget(self.sim_out, stretch=1)
 
-            outer.addLayout(left, stretch=0)
+            # 좌측 입력 열은 스크롤 영역에 담는다 — 이 탭의 세로 최소높이가 673px
+            # 이어서 창 전체 축소를 막고 있었다(2026-08 부장님 지적 ⑧).
+            lw = QtWidgets.QWidget(); lw.setLayout(left)
+            lscroll = QtWidgets.QScrollArea()
+            lscroll.setWidget(lw)
+            lscroll.setWidgetResizable(True)
+            lscroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+            lscroll.setHorizontalScrollBarPolicy(
+                QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            lscroll.setMinimumHeight(120)
+            lscroll.setMinimumWidth(lw.sizeHint().width() + 24)
+            lscroll.setMaximumWidth(lw.sizeHint().width() + 24)
+            outer.addWidget(lscroll, stretch=0)
             outer.addLayout(right, stretch=1)
             return w
 
@@ -736,22 +1005,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             recs = [{"cit": r["cit"], "corr": r["corr"], "cp_meas": r.get("cp_meas"),
                      "cp_design": r.get("cp_design")} for r in self.store.list_up()]
             table = self.store.correction_table()
-            idx = self.sim_method.currentIndex()
-            base = None
-            if idx == 1:
-                from ..curve import CorrectionCurve
-                base = CorrectionCurve(recs, method="kernel")
-            elif idx == 2:
-                from ..gp import GPCorrectionCurve
-                base = GPCorrectionCurve(recs)
-            corrector = base
-            k = self.sim_margin.value()
-            if k > 0:
-                from ..correction import applied_correction
-                from ..margin import MarginCorrector
-                inner = base if base is not None else (
-                    lambda t: applied_correction(t, table))
-                corrector = MarginCorrector(inner, recs, k=k)
+            corrector = _sel.make_corrector(
+                _METHODS[self.sim_method.currentIndex()], recs)
 
             inp = SimInput(
                 cit=self.sim_cit.value(),
@@ -785,22 +1040,12 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
 
             bar = QtWidgets.QHBoxLayout()
             self.chart_method = QtWidgets.QComboBox()
-            self.chart_method.addItems(["구간평균(기본)", "커널회귀", "GP(가우시안 프로세스)"])
-            self.chart_method.setCurrentIndex(_METHODS.index(_cf.correction_method()))
+            self.chart_method.addItems(_METHOD_ITEMS)
+            self.chart_method.setCurrentIndex(_method_index(_cf.correction_method()))
             self.chart_method.setToolTip(
-                "보정값 산출 방법 — 실측 31건 LOOCV 예측오차(MAE)\n"
-                "  구간평균 1.52 / 커널회귀 1.46 / GP 1.33 MW")
+                "보정값 산출 방법. GP 는 커널별로 곡선 성격이 다르다 —\n"
+                "여기서 바꿔 가며 눈으로 비교할 수 있다.")
             self.chart_method.currentIndexChanged.connect(self._refresh_chart)
-            self.chart_margin = QtWidgets.QDoubleSpinBox()
-            self.chart_margin.setRange(0.0, 3.0)
-            self.chart_margin.setSingleStep(0.1)
-            self.chart_margin.setValue(0.0)
-            self.chart_margin.setSuffix(" ×")
-            self.chart_margin.setToolTip(
-                "입찰 안전마진 = 계수 × 구간별 실측변동\n"
-                "0 = 마진 없음(오차 최소) · 0.8 = 미달 0건(안전 최우선)\n"
-                "마진을 켜면 오차는 커지지만 커지는 방향이 전부 안전한 쪽입니다.")
-            self.chart_margin.valueChanged.connect(self._refresh_chart)
             self.chart_pts = QtWidgets.QCheckBox("실측점")
             self.chart_pts.setChecked(True)
             self.chart_pts.stateChanged.connect(self._refresh_chart)
@@ -809,9 +1054,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.chart_band.stateChanged.connect(self._refresh_chart)
             bar.addWidget(QtWidgets.QLabel("보정 방법"))
             bar.addWidget(self.chart_method)
-            bar.addSpacing(10)
-            bar.addWidget(QtWidgets.QLabel("안전마진"))
-            bar.addWidget(self.chart_margin)
             bar.addSpacing(10)
             bar.addWidget(self.chart_pts)
             bar.addWidget(self.chart_band)
@@ -841,40 +1083,18 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 self.chart_info.setText("누적 데이터 없음")
                 return
             table = self.store.correction_table()
-            idx = self.chart_method.currentIndex()
-            sigma_fn = None
-            if idx == 1:
-                from ..curve import CorrectionCurve
-                base = CorrectionCurve(recs, method="kernel")
-            elif idx == 2:
-                from ..gp import GPCorrectionCurve
-                base = GPCorrectionCurve(recs)
-                sigma_fn = base.sigma
-            else:
-                base = None                      # 구간평균(기본)
-            k = self.chart_margin.value()
-            margin_fn = None
-            corrector = base
-            if k > 0:
-                from ..margin import MarginCorrector
-                from ..correction import applied_correction
-                inner = base if base is not None else (
-                    lambda t: applied_correction(t, table))
-                mc = MarginCorrector(inner, recs, k=k)
-                corrector = mc
-                margin_fn = mc.margin
+            method = _METHODS[self.chart_method.currentIndex()]
+            corrector = _sel.make_corrector(method, recs)
+            sigma_fn = getattr(corrector, "sigma", None)
             rows = build_profile(self.engine, table, corrector=corrector)
             self.chart.set_toggles(points=self.chart_pts.isChecked(),
                                    band=self.chart_band.isChecked())
             self.chart.set_data(rows, [(r["cit"], r["corr"]) for r in recs],
-                                sigma_fn=sigma_fn, margin_fn=margin_fn)
-            msg = f"누적 {len(recs)}건"
-            if idx == 2 and getattr(base, "hyper", None):
-                ls, sf, sn = base.hyper
-                msg += f" · GP 길이척도 {ls:.0f}°C 노이즈 {sn:.1f} MW"
-            if k > 0:
-                mg = [margin_fn(t) for t in range(-14, 41)]
-                msg += f" · 마진 {min(mg):.2f}~{max(mg):.2f} MW"
+                                sigma_fn=sigma_fn, margin_fn=None)
+            msg = f"누적 {len(recs)}건 · {_sel.METHOD_LABEL[method]}"
+            if getattr(corrector, "hyper", None):
+                ls, _sf, sn = corrector.hyper
+                msg += f" · 길이척도 {ls:.0f}°C 노이즈 {sn:.1f} MW"
             self.chart_info.setText(msg)
 
         def _list_tab(self):
@@ -1133,7 +1353,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     bid_day=self.bidday_in.text().strip() or None,
                     correction_method=_METHODS[self.method_cb.currentIndex()],
                     igv=self.igv_chk.isChecked(),
-                    margin_k=self.margin_sb.value(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,
                     template_path=template,
                     start=self.start_in.text().strip() or "17:00")
