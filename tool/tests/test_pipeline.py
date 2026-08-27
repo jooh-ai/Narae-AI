@@ -300,3 +300,46 @@ def test_rh_override_survives_accumulation(forecast):
     saved = [r for r in store.all() if r.date == "2026-05-27"][0]
     assert saved.rh == 74.1
     assert abs(saved.corr - res.new_record.corr) < 1e-9
+
+
+def test_suspect_rh_blocks_accumulation(forecast):
+    """두 습도계가 크게 어긋난 회차는 사람 확인 없이 누적되지 않는다.
+
+    2026-07-07 실제 사례: 경고는 떴는데 반영이 그대로 됐고, RH 19.6%(담당자 표
+    68.5%)로 계산된 보정값 -5.19(정답 -0.62)가 누적에 들어갔다. 30~41°C 구간
+    평균을 0.46 MW 끌어내리는 오염이다. 경고만으로는 못 막는다.
+    """
+    acq = AcquiredTest(date="2026-07-07", cit=32.40, pressure=994.9, cc_meas=384.17,
+                       rh=19.6, rh_mbl=19.6, rh_cxm=68.5, rh_source="mbl",
+                       rh_suspect=True, season="여름")
+    conn = MockRimsConnector({"2026-07-07": acq})
+    conn.last_acquired = acq                       # 커넥터가 원본을 남긴다
+    store = MeasurementStore(":memory:")
+    res = run_pipeline(date="2026-07-07", store=store, connector=conn,
+                       forecast=forecast, accumulate=True)
+    assert res.rh_unconfirmed is True
+    assert res.reflected is False                  # 막혔다
+    assert store.count() == 0
+    assert any("습도 확인 필요" in m for m in res.acq_warnings)
+
+    # 사람이 습도를 확정하면 통과한다 — 취득값을 그대로 확정해도 명시적 확인이다
+    res2 = run_pipeline(date="2026-07-07", store=store, connector=conn,
+                       forecast=forecast, accumulate=True, rh=68.5)
+    assert res2.rh_unconfirmed is False
+    assert res2.reflected is True
+    assert store.count() == 1
+    assert abs(res2.new_record.corr - (-0.65)) < 0.01   # 정답표 -0.62 (취득값 반올림차)
+
+
+def test_clean_rh_still_accumulates(forecast):
+    """습도가 정상인 회차는 예전처럼 그냥 반영된다 — 가드가 길을 막지 않는다."""
+    acq = AcquiredTest(date="2026-04-15", cit=25.73, pressure=1000.78, cc_meas=411.51,
+                       rh=32.4, rh_mbl=32.4, rh_cxm=32.4, rh_source="mbl",
+                       rh_suspect=False, season="여름")
+    conn = MockRimsConnector({"2026-04-15": acq})
+    conn.last_acquired = acq
+    store = MeasurementStore(":memory:")
+    res = run_pipeline(date="2026-04-15", store=store, connector=conn,
+                       forecast=forecast, accumulate=True)
+    assert res.rh_unconfirmed is False
+    assert res.reflected is True

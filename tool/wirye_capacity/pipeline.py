@@ -40,6 +40,7 @@ class PipelineResult:
     correction_method: str = "bin"    # 이번 산출에 쓴 보정 방법 (화면·도장 표기용)
     igv: bool = True                  # 이 시험의 IGV Turn-up 실시 여부
     igv_skipped: bool = False         # IGV 미실시라 누적 반영을 막았는지
+    rh_unconfirmed: bool = False      # 습도 미확정이라 누적 반영을 막았는지
 
 
 def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None = None,
@@ -88,6 +89,7 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     duplicate_skipped = False
     acq_warnings: list = []
     igv_skipped = False
+    rh_unconfirmed = False
     if connector is not None:
         new_record = store.compute_from_rims(connector, date, start=start, engine=eng,
                                              deg=deg, w=None if igv else 0.0, rh=rh)
@@ -106,6 +108,17 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                 igv_skipped = True
                 acq_warnings.append(
                     "IGV Turn-up 미실시 — 누적에 반영하지 않았습니다(보정값 산출 제외 방침)")
+            elif rh is None and getattr(
+                    getattr(connector, "last_acquired", None), "rh_suspect", False):
+                # 습도 두 센서가 크게 어긋난 회차. 경고만 띄우고 넣으면 조용히 오염된다
+                # (2026-07-07: RH 19.6% vs 표 68.5% → 보정값 -5.19 vs -0.62).
+                # 사람이 습도를 확정해야만 누적된다. 취득값이 맞다고 판단했으면
+                # 같은 값을 수동으로 넣으면 된다 — 그것도 명시적 확인이다.
+                rh_unconfirmed = True
+                acq_warnings.append(
+                    "습도 확인 필요 — 누적에 반영하지 않았습니다. 두 습도계가 크게 "
+                    "어긋났습니다. [상대습도 RH] 에 옳은 값을 넣고 다시 실행하십시오"
+                    "(취득값이 맞다고 판단하면 같은 값을 넣으면 됩니다).")
             elif store.has_date(date):
                 duplicate_skipped = True            # 같은 날짜 이미 반영됨 → 중복 방지
             else:
@@ -157,4 +170,5 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                           reflected=reflected, duplicate_skipped=duplicate_skipped,
                           fingerprint=fp, acq_warnings=acq_warnings,
                           correction_method=correction_method,
-                          igv=igv, igv_skipped=igv_skipped)
+                          igv=igv, igv_skipped=igv_skipped,
+                          rh_unconfirmed=rh_unconfirmed)

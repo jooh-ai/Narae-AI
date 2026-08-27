@@ -473,6 +473,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             if res.new_record is not None:
                 r = res.new_record
                 st = ("⛔ IGV 미실시 — 누적 제외(방침)" if res.igv_skipped else
+                      "⛔ 습도 확인 필요 — 누적 보류" if res.rh_unconfirmed else
                       "✅ 누적 반영됨" if res.reflected else
                       "⚠ 중복 — 건너뜀" if res.duplicate_skipped else "확인용(미반영)")
                 if r.rh is None:
