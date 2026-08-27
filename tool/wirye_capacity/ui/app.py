@@ -455,7 +455,11 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                       "✅ 누적 반영됨" if res.reflected else
                       "⚠ 중복 — 건너뜀" if res.duplicate_skipped else "확인용(미반영)")
                 rh_txt = f"RH {r.rh:.1f}%" if r.rh is not None else "RH 60%(고정)"
-                msg.append(f"신규 취득  CIT {r.cit:.2f}°C · {rh_txt} · CC실측 {r.cc_meas:.2f}"
+                # 취득 대기압을 반드시 같이 보여 준다 — 이론기준값은 대기압에
+                # 0.4 MW/mbar 로 민감해서, 이 값이 없으면 담당자 표와 대조할 때
+                # 0.1 MW 차이의 원인을 짚을 수 없다(2026-08 시운전 1회차에서 확인).
+                msg.append(f"신규 취득  CIT {r.cit:.2f}°C · 취득 대기압 {r.press:.2f} mbar"
+                           f" · {rh_txt} · CC실측 {r.cc_meas:.2f}"
                            f" · 이론 {r.theory:.2f} · W {r.w:+.0f}"
                            f" · 보정값 {r.corr:+.2f} MW  [{st}]")
             if res.output_path:
