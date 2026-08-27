@@ -1,9 +1,0 @@
-    · 06:04:10  Qt 확인
-    · 06:04:10  누적 DB 결정 : /home/user/Test/tool/wirye_measurements.db
-    · 06:04:10  QApplication 생성
-    · 06:04:10  Qt 플랫폼 'offscreen' · 화면 800x800@(0,0)
-    · 06:04:11  MainWindow 생성
-    · 06:04:11  show() 호출
-    · 06:04:11  창 상태 visible=True 1020x1003@(2,2) 최소화=False
-    · 06:04:11  이벤트 루프 진입 — 여기까지 찍히면 시작은 성공이다
-    · 06:04:11  이벤트 루프 종료 (rc=0)
