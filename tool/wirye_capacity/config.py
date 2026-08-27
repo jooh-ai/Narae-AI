@@ -28,7 +28,10 @@ CONFIG_PATH = HOME_CONFIG_PATH                          # 하위호환 별칭
 # 사내 기본값 — 설정파일/환경변수가 없어도 바로 동작(자동화 원칙: 묻지 않는다)
 DEFAULTS = {
     "opcua_host": "skes-rimspall1",   # DataPARC OPC UA 사이트 서버
-    "correction_method": "bin",       # 'bin' | 'curve' | 'gp' — 화면에서 고른 값이 남는다
+    # 기본 보정방법. 누적 36건 LOOCV 에서 GP·RBF 가 예측오차 최소(MAE 1.294)이고
+    # 종전 구간평균(1.515)·일괄(3.833)을 대체한다(2026-08-25 부장님 지시).
+    # 값은 'bin' | 'curve' | 'gp:<커널>' — 화면에서 고른 값이 남는다.
+    "correction_method": "gp:rbf",
 }
 
 # 선택 가능한 보정 방법 — 'bin'/'curve' + GP 커널별. 'gp' 는 예전 설정 파일에

@@ -38,7 +38,9 @@ from ..theory import TheoryEngine
 # 하이퍼파라미터는 커널마다 주변우도로 자동 적합한다(선택 편향 없음).
 # LOOCV 로 후보를 채점하는 것은 [🔬 모델 선정] 탭이고, 실제 산정에 쓸 방법은
 # 여기서 사람이 고른다 — 자동으로 바뀌지 않는다(부장님 방침).
-_METHODS = _sel.METHODS
+# GP RBF 를 맨 앞에 둔다 — 누적 36건 LOOCV 에서 예측오차가 가장 작고(MAE 1.294),
+# 종전 일괄/구간평균 방식을 대체하는 기본값이다(2026-08-25 부장님 지시).
+_METHODS = ("gp:rbf", *(m for m in _sel.METHODS if m != "gp:rbf"))
 _METHOD_ITEMS = [_sel.METHOD_LABEL[m] for m in _METHODS]
 
 
@@ -123,8 +125,47 @@ QPushButton#danger {
 QPushButton#danger:hover { background: #FDECEF; border-color: #EA002C; }
 
 QCheckBox { spacing: 8px; padding: 2px; }
-QCheckBox::indicator { width: 17px; height: 17px; }
-QCheckBox::indicator:checked { background: #EA002C; border-radius: 3px; }
+QCheckBox::indicator {
+    width: 17px; height: 17px; border: 1px solid #DCD2CC;
+    border-radius: 3px; background: #FFFFFF;
+}
+QCheckBox::indicator:hover { border-color: #F0431F; }
+QCheckBox::indicator:disabled { background: #F5EFEC; border-color: #E4DAD4; }
+/* 체크 표시는 런타임에 그린 PNG 를 넣는다(_INDICATOR_QSS). QSS 로 인디케이터
+   크기를 지정하면 Qt 가 네이티브 체크를 그리지 않으므로 이미지가 없으면 빈 칸이
+   된다 — 그래서 이미지 생성이 실패하면 종전처럼 빨간 채움으로 되돌린다. */
+
+/* 스핀박스 화살표 — 위치·크기를 명시하지 않으면 위 버튼이 위젯 밖으로 2px
+   밀려나고 둥근 모서리에 가려서 클릭이 안 먹는다(2026-08 부장님 지적). */
+QDoubleSpinBox, QSpinBox { padding-right: 26px; }
+QDoubleSpinBox::up-button, QSpinBox::up-button {
+    subcontrol-origin: border; subcontrol-position: top right;
+    width: 22px; margin: 1px 1px 0 0; border-left: 1px solid #DCD2CC;
+    border-top-right-radius: 5px; background: #F7F2EF;
+}
+QDoubleSpinBox::down-button, QSpinBox::down-button {
+    subcontrol-origin: border; subcontrol-position: bottom right;
+    width: 22px; margin: 0 1px 1px 0; border-left: 1px solid #DCD2CC;
+    border-bottom-right-radius: 5px; background: #F7F2EF;
+}
+QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover,
+QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {
+    background: #EFE4DE;
+}
+QDoubleSpinBox::up-button:pressed, QSpinBox::up-button:pressed,
+QDoubleSpinBox::down-button:pressed, QSpinBox::down-button:pressed {
+    background: #E4D6CE;
+}
+
+QProgressBar {
+    border: 1px solid #DCD2CC; border-radius: 6px; background: #F7F2EF;
+    text-align: center; color: #4A3B33; font-weight: 700; height: 20px;
+}
+QProgressBar::chunk {
+    border-radius: 5px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #EA002C, stop:1 #F47725);
+}
 
 QTableWidget {
     background: #FFFFFF; border: 1px solid #EDE4DF; border-radius: 8px;
@@ -142,6 +183,47 @@ QToolTip { background: #3A2E28; color: #FFF7F2; border: none; padding: 6px; }
 """
 
 NODEID_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
+
+
+def _check_indicator_qss() -> str:
+    """체크 표시 PNG 를 만들어 QSS 조각으로 돌려준다. 실패하면 빨간 채움으로 후퇴.
+
+    QSS 로 QCheckBox::indicator 의 크기를 지정하면 Qt 는 네이티브 체크를 그리지
+    않는다(실측 확인). 그래서 체크 모양은 이미지로 넣어야 한다 — 파일을 번들에
+    두는 대신 매 실행마다 임시폴더에 그려서 쓴다(PyInstaller 경로 문제가 없다).
+    """
+    import tempfile
+
+    from PySide6 import QtCore, QtGui
+    try:
+        n = 17
+        for scale in (3, 2, 1):                  # 고DPI 대비 3배로 그려 축소
+            s = n * scale
+            img = QtGui.QImage(s, s, QtGui.QImage.Format.Format_ARGB32)
+            img.fill(QtCore.Qt.GlobalColor.transparent)
+            pen = QtGui.QPen(QtGui.QColor("#EA002C"))
+            pen.setWidthF(2.2 * scale)
+            pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
+            pt = QtGui.QPainter(img)
+            pt.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+            pt.setPen(pen)
+            path = QtGui.QPainterPath()
+            path.moveTo(0.22 * s, 0.53 * s)
+            path.lineTo(0.42 * s, 0.73 * s)
+            path.lineTo(0.79 * s, 0.28 * s)
+            pt.drawPath(path)
+            pt.end()
+            out = Path(tempfile.gettempdir()) / f"wirye_check_{scale}x.png"
+            if img.save(str(out), "PNG"):
+                # Qt QSS 는 항상 슬래시 경로를 쓴다(윈도우 역슬래시는 이스케이프로 먹힘)
+                url = out.as_posix()
+                return ("QCheckBox::indicator:checked { image: url(%s); }\n"
+                        "QCheckBox::indicator:checked:disabled { image: url(%s); }"
+                        % (url, url))
+    except Exception:                            # noqa: BLE001
+        pass
+    return "QCheckBox::indicator:checked { background: #EA002C; }"
 
 
 def _require_qt():
@@ -268,6 +350,12 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.sel_btn = QtWidgets.QPushButton("▶  모델 선정 실행")
             self.sel_btn.setObjectName("primary")
             self.sel_btn.clicked.connect(self._on_select)
+            # 커널 7종 × 30건이면 약 9초 걸린다 — 진행률이 없으면 멈춘 것처럼 보인다.
+            self.sel_bar = QtWidgets.QProgressBar()
+            self.sel_bar.setRange(0, 100)
+            self.sel_bar.setValue(0)
+            self.sel_bar.setFormat("%p%  대기")
+            self.sel_bar.setVisible(False)
 
             self.sel_head = QtWidgets.QLabel(
                 "테스트셋 비율·시드·기준을 정하고 실행하세요. "
@@ -300,6 +388,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             iv.setSpacing(8)
             iv.addLayout(top)
             iv.addWidget(self.sel_btn)
+            iv.addWidget(self.sel_bar)
             iv.addWidget(self.sel_head)
             scroll = QtWidgets.QScrollArea()
             scroll.setWidget(inner)
@@ -343,19 +432,34 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     self, "데이터 부족", f"누적이 {len(recs)}건입니다. 최소 6건은 필요합니다.")
                 return
             self.sel_btn.setEnabled(False)
+            self.sel_bar.setVisible(True)
+            self.sel_bar.setValue(0)
+            self.sel_bar.setFormat("%p%  시작")
+            app = QtWidgets.QApplication.instance()
+
+            def on_progress(done, total, label):
+                pct = int(100 * done / total) if total else 0
+                self.sel_bar.setValue(pct)
+                self.sel_bar.setFormat(f"%p%  {label}")
+                if app is not None:      # 계산 중에도 화면이 갱신되도록
+                    app.processEvents()
+
             QtGui.QGuiApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
             try:
                 res = _sel.run(recs, test_frac=self.sel_frac.value() / 100.0,
                                seed=self.sel_seed.value(),
                                stratified=self.sel_strat.isChecked(),
                                criterion=_sel.CRITERIA[self.sel_crit.currentIndex()],
-                               methods=cand)
+                               methods=cand, progress=on_progress)
             except Exception as e:  # noqa: BLE001
                 QtWidgets.QMessageBox.critical(self, "모델 선정 오류", str(e))
+                self.sel_bar.setVisible(False)
                 return
             finally:
                 QtGui.QGuiApplication.restoreOverrideCursor()
                 self.sel_btn.setEnabled(True)
+            self.sel_bar.setValue(100)
+            self.sel_bar.setFormat("100%  완료")
             self._fill_select(res)
 
         def _fill_select(self, res):
@@ -1372,7 +1476,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
           + " / ".join(f"{s.geometry().width()}x{s.geometry().height()}"
                        f"@({s.geometry().x()},{s.geometry().y()})"
                        for s in app.screens()))
-    app.setStyleSheet(QSS)
+    # 체크 표시 이미지는 QApplication 이 있어야 그릴 수 있다(QImage/QPainter).
+    app.setStyleSheet(QSS + "\n" + _check_indicator_qss())
     _logo = _C.logo_path()
     if _logo:                       # 작업표시줄·창 좌상단 아이콘도 같은 로고로
         from PySide6 import QtGui

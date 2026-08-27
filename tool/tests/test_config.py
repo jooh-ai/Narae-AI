@@ -45,15 +45,18 @@ def test_env_override_wins(tmp_path, monkeypatch):
 
 # ── 보정 방법 저장 (시운전 중 방법을 바꿔 가며 비교하므로 선택이 남아야 한다) ──
 
-def test_correction_method_default_is_bin(tmp_path):
-    """설정이 없으면 엑셀4 방식(구간평균)으로 시작한다.
+def test_correction_method_default_is_gp_rbf(tmp_path):
+    """설정이 없으면 GP·RBF 로 시작한다 (2026-08-25 기본값 변경).
+
+    누적 36건 LOOCV 예측오차가 GP·RBF 1.294 < 구간평균 1.515 < 일괄 3.833 이라
+    기본을 GP·RBF 로 옮겼다. 종전 기본은 엑셀4 방식(구간평균)이었다.
 
     path 를 반드시 넘긴다 — 안 넘기면 개발 PC 의 실제 설정 파일을 읽어서,
     누군가 GUI 에서 방법을 바꿔 둔 것만으로 이 테스트가 깨진다.
     """
     from wirye_capacity.config import correction_method
-    assert correction_method(path=tmp_path / "none.json") == "bin"
-    assert DEFAULTS["correction_method"] == "bin"
+    assert correction_method(path=tmp_path / "none.json") == "gp:rbf"
+    assert DEFAULTS["correction_method"] == "gp:rbf"
 
 
 def test_correction_method_rejects_unknown_value(tmp_path):
@@ -63,7 +66,7 @@ def test_correction_method_rejects_unknown_value(tmp_path):
     from wirye_capacity.config import correction_method
     cfg = tmp_path / "c.json"
     cfg.write_text(json.dumps({"correction_method": "gp:nope"}), encoding="utf-8")
-    assert correction_method(path=cfg) == "bin"
+    assert correction_method(path=cfg) == "gp:rbf"
     cfg.write_text(json.dumps({"correction_method": "gp:matern52"}), encoding="utf-8")
     assert correction_method(path=cfg) == "gp:matern52"    # 커널별 키는 유효하다
 
@@ -86,7 +89,7 @@ def test_correction_method_rejects_garbage(tmp_path, monkeypatch):
     monkeypatch.setattr(cf, "HOME_CONFIG_PATH", tmp_path / "home.json")
     monkeypatch.setattr(cf, "app_config_path", lambda: tmp_path / "tool.json")
     cf.set_config("correction_method", "무엄한값")
-    assert cf.correction_method() == "bin"
+    assert cf.correction_method() == "gp:rbf"
 
 
 def test_tool_folder_wins_over_home(tmp_path, monkeypatch):

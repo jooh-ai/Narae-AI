@@ -162,7 +162,7 @@ def split(records: list[dict], test_frac: float, seed: int,
     return train, test, warn
 
 
-def loocv(train: list[dict], methods: list[str]) -> list[Score]:
+def loocv(train: list[dict], methods: list[str], progress=None) -> list[Score]:
     """학습셋 LOOCV — 1건을 빼고 나머지로 그 1건을 예측. 테스트셋은 안 쓴다.
 
     **모든 후보를 같은 평가집합에서 채점한다.** 어느 후보든 예측할 수 없는 회차는
@@ -171,8 +171,17 @@ def loocv(train: list[dict], methods: list[str]) -> list[Score]:
     수 없다 — RMSE 는 n 이 다르고 R² 는 SST 가 달라진다. 실제로 이 때문에
     R² 순위와 RMSE 순위가 갈리는 것을 테스트가 잡았다(2026-08-25).
     """
-    grid = {m: [predict(m, train[:i] + train[i + 1:], r["cit"])
-                for i, r in enumerate(train)] for m in methods}
+    grid: dict[str, list] = {}
+    total = max(1, len(methods) * len(train))
+    done = 0
+    for m in methods:
+        col = []
+        for i, r in enumerate(train):
+            col.append(predict(m, train[:i] + train[i + 1:], r["cit"]))
+            done += 1
+            if progress is not None:
+                progress(done, total, f"LOOCV · {METHOD_LABEL[m]}")
+        grid[m] = col
     common = [i for i in range(len(train))
               if all(grid[m][i] is not None for m in methods)]
     dropped = len(train) - len(common)
@@ -220,16 +229,24 @@ class SelectionResult:
 
 def run(records: list[dict], *, test_frac: float = 0.2, seed: int = 42,
         stratified: bool = True, criterion: str = "rmse",
-        methods: list[str] | None = None) -> SelectionResult:
-    """전 절차 실행. records: [{'cit','corr'}, ...] (누적 전체)."""
+        methods: list[str] | None = None, progress=None) -> SelectionResult:
+    """전 절차 실행. records: [{'cit','corr'}, ...] (누적 전체).
+
+    progress: progress(done, total, label) 콜백. GP 커널 7종 × 30건이면 약 9초가
+      걸려서 화면이 멈춘 것처럼 보인다 — 진행률을 밖으로 흘려보낸다.
+    """
     if criterion not in CRITERIA:
         raise ValueError(f"기준은 {CRITERIA} 중 하나여야 합니다 (입력: {criterion})")
     if not 0.0 <= test_frac < 1.0:
         raise ValueError(f"테스트셋 비율은 0 이상 1 미만이어야 합니다 (입력: {test_frac})")
     cand = list(methods or METHODS)
     train, test, warn = split(records, test_frac, seed, stratified)
-    scores = loocv(train, cand)
+    if progress is not None:
+        progress(0, 1, "테스트셋 분리")
+    scores = loocv(train, cand, progress=progress)
     best = min(scores, key=lambda s: s.value(criterion)).method if scores else None
+    if progress is not None:
+        progress(1, 1, "테스트셋 검증")
     hs, rows = (holdout(train, test, best) if (best and test) else (None, []))
 
     if len(test) < 10 and test:
