@@ -44,6 +44,30 @@ _METHODS = ("gp:rbf", *(m for m in _sel.METHODS if m != "gp:rbf"))
 _METHOD_ITEMS = [_sel.METHOD_LABEL[m] for m in _METHODS]
 
 
+def _readonly_table(tb, stretch_from: int = 0):
+    """표시 전용 표로 만든다 — 셀 편집 불가.
+
+    QTableWidget 은 기본이 편집 가능이라, 아무 설정을 안 하면 더블클릭으로 값이
+    고쳐진다. 계산 결과 표에서 그러면 화면 숫자와 실제 계산이 어긋나는데 아무
+    경고도 없다. **편집이 허용되는 표는 [Test 결과 List-up] 하나뿐이다** —
+    그 표만 편집 트리거를 따로 지정하고 저장 시 이론값·보정값을 재계산한다.
+
+    stretch_from: 이 열부터 남는 폭을 나눠 갖는다. 그 앞 열들은 내용에 맞춘다
+    (전부 Stretch 로 두면 긴 라벨이 '...' 로 잘린다).
+    """
+    from PySide6 import QtWidgets      # 모듈 상단에서 import 하지 않는다(_require_qt 참조)
+
+    tb.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+    tb.setAlternatingRowColors(True)
+    tb.verticalHeader().setVisible(False)
+    hh = tb.horizontalHeader()
+    for c in range(tb.columnCount()):
+        hh.setSectionResizeMode(
+            c, QtWidgets.QHeaderView.ResizeMode.Stretch if c >= stretch_from
+            else QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+    return tb
+
+
 def _method_index(key: str) -> int:
     """저장된 방법 키 → 콤보 인덱스. 예전 'gp' 는 'gp:rbf' 로 해석한다."""
     k = "gp:rbf" if key == "gp" else key
@@ -369,11 +393,20 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.sel_test = QtWidgets.QTableWidget(0, 5)
             self.sel_test.setHorizontalHeaderLabels(
                 ["CIT(°C)", "실측 보정값", "예측", "오차", "방향"])
+            # 첫 열('방법' / 'CIT')은 나머지와 폭을 나눠 갖지 않는다 — 전부 Stretch
+            # 로 두면 'GP · Rational Quadratic' 같은 라벨이 '...' 로 잘린다.
+            # ResizeToContents 만으로도 2px 모자라는 경우가 있어서(실측), 방법 열은
+            # 가장 긴 라벨을 실제로 재서 폭을 못박는다. 라벨은 실행 중에 바뀌지
+            # 않으므로 한 번 계산하면 된다. Interactive 라 사용자가 끌어 조절도 된다.
+            _readonly_table(self.sel_loocv, stretch_from=1)
+            _readonly_table(self.sel_test, stretch_from=1)
+            fm = self.sel_loocv.fontMetrics()
+            wide = max(fm.horizontalAdvance(_sel.METHOD_LABEL[m]) for m in _METHODS)
+            hh0 = self.sel_loocv.horizontalHeader()
+            hh0.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Interactive)
+            hh0.resizeSection(0, wide + 28)          # 여백 28px — 셀 패딩 + 정렬 여유
+            hh0.setMinimumSectionSize(min(wide + 28, 60))
             for tb in (self.sel_loocv, self.sel_test):
-                tb.setAlternatingRowColors(True)
-                tb.verticalHeader().setVisible(False)
-                tb.horizontalHeader().setSectionResizeMode(
-                    QtWidgets.QHeaderView.ResizeMode.Stretch)
                 tb.setMinimumHeight(60)
             self.sel_test_head = QtWidgets.QLabel("② 테스트셋 검증 — 아직 실행하지 않았습니다")
             self.sel_test_head.setWordWrap(True)
@@ -684,10 +717,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.profile_tbl = QtWidgets.QTableWidget(0, len(PROFILE_COLUMNS))
             self.profile_tbl.setHorizontalHeaderLabels(
                 [_SHORT_HEAD.get(attr, h) for h, attr in PROFILE_COLUMNS])
-            self.profile_tbl.setAlternatingRowColors(True)
-            self.profile_tbl.verticalHeader().setVisible(False)
-            hh = self.profile_tbl.horizontalHeader()
-            hh.setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
+            _readonly_table(self.profile_tbl)
 
             head = QtWidgets.QHBoxLayout()
             head.addWidget(QtWidgets.QLabel("온도별 예측 (−20 ~ 40°C, 61구간)"))
@@ -960,9 +990,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.status_tbl = QtWidgets.QTableWidget(0, 6)
             self.status_tbl.setHorizontalHeaderLabels(
                 ["온도구간", "종류", "건수/목표", "실측평균", "적용 보정값", "상태"])
-            self.status_tbl.setAlternatingRowColors(True)
+            _readonly_table(self.status_tbl)
             self.status_tbl.horizontalHeader().setStretchLastSection(True)
-            self.status_tbl.verticalHeader().setVisible(False)
             lay.addWidget(cap)
             lay.addWidget(self.status_tbl)
             return w
