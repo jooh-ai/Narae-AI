@@ -1500,7 +1500,15 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self._fill_profile(res.profile_rows)
 
     stage("QApplication 생성")
-    app = QtWidgets.QApplication(argv or sys.argv)
+    # 이미 인스턴스가 있으면 재사용한다. QApplication 은 프로세스당 하나만 만들 수
+    # 있어서, 무조건 새로 만들면 같은 프로세스에서 두 번 호출될 때 죽는다
+    # (libshiboken: Please destroy the QApplication singleton ...).
+    # 실제 배포에서는 항상 None 이고, 테스트가 창을 띄워 검사할 때만 재사용된다.
+    app = QtWidgets.QApplication.instance()
+    if app is None:
+        app = QtWidgets.QApplication(argv or sys.argv)
+    else:
+        stage("기존 QApplication 재사용")
     stage(f"Qt 플랫폼 '{app.platformName()}' · 화면 "
           + " / ".join(f"{s.geometry().width()}x{s.geometry().height()}"
                        f"@({s.geometry().x()},{s.geometry().y()})"
