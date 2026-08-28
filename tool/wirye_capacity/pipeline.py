@@ -58,7 +58,7 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                  connector=None, engine: TheoryEngine | None = None,
                  deg: float = C.DEFAULT_DEG,
                  forecast: WeatherForecast | None = None, forecast_path: str | None = None,
-                 bid_day: str | None = None, template_path: str | Path = DEFAULT_TEMPLATE,
+                 template_path: str | Path = DEFAULT_TEMPLATE,
                  accumulate: bool = False, correction_method: str = "bin",
                  bandwidth: float = 3.5, margin_k: float = 0.0,
                  start: str = "17:00", igv: bool = True,
@@ -67,7 +67,8 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
 
     accumulate=False(기본): 취득·보정값 계산만(확인용) — 누적에 저장 안 함.
     accumulate=True: 그 테스트를 누적에 반영(저장). 같은 날짜가 이미 있으면 건너뜀.
-    forecast/forecast_path 로 입찰 대기압(예보 중위 − 8) 결정. 없으면 ISO 1013.
+    forecast/forecast_path 로 입찰 대기압 결정 — 예보 3~7일차(D+2~D+6) 중위 평균 − 8.
+      엑셀3 '온도 Profile'!M2 = AVERAGE(Y8:Y12)-8 과 같은 값이다. 없으면 ISO 1013.
     correction_method: 'bin'(구간 평균, 기본) / 'curve'(커널회귀) / 'gp'(가우시안 프로세스).
       실측 32건 LOOCV 예측오차(MAE): bin 1.419 / curve 1.341 / gp 1.243 MW.
     margin_k: 미달 방지 안전마진 계수(0=미적용). 마진 = k × 구간별 실측변동.
@@ -91,7 +92,9 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     # 1. 날씨 → 적용 대기압
     if forecast is None and forecast_path:
         forecast = load_excel3_1(forecast_path)
-    pressure = (applied_pressure(forecast, day=bid_day) if forecast is not None
+    # 적용 대기압 = 예보 3~7일차 중위 평균 − 8 (엑셀3 M2 수식과 동일). 적용일을
+    # 고르는 인자는 없다 — 담당자 실무가 이 창 하나로 고정이다.
+    pressure = (applied_pressure(forecast) if forecast is not None
                 else C.REF_PRESSURE)
 
     # 2. RiMS 취득 → 보정값 계산(확인용). 반영(저장)은 accumulate=True 일 때만.

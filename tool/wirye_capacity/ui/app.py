@@ -663,11 +663,16 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             # ② 입찰 조건
             g2 = QtWidgets.QGroupBox("입찰 조건")
             f2 = QtWidgets.QFormLayout(g2)
-            self.bidday_in = QtWidgets.QLineEdit()
-            self.bidday_in.setPlaceholderText("입찰 적용일 라벨(선택, 미입력 시 7일 중위 평균)")
+            # 입찰 적용일 선택은 없다. 적용 대기압은 예보 3~7일차(D+2~D+6) 중위
+            # 평균 − 8 로 고정이고, 이는 엑셀3 M2 = AVERAGE(Y8:Y12)-8 과 같은 규칙이다.
+            # 고를 수 있게 두면 M2 표시값과 파일 내용이 어긋난다(2026-08-25 확인).
             self.forecast_in = self._file_row("대기압 윈드파인더 파일(.xlsx)")
-            f2.addRow("입찰 적용일", self.bidday_in)
             f2.addRow("대기압 윈드파인더", self.forecast_in["row"])
+            note = QtWidgets.QLabel(
+                "적용 대기압 = 예보 3~7일차(테스트일 +2 ~ +6) 중위 평균 − 8 mbar")
+            note.setStyleSheet("color:#6b7382; font-size:11px;")
+            note.setWordWrap(True)
+            f2.addRow("", note)
 
             # ③ 실행 옵션 · 출력
             g3 = QtWidgets.QGroupBox("실행 옵션 · 출력")
@@ -847,7 +852,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     output_path=None,          # 저장은 [엑셀로 저장] 에서
                     connector=connector,
                     engine=self.engine, deg=self.deg_in.value(),
-                    bid_day=self.bidday_in.text().strip() or None,
                     accumulate=self.accum_chk.isChecked(),
                     correction_method=_METHODS[self.method_cb.currentIndex()],
                     igv=self.igv_chk.isChecked(),
@@ -910,7 +914,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             # 방식이라 run_pipeline 을 다시 타는 것이 유일한 정합 경로다.
             self._last_run = {
                 "date": res.date, "deg": self.deg_in.value(),
-                "bid_day": self.bidday_in.text().strip() or None,
                 "method": _METHODS[self.method_cb.currentIndex()],
                 "margin_k": 0.0,          # 안전마진은 화면에서 제거됨(CLI 전용)
                 "forecast_path": self.forecast_in["edit"].text().strip() or None,
@@ -963,7 +966,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             try:
                 res = run_pipeline(
                     date=r["date"], store=self.store, output_path=path, connector=None,
-                    engine=self.engine, deg=r["deg"], bid_day=r["bid_day"],
+                    engine=self.engine, deg=r["deg"],
                     correction_method=r["method"], margin_k=r["margin_k"],
                     forecast_path=r["forecast_path"], template_path=r["template"])
             except Exception as e:  # noqa: BLE001
@@ -1483,7 +1486,6 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                     date=self.date_in.text().strip(), store=self.store,
                     output_path=self._last_bid["path"], connector=None,
                     engine=self.engine, deg=self.deg_in.value(),
-                    bid_day=self.bidday_in.text().strip() or None,
                     correction_method=_METHODS[self.method_cb.currentIndex()],
                     igv=self.igv_chk.isChecked(),
                     forecast_path=self.forecast_in["edit"].text().strip() or None,

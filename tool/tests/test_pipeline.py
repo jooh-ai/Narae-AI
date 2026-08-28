@@ -14,12 +14,16 @@ from wirye_capacity.weather import WeatherForecast
 def forecast():
     return WeatherForecast(
         capture="2026-04-15 18:09:12",
+        # 실제 양식은 항상 7일이다(성남비행장 7일 예보). 5일짜리 픽스처를 쓰면
+        # 적용 대기압 규칙(3~7일차)을 검증할 수 없다.
         days=["수요일, 4월 15일", "목요일, 4월 16일", "금요일, 4월 17일",
-              "토요일, 4월 18일", "일요일, 4월 19일"],
+              "토요일, 4월 18일", "일요일, 4월 19일", "월요일, 4월 20일",
+              "화요일, 4월 21일"],
         times=[0, 3, 6, 9, 12, 15, 18, 21],
         pressure_median={"수요일, 4월 15일": 1010.0, "목요일, 4월 16일": 1015.0,
                          "금요일, 4월 17일": 1013.0, "토요일, 4월 18일": 1015.0,
-                         "일요일, 4월 19일": 1015.0})
+                         "일요일, 4월 19일": 1015.0, "월요일, 4월 20일": 1014.0,
+                         "화요일, 4월 21일": 1014.0})
 
 
 def test_end_to_end_creates_bid_file(tmp_path, forecast):
@@ -38,9 +42,13 @@ def test_end_to_end_creates_bid_file(tmp_path, forecast):
     assert res.measurement_count == 37
     assert res.reflected is True
     assert res.new_record is not None and res.new_record.cit == 25.5
-    # 적용 대기압 = 전체 중위 평균 − 8
-    mean_med = sum(forecast.pressure_median.values()) / len(forecast.pressure_median)
+    # 적용 대기압 = 예보 3~7일차(D+2~D+6) 중위 평균 − 8  (엑셀3 M2 = AVERAGE(Y8:Y12)-8)
+    from wirye_capacity.weather import bid_days
+    picked = bid_days(forecast)
+    assert picked == forecast.days[2:7]
+    mean_med = sum(forecast.pressure_median[d] for d in picked) / len(picked)
     assert res.applied_pressure == pytest.approx(mean_med - 8)
+    assert res.applied_pressure == pytest.approx(1006.2)
     # Profile 61행
     assert len(res.profile_rows) == 61
     # 엑셀3 파일 생성 + Mode3 입력 기입됨
