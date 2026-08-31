@@ -39,7 +39,9 @@
   --brass-d:#8A6620;   /* 놋쇠 어둡게 — 열세 후보 막대 */
   --red:#FF4D63;       /* 위험·미달 (어두운 바탕 보정) */
   --red-d:#7E2333;     /* 레드 어둡게 */
-  --slate:#5E7793;     /* 종전 방식·비교군 */
+  --slate:#5E7793;     /* 종전 방식·비교군 — 채워진 면(막대·박스)에 */
+  --slate-l:#8CA3BC;   /* 종전 '선' 전용 — 2px 선은 면보다 훨씬 어둡게 보인다.
+                          홈 면(#0A1320) 위 대비 7.2:1 (면용 슬레이트는 4.2:1) */
   --body-c:#BCC9D6;    /* 본문 문장 — dim 보다 밝게 (대비 10:1) */
   --disp:'Malgun Gothic','맑은 고딕','IBM Plex Sans KR',sans-serif;
   --body:'Malgun Gothic','맑은 고딕','IBM Plex Sans KR',sans-serif;
@@ -237,8 +239,9 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
           <text x="48" y="200">0&#8451;</text><text x="190" y="200">10</text>
           <text x="332" y="200">20</text><text x="474" y="200">30</text>
         </g>
-        <!-- 종전 · 일괄 +2.4 -->
-        <line x1="40" y1="97" x2="490" y2="97" stroke="var(--slate)" stroke-width="2" stroke-dasharray="6 5"></line>
+        <!-- 종전 · 일괄 +2.4 — 개선 곡선과 같은 굵기(2.6)로 대등하게 세운다 -->
+        <line x1="40" y1="97" x2="490" y2="97" stroke="var(--slate-l)" stroke-width="2.6" stroke-dasharray="9 6"></line>
+        <text x="48" y="89" class="num" font-size="12" font-weight="700" fill="#8CA3BC">종전 · 일괄 +2.4</text>
         <!-- 개선 · GP·RBF 실측 4점 -->
         <polyline fill="none" stroke="var(--brass)" stroke-width="2.6" points="48,31 190,61 332,83 474,159"></polyline>
         <g fill="var(--brass)">
@@ -256,9 +259,11 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
           <line x1="468" y1="103" x2="480" y2="103"></line><line x1="468" y1="153" x2="480" y2="153"></line>
         </g>
       </svg>
-      <div style="display:flex;gap:22px;margin-top:12px;flex-wrap:wrap">
-        <span class="num" style="font-size:12px;color:var(--slate)">&#9644;&#9644; 종전 · 일괄 +2.4</span>
-        <span class="num" style="font-size:12px;color:var(--brass)">&#9644;&#9644; 개선 · 온도별 곡선</span>
+      <div style="display:flex;gap:26px;margin-top:12px;align-items:center">
+        <span class="num" style="font-size:12px;color:var(--slate-l);display:flex;align-items:center;gap:8px">
+          <span style="display:block;width:26px;height:0;border-top:2.6px dashed var(--slate-l)"></span>종전 · 일괄 +2.4</span>
+        <span class="num" style="font-size:12px;color:var(--brass);display:flex;align-items:center;gap:8px">
+          <span style="display:block;width:26px;height:0;border-top:2.6px solid var(--brass)"></span>개선 · 온도별 곡선</span>
       </div>
       <div class="num" style="font-size:12px;color:var(--red);margin-top:7px">
         겨울 0&#8451; 5.1 MW 과소 &nbsp;·&nbsp; 여름 30&#8451; 4.8 MW 과대</div>
@@ -322,32 +327,32 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
     </p>
 
     <!-- KPI 3 · 개방 패널 + 계기 게이지 -->
-    <div class="pan on" style="left:72px;top:288px;width:346px">
+    <div class="pan on" style="left:72px;top:282px;width:346px">
       <div class="plab">예측 오차 &nbsp;·&nbsp; MW</div>
       <div style="display:flex;align-items:baseline;gap:13px;margin-top:12px">
-        <div class="big" style="font-size:44px;color:var(--brass)">1.29</div>
+        <div class="big" style="font-size:42px;color:var(--brass)">1.29</div>
         <div class="was" style="font-size:19px">&#8592; 3.83</div>
       </div>
       <p style="margin-top:10px">평균적으로 몇 MW 틀리는가</p>
-      <div class="zone" style="margin-top:13px;padding:10px 12px">
+      <div class="zone" style="margin-top:12px;padding:9px 12px">
       <svg width="322" height="28" viewBox="0 0 346 30" role="img"
            aria-label="종전 3.83 위치에서 개선 1.29 위치까지 침이 내려왔다">
         <line x1="0" y1="16" x2="346" y2="16" stroke="var(--rule)" stroke-width="1"></line>
         <rect x="0" y="12" width="117" height="8" fill="var(--brass)"></rect>
-        <line x1="346" y1="6" x2="346" y2="26" stroke="var(--slate)" stroke-width="2"></line>
+        <line x1="346" y1="6" x2="346" y2="26" stroke="var(--slate-l)" stroke-width="2.6"></line>
         <text x="122" y="9" class="num" font-size="10.5" fill="#EFB13C" font-weight="700">개선</text>
-        <text x="342" y="9" class="num" font-size="10.5" fill="#5E7793" text-anchor="end">종전</text>
+        <text x="342" y="9" class="num" font-size="10.5" fill="#8CA3BC" text-anchor="end">종전</text>
       </svg></div>
     </div>
 
-    <div class="pan bad" style="left:467px;top:288px;width:346px">
+    <div class="pan bad" style="left:467px;top:282px;width:346px">
       <div class="plab">기준 미달 회차 &nbsp;·&nbsp; 건</div>
       <div style="display:flex;align-items:baseline;gap:13px;margin-top:12px">
-        <div class="big" style="font-size:44px;color:var(--brass)">3</div>
+        <div class="big" style="font-size:42px;color:var(--brass)">3</div>
         <div class="was" style="font-size:19px;color:var(--red)">&#8592; 14</div>
       </div>
       <p style="margin-top:10px">실제가 낮아 <b>벌점</b>이 걸린 회차</p>
-      <div class="zone" style="margin-top:13px;padding:10px 12px">
+      <div class="zone" style="margin-top:12px;padding:9px 12px">
       <svg width="322" height="28" viewBox="0 0 346 30" role="img"
            aria-label="종전 14건에서 개선 3건으로 줄었다">
         <line x1="0" y1="16" x2="346" y2="16" stroke="var(--rule)" stroke-width="1"></line>
@@ -358,47 +363,49 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
       </svg></div>
     </div>
 
-    <div class="pan on" style="left:862px;top:288px;width:346px">
+    <div class="pan on" style="left:862px;top:282px;width:346px">
       <div class="plab">과대 신고 누계 &nbsp;·&nbsp; MW</div>
       <div style="display:flex;align-items:baseline;gap:13px;margin-top:12px">
-        <div class="big" style="font-size:44px;color:var(--brass)">7.6</div>
+        <div class="big" style="font-size:42px;color:var(--brass)">7.6</div>
         <div class="was" style="font-size:19px">&#8592; 65.4</div>
       </div>
       <p style="margin-top:10px">실제보다 높게 신고한 양의 합계</p>
-      <div class="zone" style="margin-top:13px;padding:10px 12px">
+      <div class="zone" style="margin-top:12px;padding:9px 12px">
       <svg width="322" height="28" viewBox="0 0 346 30" role="img"
            aria-label="종전 65.4에서 개선 7.6으로 줄었다">
         <line x1="0" y1="16" x2="346" y2="16" stroke="var(--rule)" stroke-width="1"></line>
         <rect x="0" y="12" width="40" height="8" fill="var(--brass)"></rect>
-        <line x1="346" y1="6" x2="346" y2="26" stroke="var(--slate)" stroke-width="2"></line>
+        <line x1="346" y1="6" x2="346" y2="26" stroke="var(--slate-l)" stroke-width="2.6"></line>
         <text x="45" y="9" class="num" font-size="10.5" fill="#EFB13C" font-weight="700">개선</text>
-        <text x="342" y="9" class="num" font-size="10.5" fill="#5E7793" text-anchor="end">종전</text>
+        <text x="342" y="9" class="num" font-size="10.5" fill="#8CA3BC" text-anchor="end">종전</text>
       </svg></div>
     </div>
 
     <!-- 종전 / 현재 대비 — 외곽여백(72~1208)에 딱 맞춘 한 덩어리.
          내부를 세로 룰로 반 갈라 배열이 KPI 3열과 어긋나지 않게 한다.
          상단 룰만 좌=슬레이트 / 우=앰버로 갈라 두 방식을 색으로도 구분. -->
-    <div style="position:absolute;left:72px;top:478px;width:1136px;height:138px;background:var(--groove)"></div>
-    <div style="position:absolute;left:72px;top:478px;width:568px;height:2px;background:var(--slate)"></div>
-    <div style="position:absolute;left:640px;top:478px;width:568px;height:2px;background:var(--brass)"></div>
-    <div style="position:absolute;left:640px;top:504px;width:1px;height:86px;background:var(--rule)"></div>
-    <div style="position:absolute;left:616px;top:528px;width:48px;height:38px;background:var(--groove);
+    <div style="position:absolute;left:72px;top:486px;width:1136px;height:130px;background:var(--groove)"></div>
+    <div style="position:absolute;left:72px;top:486px;width:568px;height:2px;background:var(--slate)"></div>
+    <div style="position:absolute;left:640px;top:486px;width:568px;height:2px;background:var(--brass)"></div>
+    <div style="position:absolute;left:640px;top:510px;width:1px;height:82px;background:var(--rule)"></div>
+    <div style="position:absolute;left:616px;top:532px;width:48px;height:38px;background:var(--groove);
                 text-align:center;font-size:30px;line-height:38px;color:var(--brass)">&#8594;</div>
 
-    <div style="position:absolute;left:96px;top:498px;width:500px">
+    <!-- 좌 96~616 / 우 664~1184 — 세로 룰(x=640)에서 좌우 544px 로 대칭.
+         칩은 space-between 으로 각 절반 전폭을 채운다 (한쪽으로 쏠리지 않게). -->
+    <div style="position:absolute;left:96px;top:503px;width:520px">
       <div class="plab" style="color:var(--slate)">종전 &nbsp;·&nbsp; 사람의 판단</div>
-      <div class="sub" style="margin-top:11px;color:var(--slate)">보정값 <em style="color:var(--slate)">1개</em>를 사람이 정수로</div>
-      <div class="flow" style="margin-top:15px">
+      <div class="sub" style="margin-top:10px;color:var(--slate)">보정값 <em style="color:var(--slate)">1개</em>를 사람이 정수로</div>
+      <div class="flow" style="margin-top:14px;justify-content:space-between">
         <span class="tag">이론값 계산</span><s>&#8594;</s>
         <span class="tag">실적과 비교</span><s>&#8594;</s>
         <span class="tag">정수로 판단</span>
       </div>
     </div>
-    <div style="position:absolute;left:664px;top:498px;width:520px">
+    <div style="position:absolute;left:664px;top:503px;width:520px">
       <div class="plab" style="color:var(--brass)">현재 &nbsp;·&nbsp; 데이터의 학습</div>
-      <div class="sub" style="margin-top:11px">온도별 곡선을 <em>데이터가 갱신</em></div>
-      <div class="flow" style="margin-top:15px">
+      <div class="sub" style="margin-top:10px">온도별 곡선을 <em>데이터가 갱신</em></div>
+      <div class="flow" style="margin-top:14px;justify-content:space-between">
         <span class="tag on">자동 취득</span><s>&#8594;</s>
         <span class="tag on">온도별 학습</span><s>&#8594;</s>
         <span class="tag on">최적 방식 재선정</span>
