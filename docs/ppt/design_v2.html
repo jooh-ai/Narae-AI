@@ -199,13 +199,13 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
     <div class="meta" style="position:absolute;right:72px;top:40px">2026. 09.</div>
     <div class="hrule" style="top:72px"></div>
 
-    <h1 class="title" style="top:112px;width:600px;font-size:50px;line-height:1.2">
+    <h1 class="title" style="top:112px;width:596px;font-size:47px;line-height:1.2">
       공급가능용량 산정,<br>사람의 판단에서 <em>데이터로</em>
     </h1>
 
     <div class="sub" style="position:absolute;left:72px;top:280px;width:568px;font-size:25px;line-height:1.46">
-      온도가 달라도 <s>보정값 하나</s>로 맞춰 온 주간 신고를,
-      온도별 실적을 <em>스스로 학습하는 모델</em>로 바꿨습니다.
+      온도가 달라도 <s>보정값 하나</s>로 맞춰 온 신고를,
+      <em>온도별로 학습하는 모델</em>로 바꿨습니다.
     </div>
     <p class="txt" style="position:absolute;left:72px;top:392px;width:552px">
       종전 방식과 <b>같은 데이터 · 같은 조건</b>에서 채점한 결과입니다.
@@ -215,51 +215,55 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
     <!-- 히어로: 종전 수평선 vs 개선 곡선 (실측 RBF 4점) -->
     <div class="zone" style="position:absolute;left:668px;top:112px;width:540px">
       <div class="plab" style="margin-bottom:12px">보정값 · 단위 MW &nbsp;·&nbsp; 외기온도 0 ~ 30&#8451;</div>
-      <svg width="508" height="272" viewBox="0 0 508 272" role="img"
-           aria-label="종전의 일괄 보정값 하나는 수평선, 개선된 모델은 온도에 따라 내려가는 곡선. 두 선은 24도 부근에서 교차한다">
-        <!-- y 격자 -->
-        <g stroke="var(--rule2)" stroke-width="1">
-          <line x1="42" y1="24" x2="500" y2="24"></line>
-          <line x1="42" y1="204" x2="500" y2="204"></line>
-        </g>
-        <line x1="42" y1="144" x2="500" y2="144" stroke="var(--rule)" stroke-width="1"></line>
+      <!-- 축 규격: x 0℃=48 · 30℃=474 (14.2px/℃) · y 13px/MW · 0MW=y128
+           실측 GP·RBF 4점 (0,+7.50)(10,+5.17)(20,+3.47)(30,−2.38) → y=31,61,83,159
+           종전 일괄 +2.4 → y=97.  붉은 괄호는 0℃·30℃ 그 자리에 정확히 세운다. -->
+      <svg width="508" height="210" viewBox="0 0 508 210" role="img"
+           aria-label="종전의 일괄 보정값은 수평 점선, 개선 모델은 온도에 따라 내려가는 곡선. 겨울에는 5.1 MW 과소, 여름에는 4.8 MW 과대가 된다">
+        <!-- 격자 -->
+        <line x1="40" y1="24"  x2="490" y2="24"  stroke="var(--rule2)"></line>
+        <line x1="40" y1="128" x2="490" y2="128" stroke="var(--rule)"></line>
+        <line x1="40" y1="180" x2="490" y2="180" stroke="var(--rule2)"></line>
+        <line x1="40" y1="24"  x2="40"  y2="180" stroke="var(--rule)"></line>
         <g class="num" font-size="10" fill="#63798F">
-          <text x="0" y="28">+8</text><text x="0" y="148">0</text><text x="0" y="208">&#8722;4</text>
+          <text x="0" y="28">+8</text><text x="0" y="132">0</text><text x="0" y="184">&#8722;4</text>
         </g>
         <!-- x 눈금 -->
-        <g stroke="var(--rule)"><line x1="42" y1="232" x2="500" y2="232"></line></g>
+        <g stroke="#63798F">
+          <line x1="48"  y1="180" x2="48"  y2="185"></line><line x1="190" y1="180" x2="190" y2="185"></line>
+          <line x1="332" y1="180" x2="332" y2="185"></line><line x1="474" y1="180" x2="474" y2="185"></line>
+        </g>
         <g class="num" font-size="10" fill="#63798F" text-anchor="middle">
-          <text x="42" y="250">0&#8451;</text><text x="195" y="250">10</text>
-          <text x="348" y="250">20</text><text x="500" y="250">30</text>
+          <text x="48" y="200">0&#8451;</text><text x="190" y="200">10</text>
+          <text x="332" y="200">20</text><text x="474" y="200">30</text>
         </g>
-        <g stroke="#63798F"><line x1="42" y1="232" x2="42" y2="237"></line><line x1="195" y1="232" x2="195" y2="237"></line>
-          <line x1="348" y1="232" x2="348" y2="237"></line><line x1="500" y1="232" x2="500" y2="237"></line></g>
-
-        <!-- 종전: 일괄 +2.4 수평 점선 -->
-        <line x1="42" y1="108" x2="500" y2="108" stroke="var(--slate)" stroke-width="2" stroke-dasharray="6 5"></line>
-        <text x="46" y="101" class="num" font-size="11" fill="#5E7793" font-weight="700">종전 · 일괄 +2.4</text>
-
-        <!-- 개선: GP·RBF 실측 4점 -->
-        <polyline fill="none" stroke="var(--brass)" stroke-width="2.6"
-                  points="42,31 195,66 348,92 500,180"></polyline>
+        <!-- 종전 · 일괄 +2.4 -->
+        <line x1="40" y1="97" x2="490" y2="97" stroke="var(--slate)" stroke-width="2" stroke-dasharray="6 5"></line>
+        <!-- 개선 · GP·RBF 실측 4점 -->
+        <polyline fill="none" stroke="var(--brass)" stroke-width="2.6" points="48,31 190,61 332,83 474,159"></polyline>
         <g fill="var(--brass)">
-          <rect x="38" y="27" width="8" height="8"></rect><rect x="191" y="62" width="8" height="8"></rect>
-          <rect x="344" y="88" width="8" height="8"></rect><rect x="496" y="176" width="8" height="8"></rect>
+          <rect x="44" y="27" width="8" height="8"></rect><rect x="186" y="57" width="8" height="8"></rect>
+          <rect x="328" y="79" width="8" height="8"></rect><rect x="470" y="155" width="8" height="8"></rect>
         </g>
-        <g class="num" font-size="11" font-weight="700" fill="#EFB13C">
-          <text x="52" y="24">+7.5</text><text x="474" y="199" text-anchor="end">&#8722;2.4</text>
+        <g class="num" font-size="12" font-weight="700" fill="#EFB13C">
+          <text x="58" y="52">+7.5</text><text x="466" y="174" text-anchor="end">&#8722;2.4</text>
         </g>
-
-        <!-- 두 선의 간격 = 손실 -->
-        <line x1="24" y1="31" x2="24" y2="108" stroke="var(--red)" stroke-width="1.4"></line>
-        <line x1="470" y1="108" x2="470" y2="180" stroke="var(--red)" stroke-width="1.4"></line>
-        <g font-size="10.5" fill="#FF4D63" font-family="Malgun Gothic,sans-serif">
-          <text x="60" y="128">겨울 5.1 MW 과소</text>
-          <text x="462" y="132" text-anchor="end">여름 4.8 MW 과대</text>
+        <!-- 두 선의 간격 = 손실. 0℃ 와 30℃ 자리에 정확히 -->
+        <g stroke="var(--red)" stroke-width="1.6">
+          <line x1="48" y1="37" x2="48" y2="91"></line>
+          <line x1="42" y1="37" x2="54" y2="37"></line><line x1="42" y1="91" x2="54" y2="91"></line>
+          <line x1="474" y1="103" x2="474" y2="153"></line>
+          <line x1="468" y1="103" x2="480" y2="103"></line><line x1="468" y1="153" x2="480" y2="153"></line>
         </g>
       </svg>
+      <div style="display:flex;gap:22px;margin-top:12px;flex-wrap:wrap">
+        <span class="num" style="font-size:12px;color:var(--slate)">&#9644;&#9644; 종전 · 일괄 +2.4</span>
+        <span class="num" style="font-size:12px;color:var(--brass)">&#9644;&#9644; 개선 · 온도별 곡선</span>
+      </div>
+      <div class="num" style="font-size:12px;color:var(--red);margin-top:7px">
+        겨울 0&#8451; 5.1 MW 과소 &nbsp;·&nbsp; 여름 30&#8451; 4.8 MW 과대</div>
     </div>
-    <div class="sub" style="position:absolute;left:668px;top:462px;width:540px;font-size:19px;line-height:1.46">
+    <div class="sub" style="position:absolute;left:668px;top:452px;width:540px;font-size:19px;line-height:1.46">
       점선 하나를 <em>곡선</em>으로 바꾼 것이 전부입니다.
     </div>
 
@@ -342,7 +346,7 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
         <div class="big" style="font-size:44px;color:var(--brass)">3</div>
         <div class="was" style="font-size:19px;color:var(--red)">&#8592; 14</div>
       </div>
-      <p style="margin-top:10px">신고값보다 실제가 낮아 <b>벌점이 걸리는</b> 회차</p>
+      <p style="margin-top:10px">실제가 낮아 <b>벌점</b>이 걸린 회차</p>
       <div class="zone" style="margin-top:13px;padding:10px 12px">
       <svg width="322" height="28" viewBox="0 0 346 30" role="img"
            aria-label="종전 14건에서 개선 3건으로 줄었다">
@@ -372,9 +376,17 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
       </svg></div>
     </div>
 
-    <!-- 종전 / 현재 절차 대비 -->
-    <div style="position:absolute;left:72px;top:474px;width:516px;height:148px;
-                background:var(--groove);border-top:2px solid var(--slate);padding:17px 20px">
+    <!-- 종전 / 현재 대비 — 외곽여백(72~1208)에 딱 맞춘 한 덩어리.
+         내부를 세로 룰로 반 갈라 배열이 KPI 3열과 어긋나지 않게 한다.
+         상단 룰만 좌=슬레이트 / 우=앰버로 갈라 두 방식을 색으로도 구분. -->
+    <div style="position:absolute;left:72px;top:478px;width:1136px;height:138px;background:var(--groove)"></div>
+    <div style="position:absolute;left:72px;top:478px;width:568px;height:2px;background:var(--slate)"></div>
+    <div style="position:absolute;left:640px;top:478px;width:568px;height:2px;background:var(--brass)"></div>
+    <div style="position:absolute;left:640px;top:504px;width:1px;height:86px;background:var(--rule)"></div>
+    <div style="position:absolute;left:616px;top:528px;width:48px;height:38px;background:var(--groove);
+                text-align:center;font-size:30px;line-height:38px;color:var(--brass)">&#8594;</div>
+
+    <div style="position:absolute;left:96px;top:498px;width:500px">
       <div class="plab" style="color:var(--slate)">종전 &nbsp;·&nbsp; 사람의 판단</div>
       <div class="sub" style="margin-top:11px;color:var(--slate)">보정값 <em style="color:var(--slate)">1개</em>를 사람이 정수로</div>
       <div class="flow" style="margin-top:15px">
@@ -383,10 +395,7 @@ table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--bod
         <span class="tag">정수로 판단</span>
       </div>
     </div>
-    <div style="position:absolute;left:600px;top:534px;width:64px;text-align:center;
-                font-size:32px;color:var(--brass)">&#8594;</div>
-    <div style="position:absolute;left:692px;top:474px;width:516px;height:148px;
-                background:var(--groove);border-top:2px solid var(--brass);padding:17px 20px">
+    <div style="position:absolute;left:664px;top:498px;width:520px">
       <div class="plab" style="color:var(--brass)">현재 &nbsp;·&nbsp; 데이터의 학습</div>
       <div class="sub" style="margin-top:11px">온도별 곡선을 <em>데이터가 갱신</em></div>
       <div class="flow" style="margin-top:15px">
