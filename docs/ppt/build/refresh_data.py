@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""장표 수치 재계산 — 데이터가 갱신되면 이것부터 돌린다.
+
+    python3 docs/ppt/build/refresh_data.py
+
+누적 데이터에서 장표에 쓰는 수치를 전부 다시 계산해 deck_data.json 에 적는다.
+슬라이드 코드는 그 파일 하나만 본다. 그래서 회차가 쌓이면
+
+    python3 docs/ppt/build/refresh_data.py    # 수치 재계산
+    node    docs/ppt/build/build.js           # 18장 재생성
+    python3 docs/ppt/build/verify.py          # 기하 검증
+
+세 줄로 끝난다.
+
+**계산은 전부 도구 코드를 그대로 호출한다.** select.loocv · gp.GPCorrectionCurve ·
+method_compare._score · commission_stats.stats/skill — 장표용으로 따로 구현하지
+않는다. 그래야 Tool 화면에 뜨는 값과 장표 값이 어긋날 수 없다.
+
+계산하지 않고 손으로 두는 것 (기록이지 계산이 아니다)
+    · BLT 적용값 16회차      담당자 실적표에서 옮겨 적은 값 (scripts/period_check.py)
+    · 시운전 함정 3건        증상·크기·가드는 서술이다
+"""
+from __future__ import annotations
+
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+TOOL = ROOT / "tool"
+sys.path.insert(0, str(TOOL))
+sys.path.insert(0, str(TOOL / "scripts"))
+
+from wirye_capacity import constants as C            # noqa: E402
+from wirye_capacity import select                    # noqa: E402
+from wirye_capacity.gp import KERNELS, GPCorrectionCurve  # noqa: E402
+import commission_stats as CS                        # noqa: E402
+import method_compare as MC                          # noqa: E402
+
+SEED = TOOL / "wirye_capacity" / "data" / "measurements_seed.json"
+OUT = Path(__file__).with_name("deck_data.json")
+CURVE_T = (0, 10, 20, 30)          # 방식별 보정 곡선을 재는 온도
+WORST_N = 4                        # 오차 상위 몇 건을 장표에 싣는가
+
+
+def blanket_loocv(recs: list[dict]) -> dict:
+    """종전 방식(일괄 보정)을 한 건씩 가려 채점한다.
+    일괄값은 나머지의 평균 = 최소제곱 최적 상수. method_compare 와 같은 정의다."""
+    ys = [r["corr"] for r in recs]
+    n, tot = len(ys), sum(ys)
+    err, rows = [], []
+    for r, y in zip(recs, ys):
+        pred = (tot - y) / (n - 1)
+        e = pred - y                              # + 면 높게 신고 = 미달 위험
+        err.append(e)
+        rows.append({"date": r["date"], "cit": r["cit"], "corr": y,
+                     "pred": round(pred, 3), "err": round(e, 3)})
+    rows.sort(key=lambda d: -abs(d["err"]))
+    return {
+        "flat": round(tot / n, 3),
+        "mae": round(sum(abs(e) for e in err) / n, 3),
+        "rmse": round((sum(e * e for e in err) / n) ** 0.5, 3),
+        "worst": rows[:WORST_N],
+    }
+
+
+def bid_impact(recs: list[dict]) -> dict:
+    """종전 vs 개선을 입찰 관점으로 채점 — 미달 몇 건, 과대 신고 몇 MW.
+    밴드(±0.5%)·미달 판정은 method_compare._score 정의를 그대로 쓴다."""
+    eng = MC.TheoryEngine()
+    by = {n: b for n, b in MC.METHODS}
+    out = {}
+    for key, name in (("blanket", "일괄 보정 (종전 방식)"), ("gp", "GP (현재 툴 기본)")):
+        build = by[name]
+        cases = [(r, build([recs[k] for k in range(len(recs)) if k != i])(r["cit"]))
+                 for i, r in enumerate(recs)]
+        mae, worst, short, over, opp = MC._score(eng, cases)
+        out[key] = {"label": name, "mae": round(mae, 3), "max": round(worst, 3),
+                    "short": short, "over": round(over, 1), "opp": round(opp, 1)}
+    b, g = out["blanket"], out["gp"]
+    out["cut"] = {"mae": round((1 - g["mae"] / b["mae"]) * 100),
+                  "short": round((1 - g["short"] / b["short"]) * 100) if b["short"] else None,
+                  "over": round((1 - g["over"] / b["over"]) * 100) if b["over"] else None}
+    return out
+
+
+def commission(recs: list[dict]) -> dict:
+    """시운전 회차 성적 — BASELINE_DATE 이후 회차를 앞의 누적만으로 예측(walk-forward).
+    지표 정의는 commission_stats 의 것을 그대로 쓴다."""
+    recs = sorted(recs, key=lambda r: r["date"])
+    base = [r for r in recs if r["date"] <= CS.BASELINE_DATE]
+    trial = [r for r in recs if r["date"] > CS.BASELINE_DATE]
+    if not trial:
+        return {"n": 0}
+    act, gp, flat = [], [], []
+    for i, r in enumerate(trial):
+        train = base + trial[:i]
+        p = select.predict("gp:rbf", train, r["cit"])
+        if p is None:
+            continue
+        act.append(r["corr"])
+        gp.append(p)
+        flat.append(sum(t["corr"] for t in train) / len(train))
+    st = CS.stats([a - p for a, p in zip(act, gp)])
+    return {
+        "n": len(act),
+        "from": trial[0]["date"], "to": trial[-1]["date"],
+        "train_start": len(base),
+        "me": round(st["me"], 3), "mae": round(st["mae"], 3), "rmse": round(st["rmse"], 3),
+        "skill": round(CS.skill(act, gp, flat), 3),
+        "short": sum(1 for a, p in zip(act, gp) if p > a),   # 예측이 높다 = 미달 위험
+        "rows": [{"date": r["date"], "cit": r["cit"], "corr": round(a, 3),
+                  "pred": round(p, 3), "diff": round(a - p, 3)}
+                 for r, a, p in zip(trial, act, gp)],
+    }
+
+
+def main() -> None:
+    recs = json.loads(SEED.read_text(encoding="utf-8"))
+    recs.sort(key=lambda r: r["cit"])
+    ys = [r["corr"] for r in recs]
+
+    # ① 구간별 건수 — 도구의 BINS 를 그대로 쓴다
+    bins = []
+    for lo, hi, _ in C.BINS:
+        n = sum(1 for r in recs if lo <= r["cit"] < hi)
+        if n:
+            bins.append({"lo": lo, "hi": hi,
+                         "label": f"{lo} ~ {hi}℃".replace("-", "−"), "n": n})
+
+    # ② 후보 7가지를 같은 평가집합에서 채점 (도구의 loocv 그대로)
+    scores = select.loocv(recs, list(select.METHODS))
+    scores.sort(key=lambda s: s.mae)
+    methods = [{"key": s.method, "label": select.METHOD_LABEL[s.method],
+                "n": s.n, "mae": round(s.mae, 3), "rmse": round(s.rmse, 3),
+                "r2": round(s.r2, 3), "me": round(s.me, 3), "over": s.over}
+               for s in scores]
+
+    # ③ 방식별 보정 곡선
+    curves = {}
+    for k in KERNELS:
+        try:
+            f = GPCorrectionCurve(recs, kernel=k)
+            curves[k] = [round(f(t), 2) for t in CURVE_T]
+        except Exception:                                   # noqa: BLE001
+            curves[k] = None
+
+    # ④ 입찰 관점 — 미달 건수·과대 신고 누계.
+    #    밴드(±0.5%)와 판정은 method_compare._score 정의를 그대로 쓴다.
+    impact = bid_impact(recs)
+
+    flat = blanket_loocv(recs)
+    best = methods[0]
+
+    data = {
+        "generated": datetime.now(timezone.utc).astimezone().isoformat(timespec="minutes"),
+        "source": str(SEED.relative_to(ROOT)),
+        "n": len(recs),
+        "cit_range": [min(r["cit"] for r in recs), max(r["cit"] for r in recs)],
+        "corr_range": [round(min(ys), 3), round(max(ys), 3)],
+        "scatter": [[r["cit"], round(r["corr"], 3)] for r in recs],
+        "blanket": flat,
+        "bins": bins,
+        "methods": methods,
+        "best": best,
+        "impact": impact,
+        "curve_t": list(CURVE_T),
+        "curves": curves,
+        "commission": commission(recs),
+    }
+    OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+    # ── 사람이 눈으로 확인하는 요약 ──────────────────────────────
+    print(f"누적        {data['n']}건   보정값 {data['corr_range'][0]:+.2f} ~ "
+          f"{data['corr_range'][1]:+.2f} MW   외기 {data['cit_range'][0]} ~ {data['cit_range'][1]}℃")
+    print(f"종전 일괄   baseline {flat['flat']:+.2f}   LOOCV MAE {flat['mae']:.3f} · RMSE {flat['rmse']:.3f}")
+    print(f"최적 방식   {best['label']}   MAE {best['mae']:.3f} · RMSE {best['rmse']:.3f} · R² {best['r2']:+.3f}")
+    print("후보 순위   " + " / ".join(f"{m['label']} {m['mae']:.3f}" for m in methods))
+    print("구간별      " + " · ".join(f"{b['label']} {b['n']}건" for b in bins))
+    print("오차 상위   " + " / ".join(f"{w['date'][2:]} {w['err']:+.2f}" for w in flat["worst"]))
+    b, g, cut = impact["blanket"], impact["gp"], impact["cut"]
+    print(f"입찰 관점   평균오차 {b['mae']:.2f} → {g['mae']:.2f} MW ({cut['mae']}%↓)  ·  "
+          f"미달 {b['short']} → {g['short']}건 ({cut['short']}%↓)  ·  "
+          f"과대신고 {b['over']:.1f} → {g['over']:.1f} MW ({cut['over']}%↓)")
+    c = data["commission"]
+    if c["n"]:
+        print(f"시운전      {c['n']}회차 ({c['from']} ~ {c['to']})  편차 {c['me']:+.3f} · "
+              f"MAE {c['mae']:.3f} · RMSE {c['rmse']:.3f} · 스킬 {c['skill']:+.3f} · 미달 {c['short']}건")
+    print(f"\n기록됨      {OUT.relative_to(ROOT)}")
+
+
+if __name__ == "__main__":
+    main()

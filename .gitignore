@@ -8,6 +8,11 @@ venv/
 build/
 dist/
 
+# 예외 — 발표 장표 소스는 빌드 산출물이 아니라 원본이다.
+# 'build/' 규칙이 docs/ppt/build/ 를 통째로 삼켜 슬라이드 코드가 커밋되지
+# 않고 있었다(2026-09-01 발견). 디렉터리 자체를 되살려야 안의 파일이 산다.
+!docs/ppt/build/
+
 # Node (docs/ppt 의 pptxgenjs — 필요할 때 npm install 로 받는다)
 node_modules/
 package-lock.json
