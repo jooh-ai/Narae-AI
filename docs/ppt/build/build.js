@@ -16,8 +16,12 @@ const pptxgen = require('pptxgenjs');
 const T = require('./theme.js');
 
 const DIR = __dirname;
-const STATE_PATH = path.join(DIR, 'BUILD_STATE.json');
-const OUT = path.join(DIR, '..', '위례_공급가능용량_최종발표.pptx');
+/* --v2 : 컴팩트판(13장). 기존 18장 판은 인자 없이 그대로 만든다. */
+const V2 = process.argv.includes('--v2');
+const SLIDE_DIR = path.join(DIR, V2 ? 'slides_v2' : 'slides');
+const STATE_PATH = path.join(DIR, V2 ? 'BUILD_STATE_V2.json' : 'BUILD_STATE.json');
+const OUT = path.join(DIR, '..', V2 ? '위례_공급가능용량_최종발표_v2.pptx'
+                                    : '위례_공급가능용량_최종발표.pptx');
 
 const state = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
 /* 장표 수치는 전부 여기서 온다. 데이터가 갱신되면 refresh_data.py 를 먼저 돌린다.
@@ -46,7 +50,7 @@ function main() {
 
   let done = 0, todo = [];
   for (const it of state.slides) {
-    const f = path.join(DIR, 'slides', it.file);
+    const f = path.join(SLIDE_DIR, it.file);
     const exists = fs.existsSync(f);
     it.status = exists ? 'done' : 'todo';
     if (exists) { done++; } else { todo.push(it.no); }

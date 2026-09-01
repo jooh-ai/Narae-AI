@@ -1,0 +1,151 @@
+{
+  "meta": {
+    "deck": "공급가능용량 산정 Tool — 최종 발표 (컴팩트판)",
+    "org": "나래에너지서비스 · 위례열병합발전소",
+    "dept": "위례 정비기술팀",
+    "authors": [
+      "주현M",
+      "정상우M"
+    ],
+    "when": "2026. 09.",
+    "design": "v2 「계측 기록지」 · 컴팩트 규칙 — 한 장에 요소 2개, 리드 1줄, 큰 숫자 3개 이하",
+    "index": [
+      "개요 및 추진 배경",
+      "현황 파악 및 문제 정의",
+      "데이터 분석 및 원인 규명(가설 검증)",
+      "해결 방안 도출 및 예측/보정 모델 개발",
+      "향후 추이 분석(모니터링 체계 구축)",
+      "개선 효과(정량적/정성적)",
+      "향후 계획 및 수평 전개 방안"
+    ],
+    "note": "표지·목차·Q&A 를 뺀 본문 10장. 목차 7개 중 4번만 2장, 나머지 1장씩. 13장 전부 완료 · 기하 검증 통과(경계·여백·넘침·겹침 0).",
+    "updated": "2026-09-01 15:10",
+    "done": 13,
+    "next": null
+  },
+  "slides": [
+    {
+      "no": 1,
+      "file": "v01.js",
+      "section": null,
+      "sec": null,
+      "step": null,
+      "title": "표지",
+      "status": "done"
+    },
+    {
+      "no": 2,
+      "file": "v02.js",
+      "section": null,
+      "sec": "목차",
+      "step": null,
+      "title": "목차",
+      "status": "done"
+    },
+    {
+      "no": 3,
+      "file": "v03.js",
+      "section": null,
+      "sec": "한 장 요약",
+      "step": null,
+      "title": "한 장 요약",
+      "status": "done"
+    },
+    {
+      "no": 4,
+      "file": "v04.js",
+      "section": 1,
+      "sec": "왜 하는가",
+      "step": 1,
+      "title": "매주 신고하는 숫자, 틀리면 양쪽으로 손실",
+      "status": "done"
+    },
+    {
+      "no": 5,
+      "file": "v05.js",
+      "section": 2,
+      "sec": "문제",
+      "step": 2,
+      "title": "하나로는 맞출 수 없다",
+      "status": "done"
+    },
+    {
+      "no": 6,
+      "file": "v06.js",
+      "section": 3,
+      "sec": "가설 검증",
+      "step": 3,
+      "title": "5개를 의심했고 4개는 틀렸다",
+      "status": "done"
+    },
+    {
+      "no": 7,
+      "file": "v07.js",
+      "section": 4,
+      "sec": "해결 구조",
+      "step": 4,
+      "title": "이론은 그대로, 차이만 학습",
+      "status": "done"
+    },
+    {
+      "no": 8,
+      "file": "v08.js",
+      "section": 4,
+      "sec": "모델 선정",
+      "step": 4,
+      "title": "방식은 데이터가 골랐다",
+      "status": "done"
+    },
+    {
+      "no": 9,
+      "file": "v09.js",
+      "section": 5,
+      "sec": "모니터링",
+      "step": 5,
+      "title": "스스로 갱신하고, 의심은 코드가 한다",
+      "status": "done"
+    },
+    {
+      "no": 10,
+      "file": "v10.js",
+      "section": 6,
+      "sec": "효과",
+      "step": 6,
+      "title": "세 지표가 동시에 좋아졌다",
+      "status": "done"
+    },
+    {
+      "no": 11,
+      "file": "v11.js",
+      "section": 7,
+      "sec": "수평 전개",
+      "step": 7,
+      "title": "이론만 갈아끼우면 옮겨진다",
+      "status": "done"
+    },
+    {
+      "no": 12,
+      "file": "v12.js",
+      "section": null,
+      "sec": "Tool 시연",
+      "step": null,
+      "title": "Tool 시연",
+      "status": "done"
+    },
+    {
+      "no": 13,
+      "file": "v13.js",
+      "section": null,
+      "sec": "Q & A",
+      "step": null,
+      "title": "Q & A",
+      "status": "done"
+    }
+  ],
+  "pending": [
+    "기존 18장판(BUILD_STATE.json)은 그대로 유지한다 — 두 판을 함께 관리한다.",
+    "발표자 노트(addNotes) 미작성 — 두 판 공통 미결.",
+    "금액 환산 기준 미수령 — MW 로만 표기 중.",
+    "수평 전개 사업소 실명 미확정 — v11 은 \"동일 구조 1곳\" 으로 일반화해 둠."
+  ]
+}
