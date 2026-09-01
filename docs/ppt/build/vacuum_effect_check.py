@@ -52,6 +52,44 @@ def r(x, y):
     return float("nan") if sx * sy == 0 else sum((a - mx) * (b - my) for a, b in zip(x, y)) / (sx * sy)
 
 
+# t 분포 95% 양측 임계값 (df) — 부분집합 r 을 볼 때 반드시 함께 본다
+_T95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365,
+        8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145,
+        15: 2.131, 16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086}
+
+
+def rcrit(n):
+    """이 표본 크기에서 '유의하다' 고 말하려면 필요한 |r| (α=0.05, 양측)."""
+    df = n - 2
+    if df < 1: return float("nan")
+    t = _T95.get(df, 2.086 - (df - 20) * 0.0022)
+    return t / (t * t + df) ** .5
+
+
+def loo_range(x, y):
+    """안정성 — 한 건씩 빼며 다시 계산한 r 의 범위. 부호가 뒤집히면 못 믿는다."""
+    if len(x) < 4: return (float("nan"), float("nan"))
+    vs = [r([x[j] for j in range(len(x)) if j != i], [y[j] for j in range(len(y)) if j != i])
+          for i in range(len(x))]
+    return (min(vs), max(vs))
+
+
+def subset_line(tag, xs, ys):
+    """부분집합 결과는 r 만 내보내지 않는다 — n·임계값·판정·안정성을 함께 낸다."""
+    n = len(xs)
+    if n < 3:
+        return "   %-22s n=%-3d  (표본 부족)" % (tag, n)
+    rr, rc = r(xs, ys), rcrit(n)
+    lo, hi = loo_range(xs, ys)
+    ok = abs(rr) > rc
+    sig = "유의" if ok else "무의"
+    # 애초에 무의한 값에 '안정/불안정' 을 붙이면 오해를 부른다 — 관계가 없는 것이다.
+    stab = ("관계 없음" if not ok else
+            "—" if lo != lo else "불안정 · 한 건에 뒤집힘" if lo * hi < 0 else "안정")
+    return ("   %-22s n=%-3d  r=%+.3f  임계 %.3f  %-4s  한건빼면 %+.3f ~ %+.3f  %s"
+            % (tag, n, rr, rc, sig, lo, hi, stab))
+
+
 def fit(x, y):
     """최소제곱 직선 y = a + b·x 와 R²."""
     n = len(x); mx, my = sum(x) / n, sum(y) / n
@@ -105,17 +143,42 @@ def main():
           % (mae0, mae1, mae1 - mae0, (mae1 / mae0 - 1) * 100))
 
     # ── ⑤ 시기를 나누면 강해지는가 ────────────────────────────
-    print("\n⑤ 시기 분리")
-    print("   %-14s %4s  %-22s %-22s" % ("", "n", "보정값 vs 진공도", "진공잔차 vs 모델오차"))
-    groups = [("전체", rows), ("2025년", [d for d in rows if d["date"] < "2026"]),
-              ("2026년", [d for d in rows if d["date"] >= "2026"]),
-              ("2026-08 4회차", [d for d in rows if d["date"] >= "2026-08"]),
-              ("30~33℃ 만", [d for d in rows if 30 <= d["cit"] < 33])]
-    for tag, sel in groups:
+    #    부분집합 r 을 단독으로 내보내지 않는다. 표본 크기에서 필요한 임계값과,
+    #    한 건을 뺐을 때의 흔들림(안정성)을 항상 붙인다. 이게 재발 방지 장치다.
+    print("\n⑤ 시기 분리 — 진공잔차 vs 모델오차 (부분집합은 유의성·안정성과 함께만 본다)")
+    for tag, sel in [("전체", rows), ("2025년", [d for d in rows if d["date"] < "2026"]),
+                     ("2026년", [d for d in rows if d["date"] >= "2026"]),
+                     ("2026-08 4회차", [d for d in rows if d["date"] >= "2026-08"]),
+                     ("30~33℃ 만", [d for d in rows if 30 <= d["cit"] < 33])]:
         se = [d for d in sel if d.get("err") is not None]
-        print("   %-14s %4d  %+22.3f %+22.3f"
-              % (tag, len(sel), r([d["vac"] for d in sel], [d["corr"] for d in sel]),
-                 r([d["vres"] for d in se], [d["err"] for d in se]) if len(se) >= 3 else float("nan")))
+        print(subset_line(tag, [d["vres"] for d in se], [d["err"] for d in se]))
+
+    # ── ⑤-2 자르는 폭을 바꿔가며 전수 탐색 ────────────────────
+    #    창을 여러 개 훑어 '가장 음수인 것' 을 고르면 유의 기준마저 넘는 것이 나온다.
+    #    그것이 증거가 아니라는 것을 보여주는 표다.
+    print("\n⑤-2 날짜 연속 창 전수 탐색 — 각 창크기에서 가장 음수인 r 만 골랐다")
+    print("   창크기  가장 음수 r   구간                       n   임계값   판정")
+    decay = []
+    for w in range(4, 13):
+        cands = []
+        for i in range(len(rows) - w + 1):
+            se = [d for d in rows[i:i + w] if d.get("err") is not None]
+            if len(se) < 3: continue
+            cands.append((r([d["vres"] for d in se], [d["err"] for d in se]),
+                          se[0]["date"], se[-1]["date"], len(se)))
+        if not cands: continue
+        rr, d0, d1, n = min(cands)
+        rc = rcrit(n)
+        decay.append((w, rr))
+        print("   %5d   %+7.3f     %s ~ %s  %2d   %.3f    %s"
+              % (w, rr, d0, d1, n, rc, "유의" if abs(rr) > rc else "무의"))
+    allse = [d for d in rows if d.get("err") is not None]
+    print("   %5d   %+7.3f     %s ~ %s  %2d   %.3f    %s   ← 전부"
+          % (len(allse), r([d["vres"] for d in allse], [d["err"] for d in allse]),
+             allse[0]["date"], allse[-1]["date"], len(allse), rcrit(len(allse)),
+             "무의"))
+    print("   → 창을 넓힐수록 |r| 이 단조로 줄어 0 으로 간다. 좁은 창의 큰 값은")
+    print("     '창 9개를 훑어 가장 음수인 것을 고른' 결과다 — 증거가 아니다.")
 
     # ── ⑥ 파울링 누적 ─────────────────────────────────────────
     print("\n⑥ 파울링 누적   진공 잔차가 시간에 따라 나빠지는가")
