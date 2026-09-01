@@ -143,8 +143,26 @@ def main() -> None:
             continue
         _, bb, rr, _ = ols([vr_all[i] for i in idx], [cr_all[i] for i in idx])
         print(f"   {lab:30s} {len(idx):3d} {rr:+7.3f} {bb:+9.3f}")
-    print("   → 관계가 약하다. 개별 회차는 크기가 맞아도(아래), 누적 전체에서는")
-    print("      진공 잔차로 보정값을 예측할 수 없다. 표본이 더 쌓여야 판정된다.")
+    print("   → 누적 전체를 뭉쳐 보면 관계가 약하다. 그런데 **연도로 나누면 갈린다** ↓")
+
+    # 연도별 분리 — 2026-08 확인. 복수기 오염이 진행되면 진공 편차가 실제 출력을
+    # 움직이기 시작한다. 뭉쳐 보면 두 시기가 서로를 상쇄해 관계가 사라진다.
+    print(f"\n   고온 구간(CIT>=20)을 시기로 나눈 결과")
+    print(f"   {'시기':26s} {'n':>3s} {'r':>7s} {'기울기':>9s}   판정")
+    hot = [i for i, t in enumerate(cits_r) if t >= 20]
+    for lab, sel in (("2025년", [i for i in hot if rows[i][0] < "2026-01-01"]),
+                     ("2026년", [i for i in hot if rows[i][0] >= "2026-01-01"])):
+        if len(sel) < 4:
+            print(f"   {lab:26s} {len(sel):3d}   표본 부족")
+            continue
+        _, bb, rr, _ = ols([vr_all[i] for i in sel], [cr_all[i] for i in sel])
+        near = abs(bb + VAC_COEF) < 0.08 and rr < -0.4
+        print(f"   {lab:26s} {len(sel):3d} {rr:+7.3f} {bb:+9.4f}   "
+              f"{'물리와 부합' if near else '관계 없음'}")
+    print("   → 2026 년에만 물리와 부합하는 관계가 나타난다. 기울기까지 예상값에")
+    print("      가깝다. 복수기 오염이 진행돼 진공 편차가 실제로 출력을 움직이기")
+    print("      시작한 것으로 보인다. **다만 n 이 작다 — 2026-10 복수기 청소 전후")
+    print("      비교가 결정적 검증이다**(--split 2026-10-01).")
     print(f"\n   기준선에서 2σ({2 * sd0:.1f} mbar) 이상 벗어난 회차 — 미달 원인 1순위")
     if not odd:
         print("     없음")
