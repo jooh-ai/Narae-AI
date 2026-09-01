@@ -40,7 +40,10 @@ NEW = [
     {"date": "2026-08-18", "cit": 32.82, "cp_meas": 74.2, "corr": -1.47},
     {"date": "2026-08-26", "cit": 30.94, "cp_meas": 78.6, "corr": -3.21},
 ]
-VAC_A, VAC_B = 33.64, 1.242          # 진공도 = A + B×CIT (계획서 §6 가설 4)
+# 진공도 = A + B×CIT (계획서 §6 가설 4). 상수를 박아 두지 않고 **검정 대상 전체로
+# 다시 적합**한다 — 다른 세션(claude/practical-brown-smyhpq, 커밋 4a9a729)이 잡은
+# 결함이다. 기준선을 36건으로 적합하고 잔차를 40건에서 재면, 새 회차의 진공 잔차가
+# '자기 자신이 빠진 기준선' 대비로 재져 실제보다 부풀려 보인다.
 
 
 def r(x, y):
@@ -108,8 +111,9 @@ def main():
                    for r_ in full] + [{"date": d["date"], "cit": d["cit"], "vac": d["cp_meas"],
                                        "corr": d["corr"]} for d in NEW],
                   key=lambda d: d["date"])
+    va, vb, vr = fit([d["cit"] for d in rows], [d["vac"] for d in rows])
     for d in rows:
-        d["vres"] = d["vac"] - (VAC_A + VAC_B * d["cit"])       # 온도로 설명 안 되는 진공
+        d["vres"] = d["vac"] - (va + vb * d["cit"])             # 온도로 설명 안 되는 진공
 
     print("검정 대상  %d건 (시드 %d + 2026-08 %d)   진공도 결측 %d건"
           % (len(rows), len(full), len(NEW), len(recs) - len(full)))
@@ -118,6 +122,8 @@ def main():
     V = [d["vac"] for d in rows]; K = [d["corr"] for d in rows]; T = [d["cit"] for d in rows]
     print("\n① 원시 상관   보정값 vs 진공도        r = %+.3f   ← 강해 보인다" % r(V, K))
     print("② 교란 확인   진공도 vs 외기온도        r = %+.3f   ← 진공도는 사실상 온도의 함수다" % r(T, V))
+    print("              기준선(전체 재적합)       진공도 = %.2f + %.3f × CIT  (설명력 %.0f%%)"
+          % (va, vb, vr * 100))
     print("              보정값 vs 외기온도        r = %+.3f" % r(T, K))
     print("              두 변수가 같은 것(온도)을 따라가므로 ①은 그 그림자일 수 있다.")
 
@@ -149,6 +155,7 @@ def main():
     for tag, sel in [("전체", rows), ("2025년", [d for d in rows if d["date"] < "2026"]),
                      ("2026년", [d for d in rows if d["date"] >= "2026"]),
                      ("2026-08 4회차", [d for d in rows if d["date"] >= "2026-08"]),
+                     ("여름 CIT≥20 · 2026", [d for d in rows if d["cit"] >= 20 and d["date"] >= "2026"]),
                      ("30~33℃ 만", [d for d in rows if 30 <= d["cit"] < 33])]:
         se = [d for d in sel if d.get("err") is not None]
         print(subset_line(tag, [d["vres"] for d in se], [d["err"] for d in se]))
