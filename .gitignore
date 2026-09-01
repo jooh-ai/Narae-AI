@@ -7,3 +7,18 @@ venv/
 *.egg-info/
 build/
 dist/
+
+# Node (docs/ppt 의 pptxgenjs — 필요할 때 npm install 로 받는다)
+node_modules/
+package-lock.json
+
+# Tool 런타임 산출물 — 저장소에 들어가면 안 된다
+#   wirye_error.log        : 시작 진단 로그(diag.py). 실행할 때마다 바뀐다.
+#   wirye_measurements.db  : 누적 DB. spec 주석대로 번들·배포 대상이 아니며,
+#                            커밋되면 남의 시험 이력이 담긴 DB 가 배포된다.
+#   wirye_tool.json        : 사용자별 설정(RiMS 호스트·보정방법 등)
+wirye_error.log
+wirye_measurements.db
+wirye_tool.json
+*.db-journal
+

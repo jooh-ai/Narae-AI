@@ -15,15 +15,35 @@
     → Program Files 처럼 쓰기 불가한 곳에 두면 홈 폴더로 물러난다(폴더 복사로
       데이터가 안 따라가므로 권장하지 않는다).
 
-디버그(실행 즉시 닫히거나 오류 원인 확인 필요 시):
-    아래 EXE(...) 의 console=False → True 로 바꿔 재빌드 → 콘솔에 오류 출력.
+로고 교체
+    헤더 로고와 창 아이콘은 번들 data/logo.png 를 쓴다. 브랜드 자산이 바뀌면
+    dist\\WiryeBidTool\\logo.png 로 새 파일을 넣으면 재빌드 없이 그 파일이 먼저
+    쓰인다(constants.logo_path 참조). exe 자체 아이콘만 재빌드가 필요하고,
+    .ico 는 scripts/make_logo.py 로 다시 만든다.
+
+더블클릭했는데 아무 반응이 없을 때
+    console=False 라 시작 중 예외가 화면에 안 남는다. 그래서 런처(wirye_gui.py)가
+    직접 오류를 남기게 해 두었다. 순서대로 확인한다.
+
+    1) exe 폴더의 wirye_error.log 를 본다 — 어디까지 갔고 무엇이 터졌는지 나온다.
+    2) 로그도 없으면 프로세스가 아예 못 떴다는 뜻이다(백신 차단·파일 손상).
+       PowerShell 에서 환경 점검을 돌린다:
+            .\\WiryeBidTool.exe --selftest
+       번들 자원·DB 폴더 권한·Qt 초기화·PATH 의 다른 Qt DLL 을 한 번에 보여 준다.
+    3) 그래도 원인이 안 잡히면 아래 console=False → True 로 바꿔 재빌드하고
+       PowerShell 에서 실행한다(콘솔에 그대로 출력된다).
+
+    백신 확인: 사내 백신이 서명 없는 exe 를 조용히 격리하는 경우가 있다.
+        Get-Item .\\WiryeBidTool.exe          # 파일이 사라졌는지
+        Get-Process WiryeBidTool             # 떴다가 죽는지
 """
 from PyInstaller.utils.hooks import collect_all
 
-# 번들 데이터: 엑셀3 템플릿 + 시드/베이스 테이블 (constants.resource 가 _MEIPASS 로 참조)
+# 번들 데이터: 엑셀3 템플릿 + 시드/베이스 테이블 + 로고 (constants.resource 가 _MEIPASS 로 참조)
 datas = [
     # 템플릿 폴더 전체 — .xlsx 와 DRM 회피용 .tpl 사본을 함께 번들
     ("wirye_capacity/templates", "wirye_capacity/templates"),
+    # data/ 안에 base_table.json · measurements_seed.json · logo.png · logo.ico
     ("wirye_capacity/data", "wirye_capacity/data"),
 ]
 binaries = []
@@ -126,7 +146,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,                # SK 아이콘(.ico) 있으면 경로 지정
+    # 행복날개 아이콘 (16~256px 다중 해상도). scripts/make_logo.py 로 생성한다.
+    icon="wirye_capacity/data/logo.ico",
 )
 coll = COLLECT(
     exe,

@@ -17,8 +17,8 @@ def store():
     s.close()
 
 
-def test_seed_loads_31(store):
-    assert store.count() == 31
+def test_seed_loads_36(store):
+    assert store.count() == 36
 
 
 def test_list_up_sorted_by_cit(store):
@@ -33,7 +33,7 @@ def test_correction_table_matches_excel4(store):
     table = store.correction_table()
     expect = {
         (0, 10): (5.62, 7), (10, 15): (6.12, 6), (15, 20): (5.55, 3),
-        (20, 25): (2.62, 1), (25, 30): (-2.69, 3), (30, 41): (-0.32, 9),
+        (20, 25): (2.62, 1), (25, 30): (-2.37, 6), (30, 41): (-0.40, 11),
     }
     for key, (avg, cnt) in expect.items():
         assert table[key]["count"] == cnt
@@ -49,15 +49,15 @@ def test_record_test_computes_and_accumulates(store):
     expect_theory = eng.theory_cc(25.5, 1008.0, C.DEFAULT_DEG)
     assert rec.theory == pytest.approx(expect_theory, abs=1e-9)
     assert rec.corr == pytest.approx(414.5 - expect_theory - 6.0, abs=1e-9)
-    assert store.count() == 32
+    assert store.count() == 37
     # 새 레코드가 25~30 구간 건수에 반영됨 (시드 4건 + 1)
-    assert store.correction_table()[(25, 30)]["count"] == 4
+    assert store.correction_table()[(25, 30)]["count"] == 7
 
 
 def test_delete_and_clear(store):
     rows = store.list_up()
     store.delete(rows[0]["id"])
-    assert store.count() == 30
+    assert store.count() == 35
     store.clear()
     assert store.count() == 0
 
@@ -260,3 +260,26 @@ def test_migrate_legacy_db_noop_when_no_source(tmp_path, monkeypatch):
     empty.mkdir()
     monkeypatch.setattr(Path, "home", staticmethod(lambda: empty))
     assert migrate_legacy_db(tmp_path / "app" / C.DB_NAME) is None
+
+
+def test_migrate_legacy_db_does_not_resurrect_after_reset(tmp_path, monkeypatch):
+    """초기화하려고 DB 를 지웠으면 홈 폴더 파일이 되살아나선 안 된다.
+
+    2026-08 현장: Tool 폴더 DB 만 지우고 실행했더니 홈 파일이 다시 이관돼
+    기대한 31건이 아니라 32건이 들어왔다. '대상이 없으면 복사' 만으로는
+    사용자가 초기화를 원하는지 구분할 수 없어 표식을 남긴다.
+    """
+    from wirye_capacity.store import migrate_legacy_db
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", staticmethod(lambda: home))
+    s = MeasurementStore(home / C.DB_NAME)
+    s.seed()
+    s.close()
+
+    dst = tmp_path / "app" / C.DB_NAME
+    assert migrate_legacy_db(dst) is not None          # 1회차: 이관
+    assert (dst.parent / ".wirye_db_migrated").exists()
+    dst.unlink()                                        # 사용자가 초기화
+    assert migrate_legacy_db(dst) is None               # 되살아나지 않는다
+    assert not dst.exists()                             # 씨앗이 들어올 자리
