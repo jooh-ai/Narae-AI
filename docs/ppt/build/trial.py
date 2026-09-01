@@ -129,6 +129,12 @@ def cmd_record(a) -> None:
     rec = MeasurementStore().build_record(
         cit=a.cit, press=a.press, cc_meas=a.cc, w=w, rh=a.rh,
         cp_meas=a.cp, cp_design=a.cp_design, season=a.season, date=a.date)
+    if a.theory is not None:
+        # 화면·엑셀4 의 이론기준값을 그대로 쓴다. 표시 반올림(예: CIT 37.92 로
+        # 보이지만 내부는 37.915)이 있으면 여기서 고정해야 값이 어긋나지 않는다.
+        rec.theory = a.theory
+        rec.corr = a.cc - a.theory - rec.w
+        print(f"이론 고정   화면값 {a.theory:.2f} MW 로 고정 (표시 반올림 보정)")
 
     print(f"회차        {a.date}   CIT {a.cit}℃ · 대기압 {a.press} mbar · CC 실측 {a.cc} MW")
     print(f"이론기준값  {rec.theory:.2f} MW   W(IGV) {rec.w:+.2f}")
