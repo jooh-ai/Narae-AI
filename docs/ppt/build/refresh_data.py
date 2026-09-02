@@ -23,6 +23,7 @@ method_compare._score · commission_stats.stats/skill — 장표용으로 따로
 from __future__ import annotations
 
 import json
+import math
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -121,6 +122,68 @@ def commission(recs: list[dict]) -> dict:
 
 
 
+def _pearson(x: list[float], y: list[float]) -> float:
+    n = len(x); mx = sum(x) / n; my = sum(y) / n
+    sx = sum((a - mx) ** 2 for a in x) ** 0.5
+    sy = sum((b - my) ** 2 for b in y) ** 0.5
+    return sum((a - mx) * (b - my) for a, b in zip(x, y)) / (sx * sy)
+
+
+def _resid(x: list[float], y: list[float]) -> list[float]:
+    """y 에서 x 로 설명되는 부분(직선)을 뺀 나머지."""
+    n = len(x); mx = sum(x) / n; my = sum(y) / n
+    b = sum((a - mx) * (c - my) for a, c in zip(x, y)) / sum((a - mx) ** 2 for a in x)
+    a0 = my - b * mx
+    return [c - (a0 + b * xx) for xx, c in zip(x, y)]
+
+
+def causes(recs: list[dict]) -> dict:
+    """원인 규명 — 후보 변수가 보정값을 설명하는가, 3단으로 좁힌다.
+
+      ① 원시        보정값 vs 후보. 여기서는 다섯 개가 다 강하게 보인다.
+      ② 온도 통제 후 '온도로 설명 안 되는 후보' vs '온도로 설명 안 되는 보정값'.
+                    후보들이 서로 온도에 묶여 있으므로 이게 진짜 질문이다.
+      ③ 모델 잔차   '온도로 설명 안 되는 후보' 가 'LOOCV 모델이 못 맞힌 부분' 을
+                    설명하는가. vacuum_effect_check.py ③ 과 같은 정의다 —
+                    두 곳이 다른 정의를 쓰면 문서끼리 숫자가 어긋난다.
+                    남는 것이 있으면 그것이 다음 개선 후보다.
+
+    임계 r 은 α=0.05 양쪽, df=n−2 의 t 표에서 얻는다 (r = t/√(t²+df)).
+    이 값을 넘지 못하면 '관계 없음' 이다 — 눈에 보이는 관계도 여기를 넘어야 한다.
+
+    IGV(W) 는 후보에 넣지 않는다. 보정값 정의에서 이미 빼고 있는 값이라
+    (보정값 = 실측 − 이론 − W) 환경 원인과 나란히 두면 뜻이 어긋난다.
+    IGV 는 가설 1(설비가 달랐다 → IGV 미실시)에서 다룬다.
+    """
+    T = [r["cit"] for r in recs]
+    K = [r["corr"] for r in recs]
+    n = len(recs)
+    tcrit = 2.024 if n >= 30 else 2.101                 # α=0.05 양쪽, df≈38
+    rcrit = tcrit / math.sqrt(tcrit * tcrit + n - 2)
+
+    # 모델이 못 맞힌 부분 — 한 건씩 가리고 맞혀본 잔차(LOOCV)
+    mres = []
+    for i, d in enumerate(recs):
+        f = GPCorrectionCurve([x for j, x in enumerate(recs) if j != i], kernel="rbf")
+        mres.append(d["corr"] - f(d["cit"]))
+
+    out = []
+    for label, key in (("외기온도", "cit"), ("복수기 진공도", "cp_meas"),
+                       ("대기압", "press"), ("상대습도", "rh")):
+        X = [r[key] for r in recs]
+        row = {"label": label, "key": key, "raw": round(_pearson(X, K), 3)}
+        if key == "cit":
+            row["vs_t"] = None                          # 온도 자신은 통제 대상이 아니다
+            row["part"] = None
+            row["model"] = None
+        else:
+            row["vs_t"] = round(_pearson(T, X), 3)
+            row["part"] = round(_pearson(_resid(T, X), _resid(T, K)), 3)
+            row["model"] = round(_pearson(_resid(T, X), mres), 3)
+        out.append(row)
+    return {"n": n, "rcrit": round(rcrit, 3), "rows": out,
+            "model_mae": round(sum(abs(v) for v in mres) / n, 3)}
+
 def profile_cmp(recs: list[dict], method: str) -> dict:
     """Tool [📈 출력곡선 비교] 탭과 같은 곡선을 장표용으로 뽑는다.
 
@@ -207,6 +270,7 @@ def main() -> None:
         "curve_t": list(CURVE_T),
         "curves": curves,
         "profile": profile_cmp(recs, best["key"]),
+        "causes": causes(recs),
         "commission": commission(recs),
     }
     OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -223,6 +287,11 @@ def main() -> None:
     print(f"입찰 관점   평균오차 {b['mae']:.2f} → {g['mae']:.2f} MW ({cut['mae']}%↓)  ·  "
           f"미달 {b['short']} → {g['short']}건 ({cut['short']}%↓)  ·  "
           f"과대신고 {b['over']:.1f} → {g['over']:.1f} MW ({cut['over']}%↓)")
+    cz = data["causes"]
+    print(f"원인 규명   임계 r {cz['rcrit']:.3f} (n={cz['n']})  ·  " + "  ·  ".join(
+        f"{r['label']} 원시 {r['raw']:+.2f}" +
+        (f" → 통제후 {r['part']:+.2f}" if r["part"] is not None else "")
+        for r in cz["rows"]))
     pc = data["profile"]
     print(f"곡선 비교   {pc['t'][0]} ~ {pc['t'][-1]}℃  이론 vs 실제  차이 "
           f"{pc['gap_min']:+.2f} ~ {pc['gap_max']:+.2f} MW")

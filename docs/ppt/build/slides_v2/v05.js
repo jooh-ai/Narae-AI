@@ -7,15 +7,15 @@ module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
   const { d } = T.shell(pptx, { sec: '문제', idx: 2, step: 2 });
   const more = Math.round(D.corr_range[1]), less = Math.round(-D.corr_range[0]);
-  T.title(d, '계산값 하나로는 맞출 수 없습니다 —',
+  T.title(d, '이론값 하나로는 맞출 수 없습니다 —',
           '겨울엔 *' + more + ' MW 더*, 여름엔 *' + less + ' MW 덜* 나옵니다');
-  T.lead(d, '계산값과 실제의 차이를 온도 축에 찍으면, 흩어진 게 아니라 ' +
+  T.lead(d, '이론값과 실제의 차이를 온도 축에 찍으면, 흩어진 게 아니라 ' +
          '_온도를 따라 줄줄이 내려갑니다_.', { lines: 1 });
 
   /* 산점도 — 전폭 */
   d.zone(G.L, 284, G.W, 262);
   d.plab('점 하나가 테스트 1회  ·  누적 ' + D.n + '회  ·  가로 외기온도 ℃ / ' +
-         '세로 = 실제 − 계산값 (MW)', 96, 298, 760);
+         '세로 = 실제 − 이론값 (MW)', 96, 298, 760);
   const X = t => 130 + (t + 2) * 25.6, Y = c => 330 + (14 - c) * 9;
   [12, 8, 4, -4].forEach(v => d.hline(130, Y(v), 1050, C.rule2, 1));
   d.hline(130, Y(0), 1050, C.rule, 1);

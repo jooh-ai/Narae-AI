@@ -9,15 +9,15 @@ module.exports = (pptx, T, meta, D) => {
          '회 실적*이 정합니다.', { w: 1060, lines: 1 });
 
   const I = D.impact;
-  [[72,  '신고값이 실제와 어긋난 정도', I.gp.mae.toFixed(2),  'MW',
+  [[72,  '예측 오차  ·  MAE', I.gp.mae.toFixed(2),  'MW',
     '← ' + I.blanket.mae.toFixed(2), C.slateL,
-    '신고할 값을 미리 계산했을 때 실제와 벌어진 폭(평균)입니다.'],
-   [467, '실제가 신고값에 못 미친 횟수', String(I.gp.short),   '회',
+    '신고할 값을 미리 계산했을 때 실제와 벌어진 폭의 평균입니다. 작을수록 좋습니다.'],
+   [467, '기준 미달 회차', String(I.gp.short),   '회',
     '← ' + I.blanket.short,          C.red,
-    D.n + '회 가운데 벌점 위험이 있었던 횟수입니다.'],
-   [862, '실제보다 높게 신고한 양',     I.gp.over.toFixed(1), 'MW',
+    '실제 출력이 신고값에 못 미친 횟수입니다. ' + D.n + '회 중 몇 번이었나.'],
+   [862, '과대 신고 누계', I.gp.over.toFixed(1), 'MW',
     '← ' + I.blanket.over.toFixed(1), C.slateL,
-    D.n + '회 동안 높게 신고한 양을 모두 더한 값입니다.']]
+    D.n + '회 동안 실제보다 높게 신고한 양을 모두 더한 값입니다.']]
     .forEach(([x, l, v, u, was, wc, why]) => {
       d.panel(x, 284, 346, wc === C.red ? 'bad' : 'on');
       d.plab(l, x, 298, 346);

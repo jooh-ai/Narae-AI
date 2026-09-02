@@ -42,14 +42,14 @@ module.exports = (pptx, T, meta, D) => {
   /* 핵심 3수치 — 크게 */
   d.hline(G.L, 480, G.W, C.rule, 1);
   const I = D.impact, K = I.cut;
-  [[72, '신고값이 실제와 어긋난 정도', K.mae,
+  [[72, '예측 오차 (MAE · 평균 몇 MW 틀렸나)', K.mae,
     I.blanket.mae.toFixed(2) + ' → ' + I.gp.mae.toFixed(2) + ' MW'],
-   [420, '실제가 신고값에 못 미친 횟수', K.short,
+   [420, '기준 미달 회차 (실제 < 신고값)', K.short,
     I.blanket.short + ' → ' + I.gp.short + ' 회'],
-   [768, '실제보다 높게 신고한 양', K.over,
+   [768, '과대 신고 누계 (높게 신고한 양)', K.over,
     I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) + ' MW']]
     .forEach(([x, l, pct, sub]) => {
-      d.plab(l, x, 502, 300);
+      d.plab(l, x, 502, 340);
       d.big(pct + '%↓', x, 526, 220, 54);
       d.text(sub, { x, y: 596, w: 300, px: 16, lh: 1.4, mono: true, color: C.ink });
     });

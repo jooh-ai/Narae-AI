@@ -33,7 +33,10 @@ sys.path.insert(0, str(ROOT / "tool"))
 from wirye_capacity import select                      # noqa: E402
 
 SEED = ROOT / "tool" / "wirye_capacity" / "data" / "measurements_seed.json"
-# 2026-08 4회차 — 화면 캡쳐값 (docs/ppt/build/trial_raw_2026-08.md) + 진공도 별도 수령
+# 2026-08 4회차 — 화면 캡쳐값 (docs/ppt/build/trial_raw_2026-08.md) + 진공도 별도 수령.
+# 시드에 아직 반영되지 않았을 때를 위한 보루다. trial.py --apply 로 시드에 들어간
+# 뒤에는 날짜로 걸러 **덧붙이지 않는다** — 그러지 않으면 같은 회차를 두 번 세어
+# 44건이 되고, 부분집합 r 이 실제보다 더 그럴듯해 보인다.
 NEW = [
     {"date": "2026-08-04", "cit": 37.92, "cp_meas": 84.3, "corr": 1.48},
     {"date": "2026-08-12", "cit": 30.16, "cp_meas": 68.9, "corr": -0.65},
@@ -58,14 +61,30 @@ def r(x, y):
 # t 분포 95% 양측 임계값 (df) — 부분집합 r 을 볼 때 반드시 함께 본다
 _T95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365,
         8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145,
-        15: 2.131, 16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086}
+        15: 2.131, 16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
+        22: 2.074, 24: 2.064, 26: 2.056, 28: 2.048, 30: 2.042, 35: 2.030,
+        40: 2.021, 45: 2.014, 50: 2.009, 60: 2.000, 80: 1.990, 100: 1.984,
+        200: 1.972, 1000: 1.962}
 
 
 def rcrit(n):
-    """이 표본 크기에서 '유의하다' 고 말하려면 필요한 |r| (α=0.05, 양측)."""
+    """이 표본 크기에서 '유의하다' 고 말하려면 필요한 |r| (α=0.05, 양측).
+
+    표에 없는 df 는 이웃 두 값 사이를 선형보간한다. 종전에는 df>20 을
+    `2.086 − (df−20)×0.0022` 로 밀었는데 df=38 에서 t=2.046 (참값 2.024) 로
+    임계값을 0.315 로 부풀렸다 — refresh_data.causes 는 0.312 를 쓰므로 같은
+    n 에서 두 값이 어긋났다. 표를 df=1000 까지 늘려 그 틈을 없앤다.
+    """
     df = n - 2
     if df < 1: return float("nan")
-    t = _T95.get(df, 2.086 - (df - 20) * 0.0022)
+    if df in _T95:
+        t = _T95[df]
+    else:
+        ks = sorted(_T95)
+        lo = max([k for k in ks if k < df], default=ks[0])
+        hi = min([k for k in ks if k > df], default=ks[-1])
+        t = (_T95[lo] if lo == hi else
+             _T95[lo] + (_T95[hi] - _T95[lo]) * (df - lo) / (hi - lo))
     return t / (t * t + df) ** .5
 
 
@@ -107,16 +126,18 @@ def fit(x, y):
 def main():
     recs = json.loads(SEED.read_text(encoding="utf-8"))
     full = [r_ for r_ in recs if r_.get("cp_meas") is not None]
+    have = {r_["date"] for r_ in full}
+    extra = [d for d in NEW if d["date"] not in have]
     rows = sorted([{"date": r_["date"], "cit": r_["cit"], "vac": r_["cp_meas"], "corr": r_["corr"]}
                    for r_ in full] + [{"date": d["date"], "cit": d["cit"], "vac": d["cp_meas"],
-                                       "corr": d["corr"]} for d in NEW],
+                                       "corr": d["corr"]} for d in extra],
                   key=lambda d: d["date"])
     va, vb, vr = fit([d["cit"] for d in rows], [d["vac"] for d in rows])
     for d in rows:
         d["vres"] = d["vac"] - (va + vb * d["cit"])             # 온도로 설명 안 되는 진공
 
-    print("검정 대상  %d건 (시드 %d + 2026-08 %d)   진공도 결측 %d건"
-          % (len(rows), len(full), len(NEW), len(recs) - len(full)))
+    print("검정 대상  %d건 (시드 %d + 시드에 없는 2026-08 %d)   진공도 결측 %d건"
+          % (len(rows), len(full), len(extra), len(recs) - len(full)))
 
     # ── ① 원시 상관 / ② 교란 ──────────────────────────────────
     V = [d["vac"] for d in rows]; K = [d["corr"] for d in rows]; T = [d["cit"] for d in rows]

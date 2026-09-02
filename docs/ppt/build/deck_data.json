@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-02T15:18+00:00",
+ "generated": "2026-09-02T16:04+00:00",
  "source": "tool/wirye_capacity/data/measurements_seed.json",
  "n": 40,
  "cit_range": [
@@ -585,6 +585,45 @@
   "gap_max": 8.78,
   "gap_min": -2.66,
   "net_cap": 462.0
+ },
+ "causes": {
+  "n": 40,
+  "rcrit": 0.312,
+  "rows": [
+   {
+    "label": "외기온도",
+    "key": "cit",
+    "raw": -0.84,
+    "vs_t": null,
+    "part": null,
+    "model": null
+   },
+   {
+    "label": "복수기 진공도",
+    "key": "cp_meas",
+    "raw": -0.823,
+    "vs_t": 0.952,
+    "part": -0.145,
+    "model": 0.003
+   },
+   {
+    "label": "대기압",
+    "key": "press",
+    "raw": 0.734,
+    "vs_t": -0.829,
+    "part": 0.123,
+    "model": -0.13
+   },
+   {
+    "label": "상대습도",
+    "key": "rh",
+    "raw": -0.725,
+    "vs_t": 0.668,
+    "part": -0.407,
+    "model": -0.238
+   }
+  ],
+  "model_mae": 1.286
  },
  "commission": {
   "n": 9,

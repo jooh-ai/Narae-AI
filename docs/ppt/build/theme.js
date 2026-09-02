@@ -226,9 +226,12 @@ function shell(pptx, opt) {
     d.text(runs, { x: G.L, y: G.SEC_Y, w: 800, px: 15, lh: 1.28, cs: 0.6 });
   }
   if (opt && opt.step) {           // 우상단 7눈금 계기 (목차 7개)
+    /* 지난 눈금이 안 보였다 — rule(#22354A)은 헤어라인용이라 배경과 거의
+       같다. 남은 눈금을 dim2(따뜻한 중립 회색, 4.9:1)로 올리고 폭도 4px 로
+       키운다. 앰버(현재)와 색상·길이·굵기 세 가지로 갈린다. */
     for (let i = 0; i < 7; i++) {
-      const x = 1121 + i * 14, on = (i + 1) === opt.step;
-      d.rect(x, on ? 45 : 53, 3, on ? 13 : 5, on ? C.brass : C.rule);
+      const x = 1120 + i * 14, on = (i + 1) === opt.step;
+      d.rect(x, on ? 44 : 51, on ? 4 : 4, on ? 15 : 8, on ? C.brass : C.dim2);
     }
   }
   if (!opt || opt.rule !== false) d.hline(G.L, G.RULE1, G.W, C.rule, 1);

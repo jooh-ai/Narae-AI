@@ -1,57 +1,98 @@
-/* v2-10 · 개선 효과 — 요소 2개: 감소율 3수치 / 시운전 회차별 막대.
-   정량·정성 두 장을 한 장으로 합치고 정성 효과는 결론 한 줄로 남겼다.    */
+/* v2-10 · 해결 방안(2) 곡선 비교 ★ — 요소 2개: 2단 곡선 차트 / 차이 한 줄.
+   Tool [📈 출력곡선 비교] 탭과 같은 2단 구성이다. 위는 출력 곡선(이론 vs
+   모델), 아래는 그 차이를 확대한 곡선 + 실측점. 데이터도 그 탭이 부르는
+   profile.build_profile 을 그대로 불러 만든다(refresh_data.profile_cmp).
+
+   왜 2단인가 — 출력은 온도에 따라 100 MW 넘게 움직인다. 그 축에 8 MW 차이를
+   얹으면 두 곡선이 겹쳐 보인다. 그래서 위에서 '거의 같아 보인다'를 보이고,
+   아래에서 확대해 '온도마다 이만큼 다르다'를 보인다. 이 순서가 설명이다.
+
+   후보 7가지 확대 막대는 걷어냈다 — 1.30 vs 1.31 을 눈으로 보는 장은
+   처음 보는 사람에게 아무것도 설명하지 못한다.                              */
 'use strict';
 module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
-  const { d } = T.shell(pptx, { sec: '효과', idx: 6, step: 6 });
-  const I = D.impact, K = I.cut, S = D.commission;
-  T.title(d, '일은 간단해지고,', '숫자는 *정확해졌습니다*');
-  T.lead(d, '같은 ' + D.n + '회를 종전 방식과 나란히 채점한 결과입니다.', { lines: 1 });
+  const { d } = T.shell(pptx, { sec: '곡선 비교', idx: 4, step: 4 });
+  const P = D.profile, R = P.rows;
+  T.title(d, '겉보기엔 같은 곡선인데,', '확대하면 온도마다 *달랐습니다*');
+  T.lead(d, '앞에서 본 그 점들입니다. 이제 _채점으로 고른 곡선_ 이 그 점들을 따라 지나갑니다.',
+         { lines: 1 });
 
-  /* 효과 두 갈래 — 일 처리 / 신고 정확도 */
-  d.zone(G.L, 284, G.W, 152);
-  d.vline(640, 306, 108, C.rule, 1);
-  d.rect(G.L, 284, 568, 2, C.brass);
-  d.rect(640, 284, 568, 2, C.brass);
+  d.zone(G.L, 284, G.W, 268);
+  d.plab('Tool [출력곡선 비교] 화면과 같은 곡선  ·  가로 외기온도 ℃', 96, 296, 700);
 
-  d.plab('① 일 처리  ·  담당자 업무', 96, 300, 500);
-  d.bigUnit('4 → 1', '엑셀 4개 → 도구 1개', 96, 322, 44, C.brass, 15);
-  d.txt('순서를 지켜 파일 4개를 돌리던 일이 *날짜·시각 한 번*으로 끝납니다. ' +
-        '손으로 옮겨 적던 값 61개는 *0개*.', 96, 388, 520, 2);
+  const t0 = R[0].t, t1 = R[R.length - 1].t;
+  const X = t => 150 + (t - t0) * (1000 / (t1 - t0));
 
-  d.plab('② 신고 정확도  ·  실제와 어긋난 정도', 664, 300, 500);
-  d.bigUnit(K.mae + '%', '감소', 664, 322, 44, C.brass, 15);
-  d.text('평균 ' + I.blanket.mae.toFixed(2) + ' → ' + I.gp.mae.toFixed(2) + ' MW',
-         { x: 900, y: 336, w: 284, px: 15, lh: 1.3, mono: true, bold: true, color: C.ink });
-  d.txt('실제가 못 미친 횟수 *' + I.blanket.short + ' → ' + I.gp.short + '회*   ·   ' +
-        '높게 신고한 양 *' + I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) +
-        ' MW*', 664, 388, 520, 2);
+  /* ── 위: 출력 곡선 (MW) — 온도에 따라 100 MW 넘게 움직인다 ── */
+  const vs = R.map(r => r.theory).concat(R.map(r => r.real));
+  const lo1 = Math.floor(Math.min(...vs) / 20) * 20, hi1 = Math.ceil(Math.max(...vs) / 20) * 20;
+  const Y1 = v => 424 - (v - lo1) * (106 / (hi1 - lo1));
+  d.text('출력  MW', { x: 150, y: 310, w: 100, px: 10, lh: 1.2, mono: true, color: C.dim2 });
+  for (let v = lo1; v <= hi1; v += 40) {
+    d.hline(150, Y1(v), 1000, C.rule2, 1);
+    d.text(String(v), { x: 96, y: Y1(v) - 6, w: 46, px: 10, lh: 1.2, mono: true,
+                        color: C.dim2, align: 'right' });
+  }
+  for (let i = 0; i < R.length - 1; i++)
+    d.seg(X(R[i].t), Y1(R[i].theory), X(R[i + 1].t), Y1(R[i + 1].theory), C.slateL, 2.2, 'dash');
+  for (let i = 0; i < R.length - 1; i++)
+    d.seg(X(R[i].t), Y1(R[i].real), X(R[i + 1].t), Y1(R[i + 1].real), C.brass, 2.6);
+  [['이론값 (보정 없음)', C.slateL, true], ['모델이 만든 곡선', C.brass, false]]
+    .forEach(([s, col, dash], i) => {
+      const y = 320 + i * 19;
+      d.hline(918, y + 7, 26, col, dash ? 2.2 : 2.6, dash ? 'dash' : 'solid');
+      d.text(s, { x: 952, y, w: 230, px: 12, lh: 1.3, color: col });
+    });
+  d.text('두 곡선이 거의 붙어 보입니다 →  확대해 보겠습니다',
+         { x: 640, y: 400, w: 400, px: 12, lh: 1.3, color: C.dim, align: 'right' });
 
-  /* 시운전 — 예측을 먼저 남기고 실측과 대조 */
-  d.zone(G.L, 456, G.W, 168);
-  d.plab('시운전 ' + S.n + '회  ·  실측 전에 적어 둔 예측과 대조  ·  ' +
-         '세로 = 실제 − 예측 MW', 96, 470, 680);
-  d.text('편차 ' + (S.me >= 0 ? '+' : '−') + Math.abs(S.me).toFixed(3) +
-         '  ·  오차 ' + S.mae.toFixed(3) + '  ·  개선율 +' + Math.round(S.skill * 100) + '%',
-         { x: 790, y: 468, w: 394, px: 12.5, lh: 1.3, mono: true, bold: true,
-           color: C.brass, align: 'right' });
+  /* ── 아래: 차이만 확대 (실제 − 이론값) ── */
+  d.hline(G.L, 436, G.W, C.rule, 1);
+  const cs = R.map(r => r.corr).concat(D.scatter.map(p => p[1]));
+  const lo2 = Math.floor(Math.min(...cs) / 5) * 5, hi2 = Math.ceil(Math.max(...cs) / 5) * 5;
+  const Y2 = v => 528 - (v - lo2) * (78 / (hi2 - lo2));
+  for (let v = lo2; v <= hi2; v += 5) {
+    d.hline(150, Y2(v), 1000, v === 0 ? C.rule : C.rule2, 1);
+    d.text((v > 0 ? '+' : '') + v, { x: 96, y: Y2(v) - 6, w: 46, px: 10, lh: 1.2,
+                                     mono: true, color: C.dim2, align: 'right' });
+  }
+  for (let t = t0; t <= t1; t += 10) {
+    d.vline(X(t), 528, 5, C.dim2, 1);
+    d.text(t === t0 ? t + '℃' : String(t), { x: X(t) - 24, y: 534, w: 48, px: 10, lh: 1.3,
+                                             mono: true, color: C.dim2, align: 'center' });
+  }
+  d.text('차이 = 실제 − 이론값 (MW)', { x: 150, y: 441, w: 230, px: 11.5, lh: 1.2,
+                                        color: C.dim2 });
+  d.dot(402, 447, 3.2, C.ink);
+  d.text('점 = 테스트 ' + D.n + '회', { x: 414, y: 441, w: 170, px: 11.5, lh: 1.2,
+                                        color: C.ink });
+  d.text('위쪽일수록 더 나온 것', { x: 600, y: 441, w: 270, px: 11.5, lh: 1.2,
+                                    color: C.brass });
+  d.hline(886, 447, 24, C.slateL, 2.2, 'dash');
+  d.text('종전 · 온도 구분 없이 +' + D.blanket.flat.toFixed(1),
+         { x: 914, y: 441, w: 236, px: 11.5, lh: 1.2, color: C.slateL });
+  d.hline(150, Y2(D.blanket.flat), 1000, C.slateL, 2.2, 'dash');
+  D.scatter.forEach(([t, c]) => d.dot(X(t), Y2(c), 3.2, C.ink));
+  for (let i = 0; i < R.length - 1; i++)
+    d.seg(X(R[i].t), Y2(R[i].corr), X(R[i + 1].t), Y2(R[i + 1].corr), C.brass, 2.8);
 
-  const ZERO = 536, PXMW = 20, BW = 46;
-  d.hline(140, ZERO, 1000, C.rule, 1);
-  [2, -2].forEach(v => d.hline(140, ZERO - v * PXMW, 1000, C.rule2, 1));
-  [[2, '+2'], [0, '0'], [-2, '−2']].forEach(([v, s]) => d.text(s,
-    { x: 96, y: ZERO - v * PXMW - 7, w: 36, px: 10, lh: 1.3, mono: true,
-      color: C.dim2, align: 'right' }));
-  S.rows.forEach((r, i) => {
-    const x = 158 + i * 110, h = Math.abs(r.diff) * PXMW, up = r.diff >= 0;
-    d.rect(x, up ? ZERO - h : ZERO, BW, Math.max(h, 2), up ? C.brass : C.red);
-    d.text((r.diff >= 0 ? '+' : '−') + Math.abs(r.diff).toFixed(2),
-           { x: x - 14, y: up ? ZERO - h - 17 : ZERO + h + 3, w: BW + 28, px: 10.5, lh: 1.2,
-             mono: true, bold: true, color: up ? C.brass : C.red, align: 'center' });
-    d.text(r.date.slice(5), { x: x - 14, y: 604, w: BW + 28, px: 10, lh: 1.2,
-                              mono: true, color: C.dim2, align: 'center' });
-  });
+  /* 실측이 있는 온도 범위 안에서 가장 많이 더/덜 나온 곳만 짚는다.
+     데이터 밖(양 끝)은 곡선이 평평하게 연장되는 구간이라 거기를 가리키면
+     "가장 큰 차이" 를 잘못 짚는다. */
+  const IN = R.filter(r => r.t >= D.cit_range[0] && r.t <= D.cit_range[1]);
+  const up = IN.reduce((a, b) => (b.corr > a.corr ? b : a));
+  const dn = IN.reduce((a, b) => (b.corr < a.corr ? b : a));
+
+  /* 이 장에서 남길 문장 */
+  d.zone(G.L, 564, G.W, 60);
+  d.text('이론값보다 *' + up.t + '℃ 는 ' + up.corr.toFixed(1) + ' MW 더*, *' + dn.t +
+         '℃ 는 ' + Math.abs(dn.corr).toFixed(1) + ' MW 덜* 나왔습니다.   ' +
+         '종전에는 이 차이를 온도 구분 없이 ~하나의 값 +' + D.blanket.flat.toFixed(1) +
+         '~ 로 덮었습니다.',
+         { x: 96, y: 576, w: 1088, px: 15, lh: 1.5, lines: 2, color: C.body,
+           align: 'center' });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '시간도 줄고 숫자도 맞았습니다 — 그리고 *왜 그 숫자인지 설명*할 수 있게 됐습니다.');
+  T.foot(d, '이 차이를 온도마다 배웁니다 — 방식 7가지를 겨뤄 *가장 잘 맞는 곡선*을 골랐습니다.');
 };
