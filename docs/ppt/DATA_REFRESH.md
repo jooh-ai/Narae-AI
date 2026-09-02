@@ -85,8 +85,12 @@ tool/wirye_capacity/data/  ──(읽기)──▶  docs/ppt/build/refresh_data.
 ```bash
 python3 docs/ppt/build/refresh_data.py    # 데이터 → 수치 재계산
 node    docs/ppt/build/build.js           # 18장 재생성
-python3 docs/ppt/build/verify.py          # 기하 검증
+node    docs/ppt/build/build.js --v2      # 컴팩트판 13장 재생성
+python3 docs/ppt/build/verify.py docs/ppt/위례_공급가능용량_최종발표.pptx
+python3 docs/ppt/build/verify.py docs/ppt/위례_공급가능용량_최종발표_v2.pptx
 ```
+
+두 판이 같은 `deck_data.json` 을 본다. 회차가 쌓이면 두 판이 함께 갱신된다.
 
 `refresh_data.py` 가 계산할 것 — 36건 산점, 일괄 baseline(평균)과 LOOCV MAE·RMSE,
 구간별 건수, 오차 상위 4회차, 커널 7종 LOOCV, 방식별 보정 곡선, 미달·과대 누계.
@@ -94,6 +98,32 @@ python3 docs/ppt/build/verify.py          # 기하 검증
 **장표용으로 따로 계산하지 않는다.** 그래야 화면 값과 장표 값이 어긋나지 않는다.
 
 BLT 적용값 16회차와 시운전 함정 3건은 계산이 아니라 기록이므로 손으로 둔다.
+
+#### 추가 (2026-09-02) — `profile` 블록: 곡선 비교
+
+컴팩트판 8장(곡선 비교)이 쓰는 데이터다. Tool `[📈 출력곡선 비교]` 탭이 부르는
+`profile.build_profile(engine, table, corrector=...)` 을 **그대로** 호출한다 —
+화면 곡선과 장표 곡선이 어긋날 수 없다.
+
+| 키 | 뜻 |
+|---|---|
+| `rows[].theory` | 계산값 (온도·대기압·열화·IGV 만, 보정 없음) = `cc_theory` |
+| `rows[].real` | 모델 곡선 (계산값 + 온도별 차이) = `cc_real_gross` |
+| `rows[].corr` | 그 온도에서 모델이 배운 차이 = `correction` |
+| `gap_min` / `gap_max` | 차이의 범위 (현재 −2.66 ~ +8.78 MW) |
+
+두 가지를 일부러 이렇게 했다.
+
+1. **Gross 로 그린다.** 화면 상단은 Net(입찰값)이라 상한 462 MW 에서 잘리는데,
+   그 평평한 구간이 '계산값과 실제의 차이'를 가려 버린다. 차이를 보이는 장이므로
+   잘리지 않는 Gross 를 쓴다.
+2. **실측점을 프로파일 위로 환산해 찍지 않는다.** 장표 아래 패널은 `scatter`
+   (회차별 실제 차이)를 그대로 찍는다. 회차의 실측 출력을 기준 대기압 프로파일
+   위로 옮기면 환산값이 되는데, 그것을 "실제 테스트 결과" 라고 부르면 설명이
+   한 겹 틀어진다.
+
+또한 `theme.js` 의 `bigUnit()` 단위 칸을 글자 폭으로 잡도록 고쳤다 — 고정 42px
+이면 `번에 1번` 같은 긴 단위에서 넘친다.
 
 #### 처음 돌렸을 때 드러난 것 (2026-09-01)
 

@@ -9,8 +9,8 @@ module.exports = (pptx, T, meta, D) => {
                       color: C.dim2, cs: 1.8, align: 'right' });
 
   T.title(d, '공급가능용량 산정,', '사람의 판단에서 *데이터로*', { y: 112, w: 590, px: 44 });
-  d.sub('보정값 ~하나~ 로 맞춰 온 신고를 *온도별 학습*으로', G.L, 268, 590, 1);
-  d.sub('바꿨습니다.', G.L, 302, 590, 1);
+  d.sub('엑셀 4개로 하던 일을 *도구 하나*로,', G.L, 268, 590, 1);
+  d.sub('감으로 정한 값을 *온도별 학습*으로.', G.L, 302, 590, 1);
 
   /* 히어로 — 종전 수평선 vs 개선 곡선 */
   const ZX = 668, OX = ZX + 16, OY = 148;
@@ -28,7 +28,7 @@ module.exports = (pptx, T, meta, D) => {
   T4.forEach(t => { d.vline(X(CX(t)), Y(180), 5, C.dim2, 1);
     lab(t === 0 ? '0℃' : String(t), X(CX(t)) - 24, 48, 200, 10, C.dim2, 'center'); });
   d.hline(X(40), Y(CY(FLAT)), 450, C.slateL, 2.6, 'dash');
-  lab('종전 · 하나의 값 ' + sign(FLAT), X(48), 220, CY(FLAT) - 10, 12, C.slateL);
+  lab('종전 · 온도 구분 없이 ' + sign(FLAT) + ' MW', X(48), 240, CY(FLAT) - 10, 12, C.slateL);
   const P = T4.map((t, i) => [CX(t), CY(RBF[i])]);
   for (let i = 0; i < P.length - 1; i++)
     d.seg(X(P[i][0]), Y(P[i][1]), X(P[i + 1][0]), Y(P[i + 1][1]), C.brass, 2.8);
@@ -42,9 +42,12 @@ module.exports = (pptx, T, meta, D) => {
   /* 핵심 3수치 — 크게 */
   d.hline(G.L, 480, G.W, C.rule, 1);
   const I = D.impact, K = I.cut;
-  [[72, '예측 오차', K.mae, I.blanket.mae.toFixed(2) + ' → ' + I.gp.mae.toFixed(2) + ' MW'],
-   [420, '기준 미달 회차', K.short, I.blanket.short + ' → ' + I.gp.short + ' 건'],
-   [768, '과대 신고 누계', K.over, I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) + ' MW']]
+  [[72, '신고값이 실제와 어긋난 정도', K.mae,
+    I.blanket.mae.toFixed(2) + ' → ' + I.gp.mae.toFixed(2) + ' MW'],
+   [420, '실제가 신고값에 못 미친 횟수', K.short,
+    I.blanket.short + ' → ' + I.gp.short + ' 회'],
+   [768, '실제보다 높게 신고한 양', K.over,
+    I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) + ' MW']]
     .forEach(([x, l, pct, sub]) => {
       d.plab(l, x, 502, 300);
       d.big(pct + '%↓', x, 526, 220, 54);

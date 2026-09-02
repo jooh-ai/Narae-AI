@@ -5,28 +5,35 @@ module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
   const { d } = T.shell(pptx, { sec: '효과', idx: 6, step: 6 });
   const I = D.impact, K = I.cut, S = D.commission;
-  T.title(d, '같은 방식으로 채점했더니,', '세 지표가 *동시에* 좋아졌습니다');
-  T.lead(d, '종전 방식과 현재 도구를 같은 ' + D.n + '회차에 나란히 채점한 결과입니다.',
-         { lines: 1 });
+  T.title(d, '일은 간단해지고,', '숫자는 *정확해졌습니다*');
+  T.lead(d, '같은 ' + D.n + '회를 종전 방식과 나란히 채점한 결과입니다.', { lines: 1 });
 
-  /* 감소율 3수치 */
-  [[72,  '예측 오차',      K.mae,   '`' + I.blanket.mae.toFixed(2) + '` → `' + I.gp.mae.toFixed(2) + '` MW'],
-   [467, '기준 미달 회차', K.short, '`' + I.blanket.short + '` → `' + I.gp.short + '` 건'],
-   [862, '과대 신고 누계', K.over,  '`' + I.blanket.over.toFixed(1) + '` → `' + I.gp.over.toFixed(1) + '` MW']]
-    .forEach(([x, l, pct, sub]) => {
-      d.panel(x, 284, 346, 'on');
-      d.plab(l, x, 298, 346);
-      d.bigUnit(pct + '%', '감소', x, 320, 58, C.brass, 17);
-      d.txt(sub, x, 396, 346, 1);
-    });
+  /* 효과 두 갈래 — 일 처리 / 신고 정확도 */
+  d.zone(G.L, 284, G.W, 152);
+  d.vline(640, 306, 108, C.rule, 1);
+  d.rect(G.L, 284, 568, 2, C.brass);
+  d.rect(640, 284, 568, 2, C.brass);
+
+  d.plab('① 일 처리  ·  담당자 업무', 96, 300, 500);
+  d.bigUnit('4 → 1', '엑셀 4개 → 도구 1개', 96, 322, 44, C.brass, 15);
+  d.txt('순서를 지켜 파일 4개를 돌리던 일이 *날짜·시각 한 번*으로 끝납니다. ' +
+        '손으로 옮겨 적던 값 61개는 *0개*.', 96, 388, 520, 2);
+
+  d.plab('② 신고 정확도  ·  실제와 어긋난 정도', 664, 300, 500);
+  d.bigUnit(K.mae + '%', '감소', 664, 322, 44, C.brass, 15);
+  d.text('평균 ' + I.blanket.mae.toFixed(2) + ' → ' + I.gp.mae.toFixed(2) + ' MW',
+         { x: 900, y: 336, w: 284, px: 15, lh: 1.3, mono: true, bold: true, color: C.ink });
+  d.txt('실제가 못 미친 횟수 *' + I.blanket.short + ' → ' + I.gp.short + '회*   ·   ' +
+        '높게 신고한 양 *' + I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) +
+        ' MW*', 664, 388, 520, 2);
 
   /* 시운전 — 예측을 먼저 남기고 실측과 대조 */
-  d.zone(G.L, 452, G.W, 172);
-  d.plab('시운전 ' + S.n + '회차  ·  세로 = 실측 − 예측 MW  ·  아래쪽은 예측이 컸던 회차',
-         96, 466, 680);
+  d.zone(G.L, 456, G.W, 168);
+  d.plab('시운전 ' + S.n + '회  ·  실측 전에 적어 둔 예측과 대조  ·  ' +
+         '세로 = 실제 − 예측 MW', 96, 470, 680);
   d.text('편차 ' + (S.me >= 0 ? '+' : '−') + Math.abs(S.me).toFixed(3) +
          '  ·  오차 ' + S.mae.toFixed(3) + '  ·  개선율 +' + Math.round(S.skill * 100) + '%',
-         { x: 790, y: 464, w: 394, px: 12.5, lh: 1.3, mono: true, bold: true,
+         { x: 790, y: 468, w: 394, px: 12.5, lh: 1.3, mono: true, bold: true,
            color: C.brass, align: 'right' });
 
   const ZERO = 536, PXMW = 20, BW = 46;
@@ -46,5 +53,5 @@ module.exports = (pptx, T, meta, D) => {
   });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '숫자만 좋아진 게 아닙니다 — *왜 그 숫자인지 설명*할 수 있게 됐습니다.');
+  T.foot(d, '시간도 줄고 숫자도 맞았습니다 — 그리고 *왜 그 숫자인지 설명*할 수 있게 됐습니다.');
 };

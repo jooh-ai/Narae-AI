@@ -34,7 +34,10 @@ sys.path.insert(0, str(TOOL / "scripts"))
 
 from wirye_capacity import constants as C            # noqa: E402
 from wirye_capacity import select                    # noqa: E402
+from wirye_capacity.correction import aggregate_bins  # noqa: E402
 from wirye_capacity.gp import KERNELS, GPCorrectionCurve  # noqa: E402
+from wirye_capacity.profile import build_profile      # noqa: E402
+from wirye_capacity.theory import TheoryEngine        # noqa: E402
 import commission_stats as CS                        # noqa: E402
 import method_compare as MC                          # noqa: E402
 
@@ -42,6 +45,7 @@ SEED = TOOL / "wirye_capacity" / "data" / "measurements_seed.json"
 OUT = Path(__file__).with_name("deck_data.json")
 CURVE_T = (0, 10, 20, 30)          # 방식별 보정 곡선을 재는 온도
 WORST_N = 4                        # 오차 상위 몇 건을 장표에 싣는가
+PROF_T = tuple(range(-10, 41, 2))  # 곡선 비교 장표를 그리는 온도 (Tool [📈 출력곡선 비교])
 
 
 def blanket_loocv(recs: list[dict]) -> dict:
@@ -116,6 +120,41 @@ def commission(recs: list[dict]) -> dict:
     }
 
 
+
+def profile_cmp(recs: list[dict], method: str) -> dict:
+    """Tool [📈 출력곡선 비교] 탭과 같은 곡선을 장표용으로 뽑는다.
+
+    그 탭은 `build_profile(engine, table, corrector=...)` 결과를 그린다. 여기서도
+    같은 함수를 같은 인자로 부른다 — 장표 곡선과 화면 곡선이 어긋날 수 없다.
+
+      이론  = cc_theory      (온도·대기압·열화·IGV 만 반영, 보정 없음)
+      실제  = cc_real_gross  (거기에 온도별 보정값을 얹은 값)
+      차이  = correction     (그 온도에서 모델이 배운 값)
+
+    실측점은 여기서 만들지 않는다 — 장표 아래 패널은 `scatter`(회차별 실제
+    차이)를 그대로 찍는다. 회차의 실측 출력을 기준 대기압 프로파일 위로
+    옮겨 찍으면 환산값이 되는데, 그것을 "실제 테스트 결과" 라고 부르면
+    설명이 한 겹 틀어진다.
+
+    장표에는 Gross 로 그린다. 화면 상단은 Net(입찰값)이라 상한 462 에서 잘리는데,
+    그 평평한 구간이 '이론과 실제의 차이' 를 가려 버린다. 차이를 보이는 장이므로
+    잘리지 않는 Gross 를 쓰고, Net·상한은 다른 장에서 설명한다.
+    """
+    eng = TheoryEngine()
+    table = aggregate_bins(recs)
+    corrector = select.make_corrector(method, recs)
+    rows = {r.temp: r for r in build_profile(eng, table, temps=list(PROF_T),
+                                             corrector=corrector)}
+    prof = [{"t": t,
+             "theory": round(rows[t].cc_theory, 2),
+             "real": round(rows[t].cc_real_gross, 2),
+             "corr": round(rows[t].correction, 2)} for t in PROF_T]
+
+    gaps = [(p["real"] - p["theory"]) for p in prof]
+    return {"method": method, "t": list(PROF_T), "rows": prof,
+            "gap_max": round(max(gaps), 2), "gap_min": round(min(gaps), 2),
+            "net_cap": C.BID_CAP_NET}
+
 def main() -> None:
     recs = json.loads(SEED.read_text(encoding="utf-8"))
     recs.sort(key=lambda r: r["cit"])
@@ -167,6 +206,7 @@ def main() -> None:
         "impact": impact,
         "curve_t": list(CURVE_T),
         "curves": curves,
+        "profile": profile_cmp(recs, best["key"]),
         "commission": commission(recs),
     }
     OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -183,6 +223,9 @@ def main() -> None:
     print(f"입찰 관점   평균오차 {b['mae']:.2f} → {g['mae']:.2f} MW ({cut['mae']}%↓)  ·  "
           f"미달 {b['short']} → {g['short']}건 ({cut['short']}%↓)  ·  "
           f"과대신고 {b['over']:.1f} → {g['over']:.1f} MW ({cut['over']}%↓)")
+    pc = data["profile"]
+    print(f"곡선 비교   {pc['t'][0]} ~ {pc['t'][-1]}℃  이론 vs 실제  차이 "
+          f"{pc['gap_min']:+.2f} ~ {pc['gap_max']:+.2f} MW")
     c = data["commission"]
     if c["n"]:
         print(f"시운전      {c['n']}회차 ({c['from']} ~ {c['to']})  편차 {c['me']:+.3f} · "

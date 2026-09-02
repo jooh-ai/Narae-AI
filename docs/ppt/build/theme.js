@@ -187,7 +187,10 @@ function draw(pptx, s) {
     bigUnit(v, unit, x, y, px_, color, unitPx) {
       const vw = textW(v, px_) + 2;
       api.big(v, x, y, vw, px_, color);
-      if (unit) api.text(unit, { x: x + vw + 6, y: y + px_ * 0.5, w: 42,
+      /* 단위 칸도 글자 폭으로 잡는다 — '%' 같은 한 글자만 오는 게 아니라
+         '번에 1번' 처럼 길어질 수 있다. 고정 42px 이면 그때 넘친다. */
+      if (unit) api.text(unit, { x: x + vw + 6, y: y + px_ * 0.5,
+                                 w: Math.max(42, textW(unit, unitPx || 13) + 4),
                                  px: unitPx || 13, lh: 1.2, color: C.dim });
       return vw;
     },
