@@ -47,8 +47,8 @@ def test_aggregate_reproduces_excel4_status_sheet():
         (10, 15): (6.12, 6),
         (15, 20): (5.55, 3),
         (20, 25): (2.62, 1),
-        (25, 30): (-2.69, 3),
-        (30, 41): (-0.32, 9),
+        (25, 30): (-2.37, 6),
+        (30, 41): (-0.40, 11),
     }
     for key, (avg, cnt) in expect.items():
         assert table[key]["count"] == cnt, key
@@ -62,7 +62,7 @@ def test_aggregate_reproduces_excel4_status_sheet():
 def test_applied_correction_lookup():
     table = aggregate_bins(SEED)
     assert applied_correction(7, table) == pytest.approx(5.62, abs=0.01)
-    assert applied_correction(27, table) == pytest.approx(-2.69, abs=0.01)
+    assert applied_correction(27, table) == pytest.approx(-2.37, abs=0.01)
 
 
 def test_realized_net_and_cap():

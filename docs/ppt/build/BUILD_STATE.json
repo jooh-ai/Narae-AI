@@ -1,0 +1,201 @@
+{
+  "meta": {
+    "deck": "공급가능용량 산정 Tool — 최종 발표 (본사 직책자 보고)",
+    "org": "나래에너지서비스 · 위례열병합발전소",
+    "dept": "위례 정비기술팀",
+    "authors": [
+      "주현M",
+      "정상우M"
+    ],
+    "when": "2026. 09.",
+    "design": "v2 「계측 기록지」 — 계획서 §5.0~5.3, 목업 docs/ppt/design_v2.html",
+    "updated": "2026-09-02 16:15",
+    "done": 18,
+    "next": null,
+    "verified": "2026-08-31 · 경계 이탈 0 · 여백 침범 0 · 글자 넘침 0 · 상호 겹침 0",
+    "index": [
+      "개요 및 추진 배경",
+      "현황 파악 및 문제 정의",
+      "데이터 분석 및 원인 규명(가설 검증)",
+      "해결 방안 도출 및 예측/보정 모델 개발",
+      "향후 추이 분석(모니터링 체계 구축)",
+      "개선 효과(정량적/정성적)",
+      "향후 계획 및 수평 전개 방안"
+    ],
+    "index_note": "2026-08-31 부장님 회신 원문. 6번의 \"정석적\" 은 \"정성적\" 오타로 보아 정성적으로 넣었다 — 재확인 필요. theme.js 의 INDEX 상수 한 곳만 고치면 목차 장과 본문 15장 머리글이 함께 바뀐다.",
+    "data": "누적 40건 (2026-08-26까지) · 시운전 9회차 · 진공도 40건 전부"
+  },
+  "slides": [
+    {
+      "no": 1,
+      "file": "s01.js",
+      "section": null,
+      "sec": null,
+      "step": null,
+      "title": "표지",
+      "status": "done"
+    },
+    {
+      "no": 2,
+      "file": "s02.js",
+      "section": null,
+      "sec": "목차",
+      "step": null,
+      "title": "목차",
+      "status": "done"
+    },
+    {
+      "no": 3,
+      "file": "s03.js",
+      "section": null,
+      "sec": "한 장 요약",
+      "step": null,
+      "title": "한 장 요약",
+      "status": "done"
+    },
+    {
+      "no": 4,
+      "file": "s04.js",
+      "section": 1,
+      "sec": "추진 배경",
+      "step": 1,
+      "title": "매주 신고하는 숫자, 틀리면 양방향으로 손실이 납니다",
+      "status": "done"
+    },
+    {
+      "no": 5,
+      "file": "s05.js",
+      "section": 2,
+      "sec": "현황",
+      "step": 2,
+      "title": "지금까지는 하나의 숫자로 맞춰 왔습니다",
+      "status": "done"
+    },
+    {
+      "no": 6,
+      "file": "s06.js",
+      "section": 2,
+      "sec": "문제 정의",
+      "step": 2,
+      "title": "하나로는 맞출 수 없습니다 — 온도에 따라 갈립니다",
+      "status": "done"
+    },
+    {
+      "no": 7,
+      "file": "s07.js",
+      "section": 3,
+      "sec": "데이터 취득",
+      "step": 3,
+      "title": "숫자를 사람 손을 거치지 않고 가져옵니다",
+      "status": "done"
+    },
+    {
+      "no": 8,
+      "file": "s08.js",
+      "section": 3,
+      "sec": "가설 검증",
+      "step": 3,
+      "title": "그럴듯한 설명 5개를 의심했고, 4개는 틀렸습니다",
+      "status": "done"
+    },
+    {
+      "no": 9,
+      "file": "s09.js",
+      "section": 4,
+      "sec": "해결 구조",
+      "step": 4,
+      "title": "물리는 동결하고, 통계만 학습합니다",
+      "status": "done"
+    },
+    {
+      "no": 10,
+      "file": "s10.js",
+      "section": 4,
+      "sec": "검증 설계",
+      "step": 4,
+      "title": "36건이라는 제약을 이렇게 넘었습니다",
+      "status": "done"
+    },
+    {
+      "no": 11,
+      "file": "s11.js",
+      "section": 4,
+      "sec": "모델 선정",
+      "step": 4,
+      "title": "잇는 방식 7가지를 똑같은 조건에서 겨뤄 가장 잘 맞히는 하나를 골랐습니다",
+      "status": "done"
+    },
+    {
+      "no": 12,
+      "file": "s12.js",
+      "section": 5,
+      "sec": "모니터링",
+      "step": 5,
+      "title": "회차가 쌓이면 스스로 다시 고릅니다",
+      "status": "done"
+    },
+    {
+      "no": 13,
+      "file": "s13.js",
+      "section": 5,
+      "sec": "시운전",
+      "step": 5,
+      "title": "시운전에서 함정 3개를 만나 전부 코드로 못박았습니다",
+      "status": "done"
+    },
+    {
+      "no": 14,
+      "file": "s14.js",
+      "section": 6,
+      "sec": "정량 효과",
+      "step": 6,
+      "title": "세 지표가 동시에 좋아졌습니다",
+      "status": "done"
+    },
+    {
+      "no": 15,
+      "file": "s15.js",
+      "section": 6,
+      "sec": "정성 효과",
+      "step": 6,
+      "title": "숫자보다 오래 남는 것은 설명할 수 있게 됐다는 점입니다",
+      "status": "done"
+    },
+    {
+      "no": 16,
+      "file": "s16.js",
+      "section": 7,
+      "sec": "수평 전개",
+      "step": 7,
+      "title": "이론만 갈아끼우면 같은 구조의 사업소에 그대로 적용됩니다",
+      "status": "done"
+    },
+    {
+      "no": 17,
+      "file": "s17.js",
+      "section": null,
+      "sec": "Tool 시연",
+      "step": null,
+      "title": "Tool 시연",
+      "status": "done"
+    },
+    {
+      "no": 18,
+      "file": "s18.js",
+      "section": null,
+      "sec": "Q & A",
+      "step": null,
+      "title": "Q & A",
+      "status": "done"
+    }
+  ],
+  "pending": [
+    "정본 규약 확정 — CIT 등은 담당자 표 전사값(1 소수점). docs/ppt/DATA_REFRESH.md §3.5",
+    "Tool 스크린샷 미수령 — 슬라이드 6·10·11·12 의 화면 자리는 규격 맞춘 자리표시자 프레임으로 둔다.",
+    "금액 환산 기준 미수령 — MW 로만 표기. 추정치는 만들지 않는다.",
+    "수평 전개 사업소 실명 사용 가능 여부 미확인 — 슬라이드 15 는 '동일 구조 입찰 사업소'로 일반화해 둔다.",
+    "발표자 노트는 15장 완료 후 별도 패스.",
+    "발표자 노트 미작성 — 15장 완료 후 별도 패스(slide.addNotes).",
+    "전면 검토 패스 미실시 (계획서 §8 ⑥)."
+  ]
+}

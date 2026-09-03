@@ -15,16 +15,29 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from .. import constants as C
 
-# 색상 (앱 브랜드와 통일)
-C_THEORY = QtGui.QColor("#8b94a4")      # 이론 - 회색
-C_REAL = QtGui.QColor("#EA002C")        # 현실화 - 적색
-C_MARGIN = QtGui.QColor("#1f9254")      # 마진 적용 - 녹색
-C_CORR = QtGui.QColor("#0b6bcb")        # 보정값 - 청색
-C_BAND = QtGui.QColor(11, 107, 203, 38)  # 예측구간
-C_PT = QtGui.QColor("#10141c")          # 실측점
-C_GRID = QtGui.QColor("#e6e9ef")
-C_AXIS = QtGui.QColor("#9aa3b2")
-C_TEXT = QtGui.QColor("#3a4150")
+# 색상 — theme.py 한 곳에서 온다. 뜻은 발표자료와 같게 고정한다:
+#   슬레이트 = 이론(보정 없음) / 앰버 = 현실화·보정 반영 / 레드 = 위험
+# 종전에는 현실화가 레드였는데, 레드는 '위험' 자리다. 두 뜻이 겹치면
+# 화면과 보고자료를 나란히 놓았을 때 같은 색이 다른 말을 하게 된다.
+from .theme import C as _T                                        # noqa: E402
+
+_c = lambda k: QtGui.QColor(_T[k])                                # noqa: E731
+C_BG = _c("groove")                     # 차트 바닥 — 데이터가 앉는 홈 면
+C_THEORY = _c("slateL")                 # 이론 - 슬레이트(선)
+C_REAL = _c("brass")                    # 현실화 - 앰버
+C_MARGIN = _c("red")                    # 마진 적용 - 레드(보수적으로 깎은 선)
+C_CORR = _c("brass")                    # 보정값 - 앰버
+# 앰버를 남색 바탕에 옅게 얹으면 올리브로 탁해진다(색 계산상 어쩔 수 없다).
+# 알파만 올리면 곡선과 경쟁하므로, 알파는 조금만 올리고 위·아래 경계에 점선을
+# 그어 '띠' 라는 것이 색이 아니라 형태로 읽히게 한다.
+C_BAND = QtGui.QColor(239, 177, 60, 58)  # 예측구간 - 앰버 58/255
+C_BAND_LINE = QtGui.QColor(239, 177, 60, 150)   # 예측구간 경계 점선
+C_PT = _c("ink")                        # 실측점 - 회백
+C_PT_EDGE = _c("groove")                # 실측점 테두리(바닥색)
+C_GRID = _c("rule2")
+C_AXIS = _c("rule")
+C_TEXT = _c("dim")
+C_LABEL = _c("ink")
 
 
 class CurveChart(QtWidgets.QWidget):
@@ -39,7 +52,9 @@ class CurveChart(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(430)
+        # 창을 세로로 줄일 수 있어야 한다 — 최소는 '그래도 읽히는' 높이로만
+        # 잡는다(종전 430 은 창 최소높이를 498 로 묶어 축소를 막았다).
+        self.setMinimumHeight(220)
         self.setMouseTracking(True)
         self._rows = []
         self._pts = []
@@ -114,7 +129,7 @@ class CurveChart(QtWidgets.QWidget):
     def paintEvent(self, _e):
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        p.fillRect(self.rect(), QtGui.QColor("#ffffff"))
+        p.fillRect(self.rect(), C_BG)
         if not self._rows:
             p.setPen(C_TEXT)
             p.drawText(self.rect(), QtCore.Qt.AlignCenter,
@@ -194,10 +209,17 @@ class CurveChart(QtWidgets.QWidget):
                 p.setBrush(C_BAND)
                 p.drawPolygon(poly)
                 p.setBrush(QtCore.Qt.NoBrush)
+                pen = QtGui.QPen(C_BAND_LINE, 1.1, QtCore.Qt.DashLine)
+                p.setPen(pen)
+                for edge in (up, dn):                  # 위·아래 경계선
+                    path = QtGui.QPainterPath(edge[0])
+                    for q in edge[1:]:
+                        path.lineTo(q)
+                    p.drawPath(path)
         self._series(p, [(tx(r.temp), cy(r.correction)) for r in self._rows],
                      C_CORR, width=2.0)
         if self.show_points:
-            p.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 1))
+            p.setPen(QtGui.QPen(C_PT_EDGE, 1))
             p.setBrush(C_PT)
             for t, c in self._pts:
                 if t0 <= t <= t1:
@@ -205,7 +227,7 @@ class CurveChart(QtWidgets.QWidget):
             p.setBrush(QtCore.Qt.NoBrush)
         li = [(C_CORR, "보정값 곡선", False)]
         if self.show_band and self._sigma is not None:
-            li.append((QtGui.QColor("#7fb3e8"), "90% 예측구간", False))
+            li.append((C_BAND_LINE, "90% 예측구간", True))   # 실제 그림과 같이 점선으로
         if self.show_points:
             li.append((C_PT, "실측 보정값", "dot"))
         self._legend(p, g["px"] + 8, g["by"] + 6, li)
@@ -276,7 +298,7 @@ class CurveChart(QtWidgets.QWidget):
         p.setFont(f)
         for color, text, dash in items:
             if dash == "dot":                      # 산점 표식
-                p.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 1))
+                p.setPen(QtGui.QPen(C_PT_EDGE, 1))
                 p.setBrush(color)
                 p.drawEllipse(QtCore.QPointF(x + 9, y + 7), 3.1, 3.1)
                 p.setBrush(QtCore.Qt.NoBrush)
@@ -297,11 +319,11 @@ class CurveChart(QtWidgets.QWidget):
         if row is None:
             return
         x = tx(t)
-        p.setPen(QtGui.QPen(QtGui.QColor("#b9c0cc"), 1, QtCore.Qt.DashLine))
+        p.setPen(QtGui.QPen(C_AXIS, 1, QtCore.Qt.DashLine))
         p.drawLine(QtCore.QPointF(x, g["ty"]), QtCore.QPointF(x, g["by"] + g["bh"]))
         for yy, col in ((ty(self._theory_net(row)), C_THEORY), (ty(row.cc_real_net), C_REAL),
                         (cy(row.correction), C_CORR)):
-            p.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 1))
+            p.setPen(QtGui.QPen(C_PT_EDGE, 1))
             p.setBrush(col)
             p.drawEllipse(QtCore.QPointF(x, yy), 3.4, 3.4)
         p.setBrush(QtCore.Qt.NoBrush)
@@ -323,8 +345,8 @@ class CurveChart(QtWidgets.QWidget):
         h = len(lines) * (fm.height() + 1) + 10
         bx = min(x + 12, g["px"] + g["pw"] - w)
         by = g["ty"] + 4
-        p.setPen(QtGui.QPen(QtGui.QColor("#d8dde6"), 1))
-        p.setBrush(QtGui.QColor(255, 255, 255, 242))
+        p.setPen(QtGui.QPen(_c("rule"), 1))
+        p.setBrush(QtGui.QColor(19, 34, 52, 246))
         p.drawRoundedRect(QtCore.QRectF(bx, by, w, h), 4, 4)
         p.setPen(C_TEXT)
         for i, s in enumerate(lines):

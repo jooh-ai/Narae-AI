@@ -90,8 +90,9 @@ def build_profile(engine: TheoryEngine, correction_table: dict,
     return rows
 
 
-# 출력 컬럼 (헤더, ProfileRow 속성)
-_COLUMNS = [
+# 출력 컬럼 (헤더, ProfileRow 속성).
+# GUI 의 온도 프로파일 표도 이걸 쓴다 — 화면과 저장 파일이 어긋나면 안 된다.
+PROFILE_COLUMNS = [
     ("외기온도(CIT,°C)", "temp"),
     ("GT 이론", "gt_theory"),
     ("ST 이론", "st_theory"),
@@ -118,7 +119,7 @@ def write_xlsx(profile: list[ProfileRow], path: str, *,
              f"(대기압 {pressure:g} mbar · Deg {deg:g} · 입찰 Net ≤ {C.BID_CAP_NET:g} MW)")
     ws["A1"] = title
     ws["A1"].font = Font(bold=True, size=12)
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(_COLUMNS))
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(PROFILE_COLUMNS))
 
     ws["A2"] = "입력"
     ws["B2"] = "대기압(mbar)"
@@ -131,14 +132,14 @@ def write_xlsx(profile: list[ProfileRow], path: str, *,
     ws["E2"].fill = PatternFill("solid", fgColor="E2EFDA")
 
     hdr = 4
-    for j, (label, _) in enumerate(_COLUMNS, start=1):
+    for j, (label, _) in enumerate(PROFILE_COLUMNS, start=1):
         cell = ws.cell(row=hdr, column=j, value=label)
         cell.font = Font(bold=True)
         cell.alignment = Alignment(horizontal="center", wrap_text=True)
         cell.fill = PatternFill("solid", fgColor="D9E1F2")
 
     for i, row in enumerate(profile, start=hdr + 1):
-        for j, (_, attr) in enumerate(_COLUMNS, start=1):
+        for j, (_, attr) in enumerate(PROFILE_COLUMNS, start=1):
             val = getattr(row, attr)
             cell = ws.cell(row=i, column=j, value=round(val, 2) if isinstance(val, float) else val)
             if j >= 2:
