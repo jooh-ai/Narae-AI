@@ -83,171 +83,12 @@ _SHORT_HEAD = {
     "cc_real_gross": "CC 현실 Gross", "cc_real_net": "★ CC 현실 Net",
 }
 
-# ── SK 브랜드 스타일시트 (행복날개 레드 #EA002C · 오렌지 #F47725, 플랫 · 카드) ──
-QSS = """
-* { font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; font-size: 10pt; }
-QMainWindow, QWidget { background: #FAF7F5; color: #2B2422; }
-
-QWidget#header {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #EA002C, stop:0.6 #F0431F, stop:1 #F47725);
-    border: none;
-}
-QLabel#headertitle {
-    background: transparent; color: #FFFFFF; font-size: 14pt; font-weight: 800;
-}
-/* 로고는 헤더와 같은 레드·오렌지라 그라데이션 위에 그대로 얹으면 묻힌다.
-   흰 칩 안에 넣어 브랜드 색을 살린다. */
-QLabel#headermark { background: #FFFFFF; border-radius: 6px; }
-QLabel#headersub { color: #FFE3D6; font-size: 9pt; }
-
-QWidget#banner { background: #FFF3EC; border-bottom: 1px solid #FFCDB2; }
-QLabel#bannertext { background: transparent; color: #8A2A00; font-size: 9.5pt; }
-
-QTabWidget::pane { border: none; background: transparent; }
-QTabBar::tab {
-    background: transparent; padding: 10px 20px; margin-right: 2px;
-    color: #8A7F7A; border: none; border-bottom: 3px solid transparent;
-    font-weight: 600;
-}
-QTabBar::tab:selected { color: #EA002C; border-bottom: 3px solid #EA002C; }
-QTabBar::tab:hover { color: #F0431F; }
-
-QGroupBox {
-    background: #FFFFFF; border: 1px solid #EDE4DF; border-radius: 10px;
-    margin-top: 14px; padding: 16px 12px 10px 12px; font-weight: 700; color: #5B4A42;
-}
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; }
-
-QLineEdit, QDoubleSpinBox {
-    background: #FFFFFF; border: 1px solid #DCD2CC; border-radius: 6px;
-    padding: 7px 9px; selection-background-color: #FFD3C2;
-}
-QLineEdit:focus, QDoubleSpinBox:focus { border: 2px solid #F0431F; }
-QLineEdit:disabled { background: #F5EFEC; color: #A89B94; }
-
-QPushButton {
-    background: #F1E9E4; color: #4A3B33; border: none; border-radius: 6px;
-    padding: 8px 16px; font-weight: 600;
-}
-QPushButton:hover { background: #E7DAD2; }
-QPushButton#primary {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #EA002C, stop:1 #F47725);
-    color: #FFFFFF; font-weight: 800; font-size: 11.5pt;
-    padding: 12px; border-radius: 8px;
-}
-QPushButton#primary:hover {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #C50024, stop:1 #DC6414);
-}
-QPushButton#primary:disabled { background: #F3B7A3; }
-QPushButton#danger {
-    background: #FFFFFF; color: #C50024; border: 1px solid #F0AAB6;
-    border-radius: 6px; padding: 8px 16px; font-weight: 700;
-}
-QPushButton#danger:hover { background: #FDECEF; border-color: #EA002C; }
-
-QCheckBox { spacing: 8px; padding: 2px; }
-QCheckBox::indicator {
-    width: 17px; height: 17px; border: 1px solid #DCD2CC;
-    border-radius: 3px; background: #FFFFFF;
-}
-QCheckBox::indicator:hover { border-color: #F0431F; }
-QCheckBox::indicator:disabled { background: #F5EFEC; border-color: #E4DAD4; }
-/* 체크 표시는 런타임에 그린 PNG 를 넣는다(_INDICATOR_QSS). QSS 로 인디케이터
-   크기를 지정하면 Qt 가 네이티브 체크를 그리지 않으므로 이미지가 없으면 빈 칸이
-   된다 — 그래서 이미지 생성이 실패하면 종전처럼 빨간 채움으로 되돌린다. */
-
-/* 스핀박스 화살표 — 위치·크기를 명시하지 않으면 위 버튼이 위젯 밖으로 2px
-   밀려나고 둥근 모서리에 가려서 클릭이 안 먹는다(2026-08 부장님 지적). */
-QDoubleSpinBox, QSpinBox { padding-right: 26px; }
-QDoubleSpinBox::up-button, QSpinBox::up-button {
-    subcontrol-origin: border; subcontrol-position: top right;
-    width: 22px; margin: 1px 1px 0 0; border-left: 1px solid #DCD2CC;
-    border-top-right-radius: 5px; background: #F7F2EF;
-}
-QDoubleSpinBox::down-button, QSpinBox::down-button {
-    subcontrol-origin: border; subcontrol-position: bottom right;
-    width: 22px; margin: 0 1px 1px 0; border-left: 1px solid #DCD2CC;
-    border-bottom-right-radius: 5px; background: #F7F2EF;
-}
-QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover,
-QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {
-    background: #EFE4DE;
-}
-QDoubleSpinBox::up-button:pressed, QSpinBox::up-button:pressed,
-QDoubleSpinBox::down-button:pressed, QSpinBox::down-button:pressed {
-    background: #E4D6CE;
-}
-
-QProgressBar {
-    border: 1px solid #DCD2CC; border-radius: 6px; background: #F7F2EF;
-    text-align: center; color: #4A3B33; font-weight: 700; height: 20px;
-}
-QProgressBar::chunk {
-    border-radius: 5px;
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                stop:0 #EA002C, stop:1 #F47725);
-}
-
-QTableWidget {
-    background: #FFFFFF; border: 1px solid #EDE4DF; border-radius: 8px;
-    gridline-color: #F7F1EE; alternate-background-color: #FBF7F4;
-}
-QHeaderView::section {
-    background: #F5EDE8; color: #5B4A42; border: none;
-    border-bottom: 2px solid #F0B8A0; padding: 7px; font-weight: 700;
-}
-QLabel#summary {
-    background: #FFF3EC; border: 1px solid #FFCDB2; border-radius: 8px;
-    padding: 12px; color: #8A2A00; font-weight: 600;
-}
-QToolTip { background: #3A2E28; color: #FFF7F2; border: none; padding: 6px; }
-"""
+# ── 스타일시트는 theme.py 한 곳에서 온다 (v2 「계측 기록지」) ─────────────
+# 발표자료(docs/ppt/build/theme.js)와 같은 팔레트다. 색을 고치려면 theme.py 만
+# 고친다 — 화면과 보고자료가 갈라지지 않게 하려는 것이 이 분리의 목적이다.
+from .theme import C as THEME_C, QSS, runtime_qss as _runtime_qss  # noqa: E402
 
 NODEID_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
-
-
-def _check_indicator_qss() -> str:
-    """체크 표시 PNG 를 만들어 QSS 조각으로 돌려준다. 실패하면 빨간 채움으로 후퇴.
-
-    QSS 로 QCheckBox::indicator 의 크기를 지정하면 Qt 는 네이티브 체크를 그리지
-    않는다(실측 확인). 그래서 체크 모양은 이미지로 넣어야 한다 — 파일을 번들에
-    두는 대신 매 실행마다 임시폴더에 그려서 쓴다(PyInstaller 경로 문제가 없다).
-    """
-    import tempfile
-
-    from PySide6 import QtCore, QtGui
-    try:
-        n = 17
-        for scale in (3, 2, 1):                  # 고DPI 대비 3배로 그려 축소
-            s = n * scale
-            img = QtGui.QImage(s, s, QtGui.QImage.Format.Format_ARGB32)
-            img.fill(QtCore.Qt.GlobalColor.transparent)
-            pen = QtGui.QPen(QtGui.QColor("#EA002C"))
-            pen.setWidthF(2.2 * scale)
-            pen.setCapStyle(QtCore.Qt.PenCapStyle.RoundCap)
-            pen.setJoinStyle(QtCore.Qt.PenJoinStyle.RoundJoin)
-            pt = QtGui.QPainter(img)
-            pt.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-            pt.setPen(pen)
-            path = QtGui.QPainterPath()
-            path.moveTo(0.22 * s, 0.53 * s)
-            path.lineTo(0.42 * s, 0.73 * s)
-            path.lineTo(0.79 * s, 0.28 * s)
-            pt.drawPath(path)
-            pt.end()
-            out = Path(tempfile.gettempdir()) / f"wirye_check_{scale}x.png"
-            if img.save(str(out), "PNG"):
-                # Qt QSS 는 항상 슬래시 경로를 쓴다(윈도우 역슬래시는 이스케이프로 먹힘)
-                url = out.as_posix()
-                return ("QCheckBox::indicator:checked { image: url(%s); }\n"
-                        "QCheckBox::indicator:checked:disabled { image: url(%s); }"
-                        % (url, url))
-    except Exception:                            # noqa: BLE001
-        pass
-    return "QCheckBox::indicator:checked { background: #EA002C; }"
 
 
 def _require_qt():
@@ -400,6 +241,9 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             # 않으므로 한 번 계산하면 된다. Interactive 라 사용자가 끌어 조절도 된다.
             _readonly_table(self.sel_loocv, stretch_from=1)
             _readonly_table(self.sel_test, stretch_from=1)
+            # 폭을 재기 전에 스타일시트를 먼저 입힌다. 이걸 빼면 아직 기본 글꼴로
+            # 재고, 화면에는 QSS 의 Consolas(더 넓다)로 그려져 라벨이 잘린다.
+            self.sel_loocv.ensurePolished()
             fm = self.sel_loocv.fontMetrics()
             wide = max(fm.horizontalAdvance(_sel.METHOD_LABEL[m]) for m in _METHODS)
             hh0 = self.sel_loocv.horizontalHeader()
@@ -670,7 +514,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             f2.addRow("대기압 윈드파인더", self.forecast_in["row"])
             note = QtWidgets.QLabel(
                 "적용 대기압 = 예보 3~7일차(테스트일 +2 ~ +6) 중위 평균 − 8 mbar")
-            note.setStyleSheet("color:#6b7382; font-size:11px;")
+            note.setStyleSheet(f"color:{THEME_C['dim']}; font-size:11px;")
             note.setWordWrap(True)
             f2.addRow("", note)
 
@@ -1113,9 +957,13 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             self.sim_big.setWordWrap(True)
             self.sim_out = QtWidgets.QPlainTextEdit()
             self.sim_out.setReadOnly(True)
+            # 색은 theme.py 에서 받는다 — 여기에 리터럴을 박으면 테마를 바꿔도
+            # 이 칸만 흰색으로 남는다(실제로 그렇게 남아 있었다).
             self.sim_out.setStyleSheet(
                 "font-family: 'Consolas','D2Coding',monospace; font-size: 10pt;"
-                "background:#FFFFFF; border:1px solid #EDE4DF; border-radius:8px; padding:8px;")
+                f"background:{THEME_C['groove']}; color:{THEME_C['ink']};"
+                f"border:1px solid {THEME_C['rule']}; border-radius:8px; padding:8px;"
+                f"selection-background-color:{THEME_C['brassD']};")
             right.addWidget(self.sim_big)
             right.addWidget(self.sim_out, stretch=1)
 
@@ -1195,7 +1043,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             bar.addWidget(self.chart_band)
             bar.addStretch(1)
             self.chart_info = QtWidgets.QLabel()
-            self.chart_info.setStyleSheet("color:#6b7382;")
+            self.chart_info.setStyleSheet(f"color:{THEME_C['dim']};")
             bar.addWidget(self.chart_info)
 
             self.chart = CurveChart()
@@ -1205,7 +1053,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 "위 곡선: 이론값(보정 없음) vs 현실화 Net(보정 반영, 입찰값) · "
                 "아래 곡선: 온도별 보정값과 실측점. 마우스를 올리면 해당 온도 값이 표시됩니다.")
             note.setWordWrap(True)
-            note.setStyleSheet("color:#6b7382; font-size:11px;")
+            note.setStyleSheet(f"color:{THEME_C['dim']}; font-size:11px;")
             lay.addWidget(note)
             return w
 
@@ -1310,17 +1158,23 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                         # 편집 대기값이 있으면 그걸 보여준다(저장 전 확인용)
                         src = dict(r, **edits) if edits else r
                         item = QtWidgets.QTableWidgetItem(self._cell_text(src, field, dp))
-                        if not editable:         # 파생값 — 편집 불가 + 회색 배경
+                        if not editable:         # 파생값 — 편집 불가 + 뜻에 맞는 색
+                            # 밝은 테마에서는 회색 배경으로 '못 고치는 칸' 을 표시했다.
+                            # 어두운 테마에서는 배경차가 안 보이므로 글자색으로 말한다 —
+                            # 이론기준값은 슬레이트, 보정값은 앰버. 발표자료와 같은 뜻이다.
                             item.setFlags(item.flags()
                                           & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-                            item.setBackground(QtGui.QColor("#F6F2F0"))
+                            item.setBackground(QtGui.QColor(THEME_C["ground"]))
+                            item.setForeground(QtGui.QColor(
+                                THEME_C["brass"] if field == "corr" else THEME_C["slateL"]))
                             item.setToolTip("이론기준값·보정값은 저장 시 자동 재계산됩니다.")
-                        if field in edits:       # 고친 셀 — 주황 강조
-                            item.setBackground(QtGui.QColor("#FFE8D8"))
+                        if field in edits:       # 고친 셀 — 앰버 강조
+                            item.setBackground(QtGui.QColor(THEME_C["brassS"]))
+                            item.setForeground(QtGui.QColor(THEME_C["brass"]))
                             f = item.font(); f.setBold(True); item.setFont(f)
-                        if marked:               # 삭제 대기 행 — 취소선 + 회색
+                        if marked:               # 삭제 대기 행 — 취소선 + 흐리게
                             f = item.font(); f.setStrikeOut(True); item.setFont(f)
-                            item.setForeground(QtGui.QColor("#B9AFA9"))
+                            item.setForeground(QtGui.QColor(THEME_C["dim2"]))
                         self.list_tbl.setItem(i, j, item)
             finally:
                 self._loading_list = False
@@ -1516,7 +1370,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                        f"@({s.geometry().x()},{s.geometry().y()})"
                        for s in app.screens()))
     # 체크 표시 이미지는 QApplication 이 있어야 그릴 수 있다(QImage/QPainter).
-    app.setStyleSheet(QSS + "\n" + _check_indicator_qss())
+    app.setStyleSheet(QSS + "\n" + _runtime_qss())
     _logo = _C.logo_path()
     if _logo:                       # 작업표시줄·창 좌상단 아이콘도 같은 로고로
         from PySide6 import QtGui
