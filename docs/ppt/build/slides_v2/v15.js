@@ -1,18 +1,42 @@
-/* v2-15 · Q & A — 표지에서 이미 보인 3수치를 반복하지 않는다.
-   마지막에 남길 것은 수치가 아니라 한 문장이다.                          */
+/* v2-15 · Tool 시연 — 요소 2개: 4단계 / ④의 결과물(프로파일 표) 캡처.
+   앞 장(14장)이 '화면이 이렇게 생겼다' 라면 이 장은 '눌렀을 때 무엇이 나오나' 다.
+   그래서 그림은 최종 산출물 하나만 둔다 — 온도별 신고값 표. 이 과제가 만드는
+   물건이 결국 이 표다.
+
+   종전의 '보실 지점 3개' 는 발표자가 말할 것이라 화면에서 뺐다(발표자 노트로).
+   실물을 띄워 놓고 화면에 안내문을 같이 띄우면 둘 다 안 읽힌다.              */
 'use strict';
+const STEP = [
+  ['데이터 취득',      '설비에서 값을 그대로 읽어옵니다. 옮겨 적는 칸이 없습니다.'],
+  ['출력 시뮬레이션',  '온도를 넣으면 이론값이 나옵니다. 손대지 않는 부분입니다.'],
+  ['곡선 비교',        '이론값 곡선과 모델 곡선을 겹쳐 봅니다. 차이가 보입니다.'],
+  ['프로파일 생성',    '신고할 표가 파일로 바로 나옵니다.'],
+];
+const SHOT = { file: 'tool_profile.png', w: 1264, h: 341 };
 module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
-  const { d } = T.shell(pptx, {});
-  d.text(meta.org, { x: G.L, y: G.SEC_Y, w: 600, px: 12, lh: 1.25, mono: true, color: C.dim2, cs: 1.8 });
-  d.text(meta.when, { x: 1008, y: G.SEC_Y, w: 200, px: 12, lh: 1.25, mono: true,
-                      color: C.dim2, cs: 1.8, align: 'right' });
+  const { d } = T.shell(pptx, { sec: 'Tool 시연' });
+  T.title(d, '실제로 *돌려 보겠습니다*');
+  T.lead(d, '3~4분입니다. _네 단계_ 만 보시면 됩니다.', { y: 152, lines: 1 });
 
-  T.title(d, '감사합니다', '*질문 받겠습니다*', { y: 232, w: 700, px: 52 });
-  d.sub('엑셀 4개로 하던 일을 도구 하나로, 감으로 정한 값을 *데이터가 갱신하는 값*으로.',
-        G.L, 406, 900, 1);
+  /* 4단계 */
+  d.zone(G.L, 216, G.W, 152);
+  STEP.forEach(([k, v], i) => {
+    const x = 96 + i * 272;
+    d.big(String(i + 1), x, 234, 34, 32, C.brassD);
+    d.sub(k, x + 42, 232, 204, 1);
+    d.txt(v, x + 42, 268, 204, 3);
+    if (i < 3) d.vline(x + 256, 232, 110, C.rule2, 1);
+  });
 
-  d.hline(G.L, 634, G.W, C.rule, 1);
-  d.text(meta.dept + '  ·  ' + meta.authors.join(' · '),
-         { x: G.L, y: G.FOOT_Y, w: 600, px: 12, lh: 1.4, mono: true, color: C.dim, cs: 1.6 });
+  /* ④ 의 결과 — 이 과제가 만드는 물건 */
+  const W_ = 800, H_ = Math.round(W_ * SHOT.h / SHOT.w);     // 216
+  const X_ = G.L + Math.round((G.W - W_) / 2);
+  d.plab('④ 의 결과  ·  온도별 신고값 표  ·  −20 ~ 40℃ 61행  ·  실제 화면', X_, 388, 700);
+  d.img(SHOT.file, X_, 406, W_, H_);
+  d.text('이 표가 그대로 *주간 입찰값*이 됩니다', { x: X_, y: 406 + H_ + 8, w: W_,
+         px: 13, lh: 1.35, color: C.dim, align: 'right' });
+
+  d.hline(G.L, G.RULE2, G.W, C.rule, 1);
+  T.foot(d, '입력하는 칸이 아니라, *근거가 붙은 숫자*를 보십시오.');
 };

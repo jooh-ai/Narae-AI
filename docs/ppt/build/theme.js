@@ -49,6 +49,11 @@ const INDEX = [
 
 const F = { kr: 'Malgun Gothic', mono: 'Consolas' };
 
+/* 캡처 그림 경로 — docs/ppt/assets/. build.js 를 어디서 돌려도 같은 파일을
+   가리키게 이 파일 위치를 기준으로 만든다. */
+const path = require('path');
+const ASSET = name => path.join(__dirname, '..', 'assets', name);
+
 /* px → in / pt */
 const IN = px => px / 96;
 const PT = px => px * 0.75;
@@ -201,6 +206,16 @@ function draw(pptx, s) {
                              color: on ? C.brass : C.dim });
     },
     arrow(x, y) { return api.text('→', { x, y, w: 20, px: 13, lh: 1.2, color: C.dim2, align: 'center' }); },
+    /* 그림 — Tool 화면 캡처. 테두리를 한 줄 둘러 '창' 이라는 것을 보이게 한다.
+       캡처는 docs/ppt/assets/ 에 있고 파일명만 준다(ASSET 이 경로를 만든다).
+       w·h 는 원본 비율대로 넣는다 — 늘리면 글자가 뭉개져서 캡처가 지저분해진다. */
+    img(name, x, y, w, h, opt) {
+      s.addImage(Object.assign({
+        path: ASSET(name), x: IN(x), y: IN(y), w: IN(w), h: IN(h),
+      }, opt || {}));
+      if (!opt || opt.frame !== false) api.box(x - 1, y - 1, w + 2, h + 2, null, C.rule, 1);
+      return api;
+    },
   };
   return api;
 }
@@ -264,4 +279,4 @@ function foot(d, str) {
   return d.text(str, { x: G.L + 56, y: G.FOOT_Y, w: G.W - 56, px: 16.5, lh: 1.4 });
 }
 
-module.exports = { C, F, IN, PT, G, INDEX, rt, textW, draw, shell, title, lead, foot };
+module.exports = { C, F, IN, PT, G, INDEX, ASSET, rt, textW, draw, shell, title, lead, foot };

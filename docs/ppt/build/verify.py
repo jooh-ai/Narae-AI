@@ -58,7 +58,7 @@ def shapes(slide_xml):
                     seg[-1] += ''.join(t.text or '' for t in ch.iter(A + 't'))
             for t in seg:
                 if t.strip(): paras.append((t, sz, ls))
-        out.append(dict(x=x, y=y, w=w, h=h, paras=paras,
+        out.append(dict(x=x, y=y, w=w, h=h, paras=paras, pic=(sp.tag == P + 'pic'),
                         txt=' '.join(p[0] for p in paras)))
     return out
 
@@ -72,15 +72,16 @@ def check(path):
         sh = shapes(z.read(n))
         for s in sh:
             r, b = s['x'] + s['w'], s['y'] + s['h']
-            tag = (s['txt'][:26] or '(도형)')
+            tag = (s['txt'][:26] or ('(그림)' if s['pic'] else '(도형)'))
             if s['x'] < -0.5 or s['y'] < -0.5 or r > W + 0.5 or b > H + 0.5:
                 fails.append(('①경계', i, tag,
                               'x %.0f y %.0f → %.0f, %.0f' % (s['x'], s['y'], r, b)))
-            if s['paras']:
+            if s['paras'] or s['pic']:
                 if s['x'] < MARGIN[0] - 0.5 or s['y'] < MARGIN[1] - 0.5 \
                    or r > MARGIN[2] + 0.5 or b > MARGIN[3] + 0.5:
                     fails.append(('②여백', i, tag,
                                   'x %.0f y %.0f → %.0f, %.0f' % (s['x'], s['y'], r, b)))
+            if s['paras']:
                 need = 0.0
                 for t, sz, ls in s['paras']:
                     sz_px = (sz or 11) / 0.75
@@ -90,14 +91,17 @@ def check(path):
                 if need > s['h'] + 1.5:
                     fails.append(('③넘침', i, tag,
                                   '필요 %.0f > 박스 %.0f px' % (need, s['h'])))
-        tb = [s for s in sh if s['paras']]
+        # 그림도 겹침 대상에 넣는다. 그림 테두리(글자 없는 도형)는 그림과 겹치는
+        # 것이 설계이므로 여기 들어오지 않는다.
+        tb = [s for s in sh if s['paras'] or s['pic']]
         for a in range(len(tb)):
             for b2 in range(a + 1, len(tb)):
                 p, q = tb[a], tb[b2]
                 ox = min(p['x'] + p['w'], q['x'] + q['w']) - max(p['x'], q['x'])
                 oy = min(p['y'] + p['h'], q['y'] + q['h']) - max(p['y'], q['y'])
                 if ox > 1.5 and oy > 1.5:
-                    fails.append(('④겹침', i, p['txt'][:18] + ' ↔ ' + q['txt'][:18],
+                    nm = lambda z: (z['txt'][:18] or '(그림)')          # noqa: E731
+                    fails.append(('④겹침', i, nm(p) + ' ↔ ' + nm(q),
                                   '%.0f × %.0f px' % (ox, oy)))
     return len(names), fails
 
