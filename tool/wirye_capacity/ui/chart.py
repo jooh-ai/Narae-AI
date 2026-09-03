@@ -27,8 +27,11 @@ C_THEORY = _c("slateL")                 # 이론 - 슬레이트(선)
 C_REAL = _c("brass")                    # 현실화 - 앰버
 C_MARGIN = _c("red")                    # 마진 적용 - 레드(보수적으로 깎은 선)
 C_CORR = _c("brass")                    # 보정값 - 앰버
-C_BAND = QtGui.QColor(239, 177, 60, 40)  # 예측구간 - 앰버 40/255
-C_BAND_LINE = QtGui.QColor("#8A6620")
+# 앰버를 남색 바탕에 옅게 얹으면 올리브로 탁해진다(색 계산상 어쩔 수 없다).
+# 알파만 올리면 곡선과 경쟁하므로, 알파는 조금만 올리고 위·아래 경계에 점선을
+# 그어 '띠' 라는 것이 색이 아니라 형태로 읽히게 한다.
+C_BAND = QtGui.QColor(239, 177, 60, 58)  # 예측구간 - 앰버 58/255
+C_BAND_LINE = QtGui.QColor(239, 177, 60, 150)   # 예측구간 경계 점선
 C_PT = _c("ink")                        # 실측점 - 회백
 C_PT_EDGE = _c("groove")                # 실측점 테두리(바닥색)
 C_GRID = _c("rule2")
@@ -206,6 +209,13 @@ class CurveChart(QtWidgets.QWidget):
                 p.setBrush(C_BAND)
                 p.drawPolygon(poly)
                 p.setBrush(QtCore.Qt.NoBrush)
+                pen = QtGui.QPen(C_BAND_LINE, 1.1, QtCore.Qt.DashLine)
+                p.setPen(pen)
+                for edge in (up, dn):                  # 위·아래 경계선
+                    path = QtGui.QPainterPath(edge[0])
+                    for q in edge[1:]:
+                        path.lineTo(q)
+                    p.drawPath(path)
         self._series(p, [(tx(r.temp), cy(r.correction)) for r in self._rows],
                      C_CORR, width=2.0)
         if self.show_points:
@@ -217,7 +227,7 @@ class CurveChart(QtWidgets.QWidget):
             p.setBrush(QtCore.Qt.NoBrush)
         li = [(C_CORR, "보정값 곡선", False)]
         if self.show_band and self._sigma is not None:
-            li.append((C_BAND_LINE, "90% 예측구간", False))
+            li.append((C_BAND_LINE, "90% 예측구간", True))   # 실제 그림과 같이 점선으로
         if self.show_points:
             li.append((C_PT, "실측 보정값", "dot"))
         self._legend(p, g["px"] + 8, g["by"] + 6, li)

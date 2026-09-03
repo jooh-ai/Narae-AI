@@ -44,6 +44,29 @@ _METHODS = ("gp:rbf", *(m for m in _sel.METHODS if m != "gp:rbf"))
 _METHOD_ITEMS = [_sel.METHOD_LABEL[m] for m in _METHODS]
 
 
+# ── 상태 표시 색 ────────────────────────────────────────────────────────
+# correction.status_rows() 의 문자열에는 🟢/🔴 이모지가 들어 있다. 그 문자열은
+# CLI 와 테스트가 함께 쓰므로 고치지 않는다. 화면에서만 글리프를 중립 기호(●)로
+# 바꾸고 뜻을 글자색으로 말한다 — 이모지는 자체 색을 갖고 있어 팔레트 밖이다.
+_STATUS_MARK = {"🟢": "●", "🔴": "●"}
+
+
+def _status_text(s: str) -> str:
+    for k, v in _STATUS_MARK.items():
+        s = s.replace(k, v)
+    return s
+
+
+def _status_color(s: str) -> str:
+    if "🔴" in s:
+        return THEME_C["red"]                    # 데이터 부족
+    if "🟢" in s:
+        return THEME_C["brass"]                  # 자동반영 — 목표 충족
+    if "△" in s:
+        return THEME_C["slateL"]                 # 보수적 고정
+    return THEME_C["dim2"]                       # Shaft Limit 등
+
+
 def _readonly_table(tb, stretch_from: int = 0):
     """표시 전용 표로 만든다 — 셀 편집 불가.
 
@@ -828,11 +851,18 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
 
         # ---------- 온도 구간별 보정값 현황 탭 (엑셀4 '보정값 현황' 재현) ----------
         def _status_tab(self):
+            from PySide6 import QtCore
             w = QtWidgets.QWidget()
             lay = QtWidgets.QVBoxLayout(w)
+            # 범례의 표식도 표와 같은 색이어야 한다. QLabel 은 서식 있는 글을
+            # 받으므로 점마다 색을 준다 — 이모지를 쓰면 팔레트 밖 색이 된다.
             cap = QtWidgets.QLabel(
-                "온도구간별 보정값 현황 (엑셀4 '보정값 현황' 시트와 동일). "
-                "🟢 자동반영 · 🔴 데이터 부족 · △ 보수적 고정 · ─ Shaft Limit")
+                "온도구간별 보정값 현황 (엑셀4 '보정값 현황' 시트와 동일).&nbsp;&nbsp;"
+                f"<span style='color:{THEME_C['brass']}'>●</span> 자동반영 &nbsp;·&nbsp; "
+                f"<span style='color:{THEME_C['red']}'>●</span> 데이터 부족 &nbsp;·&nbsp; "
+                f"<span style='color:{THEME_C['slateL']}'>△</span> 보수적 고정 &nbsp;·&nbsp; "
+                f"<span style='color:{THEME_C['dim2']}'>─</span> Shaft Limit")
+            cap.setTextFormat(QtCore.Qt.TextFormat.RichText)
             cap.setWordWrap(True)
             self.status_tbl = QtWidgets.QTableWidget(0, 6)
             self.status_tbl.setHorizontalHeaderLabels(
@@ -844,6 +874,7 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             return w
 
         def _refresh_status(self, table):
+            from PySide6 import QtGui
             rows = status_rows(table)
             self.status_tbl.setRowCount(len(rows))
             for i, r in enumerate(rows):
@@ -852,7 +883,11 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 applied = f"{r['applied']:+.2f}" if r["applied"] is not None else "-"
                 vals = [r["bin_label"], r["kind_label"], cnt, avg, applied, r["status"]]
                 for j, v in enumerate(vals):
-                    self.status_tbl.setItem(i, j, QtWidgets.QTableWidgetItem(str(v)))
+                    item = QtWidgets.QTableWidgetItem(str(v))
+                    if j == 5:                       # 상태 — 뜻을 글자색으로
+                        item.setText(_status_text(str(v)))
+                        item.setForeground(QtGui.QColor(_status_color(str(v))))
+                    self.status_tbl.setItem(i, j, item)
 
         # ---------- Test 결과 List-up 탭 ----------
         # ---------- 출력 시뮬레이션 탭 ----------

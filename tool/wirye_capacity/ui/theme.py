@@ -117,14 +117,21 @@ QPushButton {{
 }}
 QPushButton:hover {{ background: {C['rule2']}; border-color: {C['steel']}; color: {C['ink']}; }}
 QPushButton:disabled {{ color: {C['dim2']}; border-color: {C['rule2']}; }}
+/* 주 버튼은 전폭으로 깔리므로 솔리드 앰버면 화면을 지배한다. 평소에는
+   옅은 앰버 면 + 앰버 테두리로 낮추고, 마우스를 올렸을 때만 채운다.
+   누를 자리라는 것은 테두리와 글자색으로 이미 충분히 말한다. */
 QPushButton#primary {{
-    background: {C['brass']}; color: {C['ground']};
-    border: none; border-radius: 8px;
-    font-weight: 800; font-size: 11.5pt; padding: 12px;
+    background: {C['brassS']}; color: {C['brass']};
+    border: 1px solid {C['brass']}; border-radius: 8px;
+    font-weight: 800; font-size: 11.5pt; padding: 11px;
 }}
-QPushButton#primary:hover {{ background: #FFC65C; }}
+QPushButton#primary:hover {{
+    background: {C['brass']}; color: {C['ground']}; border-color: {C['brass']};
+}}
 QPushButton#primary:pressed {{ background: {C['brassD']}; color: {C['ink']}; }}
-QPushButton#primary:disabled {{ background: {C['brassD']}; color: {C['dim2']}; }}
+QPushButton#primary:disabled {{
+    background: transparent; color: {C['dim2']}; border-color: {C['rule']};
+}}
 QPushButton#danger {{
     background: transparent; color: {C['red']};
     border: 1px solid {C['redD']}; border-radius: 6px;
