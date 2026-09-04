@@ -215,6 +215,41 @@ def causes(recs: list[dict]) -> dict:
     return {"n": n, "rcrit": round(rcrit, 3), "rows": out,
             "model_mae": round(sum(abs(v) for v in mres) / n, 3)}
 
+def learning(recs: list[dict], start: int = 12, blocks: int = 4) -> dict:
+    """회차가 쌓이면 예측이 나아지는가 — walk-forward 학습 곡선.
+
+    각 회차를 **그 앞의 회차만으로** 학습해 예측하고(뒤를 보지 않는다) 오차를
+    구한 뒤, 시간 순으로 몇 구간으로 나눠 구간별 평균 오차를 낸다. 구간 평균을
+    쓰는 이유 — 누적 평균은 앞의 큰 오차가 뒤로 갈수록 희석되어 **무조건**
+    내려간다. 그건 나아진 게 아니라 평균의 성질이다. 구간 평균은 '그 무렵의
+    실력' 을 보여주므로 오르내림도 그대로 드러난다.
+
+    start: 이 회차 수까지는 학습만 하고 채점하지 않는다(너무 적으면 의미 없다).
+    """
+    rs = sorted(recs, key=lambda r: r["date"])
+    pts = []
+    for k in range(start, len(rs)):
+        try:
+            f = GPCorrectionCurve(rs[:k], kernel="rbf")
+        except Exception:                                   # noqa: BLE001
+            continue
+        pts.append({"no": k + 1, "date": rs[k]["date"],
+                    "err": round(abs(rs[k]["corr"] - f(rs[k]["cit"])), 3)})
+    if not pts:
+        return {"n": 0}
+    size = len(pts) / blocks
+    out = []
+    for b in range(blocks):
+        seg = pts[int(b * size):int((b + 1) * size)]
+        if not seg:
+            continue
+        out.append({"from": seg[0]["no"], "to": seg[-1]["no"], "n": len(seg),
+                    "mae": round(sum(p["err"] for p in seg) / len(seg), 3)})
+    return {"n": len(pts), "start": start + 1, "blocks": out,
+            "first": out[0]["mae"], "last": out[-1]["mae"],
+            "cut": round((1 - out[-1]["mae"] / out[0]["mae"]) * 100)}
+
+
 def profile_cmp(recs: list[dict], method: str) -> dict:
     """Tool [📈 출력곡선 비교] 탭과 같은 곡선을 장표용으로 뽑는다.
 
@@ -304,6 +339,7 @@ def main() -> None:
         "curves": curves,
         "profile": profile_cmp(recs, best["key"]),
         "causes": causes(recs),
+        "learning": learning(recs),
         "commission": commission(recs),
     }
     OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -321,6 +357,11 @@ def main() -> None:
     print(f"입찰 관점   평균오차 {b['mae']:.2f} → {g['mae']:.2f} MW ({cut['mae']}%↓)  ·  "
           f"미달 {b['short']} → {g['short']}건 ({cut['short']}%↓)  ·  "
           f"과대신고 {b['over']:.1f} → {g['over']:.1f} MW ({cut['over']}%↓)")
+    lz = data["learning"]
+    if lz.get("n"):
+        print(f"학습 곡선   {lz['start']}회차부터 {lz['n']}건 walk-forward  ·  " +
+              "  ".join(f"{b['from']}~{b['to']}회 {b['mae']:.2f}" for b in lz["blocks"]) +
+              f"  →  {lz['first']:.2f} → {lz['last']:.2f} MW ({lz['cut']}%↓)")
     cz = data["causes"]
     print(f"원인 규명   임계 r {cz['rcrit']:.3f} (n={cz['n']})  ·  " + "  ·  ".join(
         f"{r['label']} 원시 {r['raw']:+.2f}" +

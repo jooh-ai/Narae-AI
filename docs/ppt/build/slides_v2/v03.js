@@ -12,9 +12,10 @@ module.exports = (pptx, T, meta, D) => {
   [[72,  '예측 오차  ·  MAE', I.gp.mae.toFixed(2),  'MW',
     '← ' + I.blanket.mae.toFixed(2), C.slateL,
     '신고할 값을 미리 계산했을 때 실제와 벌어진 폭의 평균입니다. 작을수록 좋습니다.'],
-   [467, '기준 미달 회차', String(I.gp.short),   '회',
+   [467, '신고값을 못 채운 횟수', String(I.gp.short),   '회',
     '← ' + I.blanket.short,          C.red,
-    '실제 출력이 신고값에 못 미친 횟수입니다. 벌점이 붙는 회차입니다.'],
+    '그 주에 신고한 값보다 실제 출력이 낮게 나온 횟수입니다. 이런 회차는 정산에서 ' +
+    '불이익을 받습니다.'],
    [862, '과대 신고 누계', I.gp.over.toFixed(1), 'MW',
     '← ' + I.blanket.over.toFixed(1), C.slateL,
     D.n + '회 동안 실제보다 높게 신고한 양을 모두 더한 값입니다.']]

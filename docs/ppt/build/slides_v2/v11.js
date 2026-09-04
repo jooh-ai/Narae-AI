@@ -23,7 +23,7 @@ module.exports = (pptx, T, meta, D) => {
   d.bigUnit(K.mae + '%', '감소', 664, 322, 44, C.brass, 15);
   d.text('평균 ' + I.blanket.mae.toFixed(2) + ' → ' + I.gp.mae.toFixed(2) + ' MW',
          { x: 900, y: 336, w: 284, px: 15, lh: 1.3, mono: true, bold: true, color: C.ink });
-  d.txt('실제가 못 미친 횟수 *' + I.blanket.short + ' → ' + I.gp.short + '회*   ·   ' +
+  d.txt('신고값을 못 채운 횟수 *' + I.blanket.short + ' → ' + I.gp.short + '회*   ·   ' +
         '높게 신고한 양 *' + I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) +
         ' MW*', 664, 388, 520, 2);
 

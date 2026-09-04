@@ -8,7 +8,7 @@
    한 일 전부다.                                                            */
 'use strict';
 module.exports = (pptx, T, meta, D) => {
-  const { C, G } = T;
+  const { C, G, LW } = T;
   const { d } = T.shell(pptx, {});
   const P = D.profile, R = P.rows;
   d.text(meta.org, { x: G.L, y: G.SEC_Y, w: 600, px: 12, lh: 1.25, mono: true,
@@ -42,18 +42,18 @@ module.exports = (pptx, T, meta, D) => {
       lh: 1.3, mono: true, color: C.dim2, align: 'center' });
   }
   for (let i = 0; i < R.length - 1; i++)
-    d.seg(X(R[i].t), Y(R[i].theory), X(R[i + 1].t), Y(R[i + 1].theory), C.slateL, 2.0, 'dash');
+    d.seg(X(R[i].t), Y(R[i].theory), X(R[i + 1].t), Y(R[i + 1].theory), C.slateL, LW.ref, 'dash');
   for (let i = 0; i < R.length - 1; i++)
-    d.seg(X(R[i].t), Y(R[i].real), X(R[i + 1].t), Y(R[i + 1].real), C.brass, 3.0);
+    d.seg(X(R[i].t), Y(R[i].real), X(R[i + 1].t), Y(R[i + 1].real), C.brass, LW.main);
   /* 실측점은 그 회차의 이론값 위에 그 회차의 차이를 얹어 찍는다 */
   const th = {}; R.forEach(r => { th[r.t] = r.theory; });
   D.scatter.forEach(([t, c]) => {
     const k = Math.max(t0, Math.min(t1, Math.round(t / 2) * 2));
-    d.dot(X(t), Y(th[k] + c), 3.4, C.ink);
+    d.dot(X(t), Y(th[k] + c), 3.0, C.ink);
   });
   [[700, C.slateL, '이론값 (보정 없음)', true], [930, C.brass, '모델이 만든 곡선', false]]
     .forEach(([x, col, s, dash]) => {
-      d.hline(x, 285, 24, col, dash ? 2.0 : 3.0, dash ? 'dash' : 'solid');
+      d.hline(x, 285, 24, col, dash ? LW.ref : LW.main, dash ? 'dash' : 'solid');
       d.text(s, { x: x + 32, y: 278, w: 200, px: 12, lh: 1.3, color: col });
     });
   d.dot(706, 305, 3.4, C.ink);

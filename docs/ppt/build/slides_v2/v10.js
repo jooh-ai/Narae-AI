@@ -8,7 +8,7 @@ const STEP = [
   ['신고값 갱신',    '근거와 함께 출력'],
 ];
 module.exports = (pptx, T, meta, D) => {
-  const { C, G } = T;
+  const { C, G, LW } = T;
   const { d } = T.shell(pptx, { sec: '모니터링', idx: 5, step: 5 });
   T.title(d, '테스트가 쌓이면 스스로 다시 고르고,', '*의심도 도구가 합니다*');
   T.lead(d, '사람이 다시 정해야 하는 숫자가 없습니다. _넣기 → 채점 → 고르기_ 가 한 바퀴입니다.',
@@ -26,7 +26,7 @@ module.exports = (pptx, T, meta, D) => {
     if (i < 3) d.text('→', { x: x + 220, y: 336, w: 44, px: 20, lh: 1.2,
                              color: C.brass, align: 'center' });
   });
-  d.hline(210, 400, 800, C.brassD, 1.4, 'dash');
+  d.hline(210, 400, 800, C.brassD, LW.ref, 'dash');
   d.text('↺   테스트가 늘면 다시 처음으로 — 사람이 손으로 정하는 값은 없습니다',
          { x: 210, y: 406, w: 800, px: 13, lh: 1.3, color: C.dim, align: 'center' });
 

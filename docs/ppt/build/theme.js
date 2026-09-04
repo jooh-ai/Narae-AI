@@ -49,6 +49,12 @@ const INDEX = [
 
 const F = { kr: 'Malgun Gothic', mono: 'Consolas' };
 
+/* 선 굵기 — 차트 선은 여기서만 정한다. 굵은 선은 데이터를 가리고 화면을
+   무겁게 만든다. 얇게 두고 색으로 구분한다.
+     main 모델·개선 주 곡선 / ref 종전·이론 점선 / aux 보조 곡선(후보 커널)
+     mark 임계선·브래킷 / grid 눈금선·축선                                  */
+const LW = { main: 1.8, ref: 1.4, aux: 1.0, mark: 1.2, grid: 1 };
+
 /* 캡처 그림 경로 — docs/ppt/assets/. build.js 를 어디서 돌려도 같은 파일을
    가리키게 이 파일 위치를 기준으로 만든다. */
 const path = require('path');
@@ -279,4 +285,4 @@ function foot(d, str) {
   return d.text(str, { x: G.L + 56, y: G.FOOT_Y, w: G.W - 56, px: 16.5, lh: 1.4 });
 }
 
-module.exports = { C, F, IN, PT, G, INDEX, ASSET, rt, textW, draw, shell, title, lead, foot };
+module.exports = { C, F, LW, IN, PT, G, INDEX, ASSET, rt, textW, draw, shell, title, lead, foot };

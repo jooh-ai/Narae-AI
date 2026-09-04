@@ -14,7 +14,7 @@ const NAME = {
   'bin': '구간평균 (온도 구간별 평균)',
 };
 module.exports = (pptx, T, meta, D) => {
-  const { C, G } = T;
+  const { C, G, LW } = T;
   const { d } = T.shell(pptx, { sec: '모델 선정', idx: 4, step: 4 });
   const M = D.methods, B = D.best, nm = k => NAME[k] || k;
   T.title(d, '눈대중으로 고르지 않았습니다 —', '방식 *7가지를 겨뤄* 곡선을 골랐습니다');
@@ -78,11 +78,11 @@ module.exports = (pptx, T, meta, D) => {
   KS.filter(k => k !== WIN).forEach(k => {
     const v = D.curves[k];
     for (let i = 0; i < T4.length - 1; i++)
-      d.seg(X(T4[i]), Y(v[i]), X(T4[i + 1]), Y(v[i + 1]), C.steel, 1.5);
+      d.seg(X(T4[i]), Y(v[i]), X(T4[i + 1]), Y(v[i + 1]), C.steel, LW.aux);
   });
   const w = D.curves[WIN] || D.curves.rbf;
   for (let i = 0; i < T4.length - 1; i++)
-    d.seg(X(T4[i]), Y(w[i]), X(T4[i + 1]), Y(w[i + 1]), C.brass, 2.6);
+    d.seg(X(T4[i]), Y(w[i]), X(T4[i + 1]), Y(w[i + 1]), C.brass, LW.main);
 
   /* 어디서 갈리는지는 데이터가 고른다 — 손으로 적으면 회차가 쌓일 때 틀어진다 */
   const sp = T4.map((t, i) => {
@@ -90,7 +90,7 @@ module.exports = (pptx, T, meta, D) => {
     return { t, hi: Math.max(...vv), lo: Math.min(...vv), gap: Math.max(...vv) - Math.min(...vv) };
   });
   const wide = sp.reduce((a, b) => (b.gap > a.gap ? b : a));
-  d.vline(X(wide.t), Y(wide.hi) - 4, (Y(wide.lo) - Y(wide.hi)) + 8, C.red, 1.6);
+  d.vline(X(wide.t), Y(wide.hi) - 4, (Y(wide.lo) - Y(wide.hi)) + 8, C.red, LW.mark);
   d.text('커널을 바꾸면 곡선이 갈립니다 — 가장 벌어지는 곳은 *' + wide.t + '℃, ' +
          wide.gap.toFixed(2) + ' MW*.  눈으로는 고를 수 없어서 *위 표로 채점*했습니다.',
          { x: 740, y: 540, w: 444, px: 13, lh: 1.5, lines: 3, color: C.body });

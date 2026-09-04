@@ -11,7 +11,7 @@
    처음 보는 사람에게 아무것도 설명하지 못한다.                              */
 'use strict';
 module.exports = (pptx, T, meta, D) => {
-  const { C, G } = T;
+  const { C, G, LW } = T;
   const { d } = T.shell(pptx, { sec: '곡선 비교', idx: 4, step: 4 });
   const P = D.profile, R = P.rows;
   T.title(d, '겉보기엔 같은 곡선인데,', '확대하면 온도마다 *달랐습니다*');
@@ -35,13 +35,13 @@ module.exports = (pptx, T, meta, D) => {
                         color: C.dim2, align: 'right' });
   }
   for (let i = 0; i < R.length - 1; i++)
-    d.seg(X(R[i].t), Y1(R[i].theory), X(R[i + 1].t), Y1(R[i + 1].theory), C.slateL, 2.2, 'dash');
+    d.seg(X(R[i].t), Y1(R[i].theory), X(R[i + 1].t), Y1(R[i + 1].theory), C.slateL, LW.ref, 'dash');
   for (let i = 0; i < R.length - 1; i++)
-    d.seg(X(R[i].t), Y1(R[i].real), X(R[i + 1].t), Y1(R[i + 1].real), C.brass, 2.6);
+    d.seg(X(R[i].t), Y1(R[i].real), X(R[i + 1].t), Y1(R[i + 1].real), C.brass, LW.main);
   [['이론 출력 (IGV 포함 · 보정 없음)', C.slateL, true], ['모델이 만든 곡선', C.brass, false]]
     .forEach(([s, col, dash], i) => {
       const y = 320 + i * 19;
-      d.hline(918, y + 7, 26, col, dash ? 2.2 : 2.6, dash ? 'dash' : 'solid');
+      d.hline(918, y + 7, 26, col, dash ? LW.ref : LW.main, dash ? 'dash' : 'solid');
       d.text(s, { x: 952, y, w: 230, px: 12, lh: 1.3, color: col });
     });
   d.text('두 곡선이 거의 붙어 보입니다 — 아래는 그 차이만 확대한 것입니다',
@@ -69,13 +69,13 @@ module.exports = (pptx, T, meta, D) => {
                                         color: C.ink });
   d.text('위쪽일수록 더 나온 것', { x: 600, y: 441, w: 270, px: 11.5, lh: 1.2,
                                     color: C.brass });
-  d.hline(886, 447, 24, C.slateL, 2.2, 'dash');
+  d.hline(886, 447, 24, C.slateL, LW.ref, 'dash');
   d.text('종전 · 온도 구분 없이 +' + D.blanket.flat.toFixed(1),
          { x: 914, y: 441, w: 236, px: 11.5, lh: 1.2, color: C.slateL });
-  d.hline(150, Y2(D.blanket.flat), 1000, C.slateL, 2.2, 'dash');
+  d.hline(150, Y2(D.blanket.flat), 1000, C.slateL, LW.ref, 'dash');
   D.scatter.forEach(([t, c]) => d.dot(X(t), Y2(c), 3.2, C.ink));
   for (let i = 0; i < R.length - 1; i++)
-    d.seg(X(R[i].t), Y2(R[i].corr), X(R[i + 1].t), Y2(R[i + 1].corr), C.brass, 2.8);
+    d.seg(X(R[i].t), Y2(R[i].corr), X(R[i + 1].t), Y2(R[i + 1].corr), C.brass, LW.main);
 
   /* 실측이 있는 온도 범위 안에서 가장 많이 더/덜 나온 곳만 짚는다.
      데이터 밖(양 끝)은 곡선이 평평하게 연장되는 구간이라 거기를 가리키면

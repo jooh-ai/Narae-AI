@@ -16,12 +16,12 @@ const FLOW = [
   ['프로파일 완성', '엑셀 ③ 붙여넣기 → 신고', false],
 ];
 module.exports = (pptx, T, meta, D) => {
-  const { C, G } = T;
+  const { C, G, LW } = T;
   const { d } = T.shell(pptx, { sec: '왜 하는가', idx: 1, step: 1 });
   const P = D.profile, R = P.rows, FLAT = D.blanket.flat, B = D.impact.blanket;
-  T.title(d, '테스트는 하루 한 점,', '신고는 *61개 온도* 전부입니다');
-  T.lead(d, '그 사이를 메우려고 차이 하나를 61개에 똑같이 얹었습니다 — _일괄 보정_ 입니다.',
-         { lines: 1 });
+  T.title(d, '테스트는 한 점,', '신고는 *61개 온도 전부*');
+  T.lead(d, '그 빈 구간을 메우려고, 한 점에서 구한 보정값 하나를 61개 온도에 똑같이 ' +
+         '적용한 것이 _일괄 보정_ 입니다.', { lines: 1 });
 
   /* ① 종전 업무 플로우 */
   d.zone(G.L, 268, G.W, 114);
@@ -71,16 +71,16 @@ module.exports = (pptx, T, meta, D) => {
            r.corr > FLAT ? C.steel : C.redD);
   });
   for (let i = 0; i < R.length - 1; i++)
-    d.seg(X(R[i].t), Y(bid(R[i])), X(R[i + 1].t), Y(bid(R[i + 1])), C.slateL, 2.0, 'dash');
+    d.seg(X(R[i].t), Y(bid(R[i])), X(R[i + 1].t), Y(bid(R[i + 1])), C.slateL, LW.ref, 'dash');
   for (let i = 0; i < R.length - 1; i++)
-    d.seg(X(R[i].t), Y(R[i].real), X(R[i + 1].t), Y(R[i + 1].real), C.brass, 2.4);
+    d.seg(X(R[i].t), Y(R[i].real), X(R[i + 1].t), Y(R[i + 1].real), C.brass, LW.main);
 
   const IN = R.filter(r => r.t >= D.cit_range[0] && r.t <= D.cit_range[1]);
   const up = IN.reduce((a, b) => (b.corr > a.corr ? b : a));
   const dn = IN.reduce((a, b) => (b.corr < a.corr ? b : a));
   const cross = R.find((r, i) => i > 0 && (R[i - 1].corr - FLAT) * (r.corr - FLAT) < 0);
   if (cross) {
-    d.vline(X(cross.t), 430, 142, C.dim2, 1, 'dash');
+    d.vline(X(cross.t), 430, 142, C.dim2, LW.grid, 'dash');
     d.text('여기서 방향이 바뀝니다 (' + cross.t + '℃)',
            { x: X(cross.t) + 8, y: 432, w: 220, px: 11.5, lh: 1.2, color: C.dim });
   }
@@ -92,12 +92,12 @@ module.exports = (pptx, T, meta, D) => {
            lh: 1.2, bold: true, color: C.red, align: 'right' });
   [[150, C.slateL, '종전 신고 (하나의 값)', true], [420, C.brass, '실제 능력', false]]
     .forEach(([x, col, s, dash]) => {
-      d.hline(x, 428, 26, col, dash ? 2.0 : 2.4, dash ? 'dash' : 'solid');
+      d.hline(x, 428, 26, col, dash ? LW.ref : LW.main, dash ? 'dash' : 'solid');
       d.text(s, { x: x + 34, y: 421, w: 240, px: 12, lh: 1.3, color: col });
     });
 
   d.text('종전 누계 — 낮게 신고해 못 판 양 *' + B.opp.toFixed(1) + ' MW*   ·   ' +
-         '기준 미달 *' + B.short + '회* (과대 신고 ' + B.over.toFixed(1) + ' MW)',
+         '신고값을 못 채운 *' + B.short + '회* (과대 신고 ' + B.over.toFixed(1) + ' MW)',
          { x: 96, y: 598, w: 1088, px: 13.5, lh: 1.3, color: C.body, align: 'center' });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);

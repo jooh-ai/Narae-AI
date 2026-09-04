@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-04T05:31+00:00",
+ "generated": "2026-09-04T07:13+00:00",
  "source": "tool/wirye_capacity/data/measurements_seed.json",
  "n": 40,
  "n_score": 39,
@@ -626,6 +626,39 @@
    }
   ],
   "model_mae": 1.286
+ },
+ "learning": {
+  "n": 28,
+  "start": 13,
+  "blocks": [
+   {
+    "from": 13,
+    "to": 19,
+    "n": 7,
+    "mae": 2.264
+   },
+   {
+    "from": 20,
+    "to": 26,
+    "n": 7,
+    "mae": 2.259
+   },
+   {
+    "from": 27,
+    "to": 33,
+    "n": 7,
+    "mae": 0.905
+   },
+   {
+    "from": 34,
+    "to": 40,
+    "n": 7,
+    "mae": 1.189
+   }
+  ],
+  "first": 2.264,
+  "last": 1.189,
+  "cut": 47
  },
  "commission": {
   "n": 9,
