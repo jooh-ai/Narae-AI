@@ -1,73 +1,49 @@
-/* v2-01 · 표지 — 요소 2개: 제목 블록 / 히어로 차트. 하단에 핵심 3수치.
-   18장판보다 설명을 걷어내고 숫자를 키웠다.                              */
+/* v2-01 · 표지 — 최종보고서 표지 형식.
+   [검토 반영] 종전 표지에는 히어로 차트와 핵심 3수치가 있었는데, 그 내용은
+   3장(한 장 요약)과 겹쳤다. 표지는 표지 일만 하게 비웠다 —
+   CI · 문서 종류 · 제목 · 부제 · 소속/작성자/일자.
+
+   CI 는 배경이 투명한 원본이지만 한글 글자가 검정(#231f20)이라 남색 위에
+   그대로 얹으면 회사 이름이 사라진다. 그래서 흰 판에 올린다. 로고 색을
+   고쳐 쓰지 않는 것이 CI 규정에 맞다.                                      */
 'use strict';
+const CI = { file: 'ci_narae.png', w: 5619, h: 1056 };   // 원본 픽셀 — 비율 5.32
 module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
-  const { d } = T.shell(pptx, {});
-  d.text(meta.org, { x: G.L, y: G.SEC_Y, w: 600, px: 12, lh: 1.25, mono: true, color: C.dim2, cs: 1.8 });
-  d.text(meta.when, { x: 1008, y: G.SEC_Y, w: 200, px: 12, lh: 1.25, mono: true,
-                      color: C.dim2, cs: 1.8, align: 'right' });
+  const { d } = T.shell(pptx, { rule: false });
 
-  T.title(d, '공급가능용량 산정,', '사람의 판단에서 *데이터로*', { y: 112, w: 590, px: 44 });
-  d.sub('엑셀 4개로 하던 일을 *도구 하나*로,', G.L, 268, 590, 1);
-  d.sub('하나로 정하던 값을 *온도별 학습*으로.', G.L, 302, 590, 1);
+  /* CI — 흰 판 위에. 너무 크지 않게 폭 196px(슬라이드 폭의 15%) */
+  const LW = 196, LH = Math.round(LW * CI.h / CI.w);      // 37
+  d.rect(G.L, 56, LW + 28, LH + 26, 'FFFFFF');
+  d.img(CI.file, G.L + 14, 69, LW, LH, { frame: false });
+  d.text('개선과제 최종 보고', { x: 808, y: 74, w: 400, px: 12.5, lh: 1.25, mono: true,
+                                 color: C.dim, cs: 2.0, align: 'right' });
 
-  /* 히어로 — 종전 수평선 vs 개선 곡선 */
-  const ZX = 668, OX = ZX + 16, OY = 148;
-  d.zone(ZX, 112, 540, 318);
-  d.plab('보정값 · MW · 외기온도 0 ~ 30℃', OX, 126, 480);
-  const T4 = D.curve_t, RBF = D.curves.rbf, FLAT = D.blanket.flat;
-  const CX = t => 48 + t * 14.2, CY = v => 128 - v * 13;
-  const X = v => OX + v, Y = v => OY + v;
-  const sign = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1);
-  const lab = (s, x, w, base, px, col, al) => d.text(s, { x, y: Y(base) - px * 0.8, w, px,
-    lh: 1.3, mono: true, color: col, align: al || 'left' });
-  [24, 128, 180].forEach((y, i) => d.hline(X(40), Y(y), 450, i === 1 ? C.rule : C.rule2, 1));
-  d.vline(X(40), Y(24), 156, C.rule, 1);
-  [[8, '+8'], [0, '0'], [-4, '−4']].forEach(([v, s]) => lab(s, X(0), 34, CY(v) + 4, 10, C.dim2));
-  T4.forEach(t => { d.vline(X(CX(t)), Y(180), 5, C.dim2, 1);
-    lab(t === 0 ? '0℃' : String(t), X(CX(t)) - 24, 48, 200, 10, C.dim2, 'center'); });
-  d.hline(X(40), Y(CY(FLAT)), 450, C.slateL, 2.6, 'dash');
-  lab('종전 · 온도 구분 없이 ' + sign(FLAT) + ' MW', X(48), 240, CY(FLAT) - 10, 12, C.slateL);
-  const P = T4.map((t, i) => [CX(t), CY(RBF[i])]);
-  for (let i = 0; i < P.length - 1; i++)
-    d.seg(X(P[i][0]), Y(P[i][1]), X(P[i + 1][0]), Y(P[i + 1][1]), C.brass, 2.8);
-  P.forEach(([a, b]) => d.rect(X(a) - 4, Y(b) - 4, 8, 8, C.brass));
-  lab(sign(RBF[0]), X(58), 60, CY(RBF[0]) + 21, 12.5, C.brass);
-  lab(sign(RBF[3]), X(398), 66, CY(RBF[3]) + 15, 12.5, C.brass, 'right');
-  /* [검토 반영] 4·9장과 같은 자리(실측이 있는 온도 범위의 최대/최소)에서
-     읽는다. 종전에는 표지만 30℃ 를 써서 같은 이야기가 장마다 다른 숫자로
-     보였다. */
-  const IN = D.profile.rows.filter(r => r.t >= D.cit_range[0] && r.t <= D.cit_range[1]);
-  const hiR = IN.reduce((a, b) => (b.corr > a.corr ? b : a));
-  const loR = IN.reduce((a, b) => (b.corr < a.corr ? b : a));
-  d.text(hiR.t + '℃ 에서 ' + (hiR.corr - FLAT).toFixed(1) + ' MW 모자라고,  ' +
-         loR.t + '℃ 에서 ' + (FLAT - loR.corr).toFixed(1) + ' MW 넘칩니다',
-         { x: OX, y: 388, w: 500, px: 13.5, lh: 1.4, color: C.red });
-  /* 기준선이 어디서 나온 값인지 그림 안에서 답한다 — 표지에서 처음 나오는 숫자다 */
-  d.text('기준선 ' + sign(FLAT) + ' MW = 누적 ' + D.n +
-         '회 보정값의 평균 (온도를 안 보고 하나로 맞출 때 오차 최소)',
-         { x: OX, y: 410, w: 508, px: 10.5, lh: 1.3, color: C.dim2 });
+  d.hline(G.L, 150, G.W, C.rule, 1);
 
-  /* 핵심 3수치 — 크게 */
-  d.hline(G.L, 480, G.W, C.rule, 1);
-  const I = D.impact, K = I.cut;
-  [[72, '예측 오차 (MAE · 평균 몇 MW 틀렸나)', K.mae,
-    I.blanket.mae.toFixed(2) + ' → ' + I.gp.mae.toFixed(2) + ' MW'],
-   [420, '기준 미달 회차 (실제 < 신고값)', K.short,
-    I.blanket.short + ' → ' + I.gp.short + ' 회'],
-   [768, '과대 신고 누계 (높게 신고한 양)', K.over,
-    I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) + ' MW']]
-    .forEach(([x, l, pct, sub]) => {
-      d.plab(l, x, 502, 340);
-      d.big(pct + '%↓', x, 526, 220, 54);
-      d.text(sub, { x, y: 596, w: 300, px: 16, lh: 1.4, mono: true, color: C.ink });
+  /* 제목 */
+  d.rect(G.L, 236, 46, 3, C.brass);
+  d.text('공급가능용량 산정 자동화 및', { x: G.L, y: 264, w: 1000, px: 44, lh: 1.28,
+                                          bold: true, color: C.ink });
+  d.text('온도별 보정 모델 개발', { x: G.L, y: 320, w: 1000, px: 44, lh: 1.28,
+                                    bold: true, color: C.ink });
+  d.text('온도 프로파일 생성 절차 통합과 누적 ' + D.n + '회 실적 기반 보정 곡선 적용',
+         { x: G.L, y: 392, w: 1000, px: 17, lh: 1.5, color: C.body });
+
+  d.hline(G.L, 452, G.W, C.rule, 1);
+
+  /* 소속·작성자·일자 */
+  [['소  속', meta.org], ['부  서', meta.dept],
+   ['작 성 자', meta.authors.join('  ·  ')], ['작성일자', meta.when]]
+    .forEach(([k, v], i) => {
+      const y = 486 + i * 38;
+      d.text(k, { x: G.L, y: y + 2, w: 80, px: 11.5, lh: 1.25, mono: true,
+                  color: C.dim2, cs: 1.4 });
+      d.vline(168, y, 20, C.rule, 1);
+      d.text(v, { x: 190, y, w: 700, px: 16, lh: 1.35, color: C.ink });
     });
-  [396, 744].forEach(x => d.vline(x, 502, 116, C.rule, 1));
 
   d.hline(G.L, 634, G.W, C.rule, 1);
-  d.text(meta.dept + '  ·  ' + meta.authors.join(' · '),
-         { x: G.L, y: G.FOOT_Y, w: 600, px: 12, lh: 1.4, mono: true, color: C.dim, cs: 1.6 });
-  d.text('발표 10분  ·  Tool 시연 4분', { x: 808, y: G.FOOT_Y, w: 400, px: 12, lh: 1.4,
-                                          mono: true, color: C.dim2, cs: 1.6, align: 'right' });
+  d.text('위례열병합발전소  ·  공급가능용량 입찰 산정 Tool',
+         { x: G.L, y: G.FOOT_Y, w: 800, px: 12, lh: 1.4, mono: true, color: C.dim2, cs: 1.6 });
 };
