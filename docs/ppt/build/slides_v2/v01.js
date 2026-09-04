@@ -35,9 +35,13 @@ module.exports = (pptx, T, meta, D) => {
   P.forEach(([a, b]) => d.rect(X(a) - 4, Y(b) - 4, 8, 8, C.brass));
   lab(sign(RBF[0]), X(58), 60, CY(RBF[0]) + 21, 12.5, C.brass);
   lab(sign(RBF[3]), X(398), 66, CY(RBF[3]) + 15, 12.5, C.brass, 'right');
-  d.text('겨울엔 ' + (RBF[0] - FLAT).toFixed(1) + ' MW 모자라고, 여름엔 ' +
-         (FLAT - RBF[3]).toFixed(1) + ' MW 넘칩니다',
-         { x: OX, y: 392, w: 500, px: 13.5, lh: 1.4, color: C.red });
+  d.text(T4[0] + '℃ 에서 ' + (RBF[0] - FLAT).toFixed(1) + ' MW 모자라고,  ' +
+         T4[3] + '℃ 에서 ' + (FLAT - RBF[3]).toFixed(1) + ' MW 넘칩니다',
+         { x: OX, y: 388, w: 500, px: 13.5, lh: 1.4, color: C.red });
+  /* 기준선이 어디서 나온 값인지 그림 안에서 답한다 — 표지에서 처음 나오는 숫자다 */
+  d.text('기준선 ' + sign(FLAT) + ' MW = 누적 ' + D.n +
+         '회 보정값의 평균 (온도를 안 보고 하나로 맞출 때 오차 최소)',
+         { x: OX, y: 410, w: 508, px: 10.5, lh: 1.3, color: C.dim2 });
 
   /* 핵심 3수치 — 크게 */
   d.hline(G.L, 480, G.W, C.rule, 1);

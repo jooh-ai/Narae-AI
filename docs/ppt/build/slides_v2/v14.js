@@ -1,43 +1,69 @@
-/* v2-14 · Tool 기능 — 화면 그대로 · 요소 2개: 캡처 2장 / 탭 6개 띠.
-   도구를 만든 보고인데 도구 화면이 한 장도 없으면 이상하다. 그림은 실제
-   캡처다(docs/ppt/assets/, tool/scripts/ui_shot.py 로 뽑았다) — 목업이 아니다.
+/* v2-14 · 마무리 — 요소 2개: 인사 / 이 과제를 한 장에 담은 그림.
+   [검토 반영] '엑셀 4개로 하던…' 요약문과 '질문 받겠습니다' 를 뺐다. 앞에서
+   이미 두 번 한 말이고, 마지막 장에서 또 하면 힘이 빠진다.
 
-   두 장을 고른 기준: 왼쪽은 '무엇을 넣고 무엇이 나오는가'(입력 4칸 → 61행
-   프로파일 표), 오른쪽은 '무엇을 보고 판단하는가'(이론값 vs 모델 곡선).
-   나머지 탭은 아래 띠에 이름만 둔다 — 실물은 다음 장에서 띄운다.
-
-   그림 크기는 원본 비율 그대로다. 캡처를 늘리면 글자가 뭉개져서 화면이
-   지저분해 보이고, 그러면 도구가 지저분해 보인다.                          */
+   남길 그림으로 출력 곡선을 골랐다 — 표지는 '보정값' 곡선(우리가 배운 것)이고
+   여기는 '출력' 곡선(그래서 신고하는 값)이다. 같은 데이터의 다른 얼굴이라
+   반복으로 읽히지 않고, 실측점 40개가 곡선을 따라가는 그림 하나가 이 과제가
+   한 일 전부다.                                                            */
 'use strict';
-/* 원본 픽셀 — 비율을 여기서 한 번만 계산한다 */
-const SHOT = {
-  win:   { file: 'tool_window.png', w: 1280, h: 860 },
-  curve: { file: 'tool_curve.png',  w: 1262, h: 654 },
-};
-const TABS = ['공급가능용량 산정', '온도 구간별 보정값 현황', 'Test 결과 List-up',
-              '출력 시뮬레이션', '출력곡선 비교', '모델 선정'];
 module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
-  const { d } = T.shell(pptx, { sec: 'Tool 기능' });
-  T.title(d, '엑셀 4개가 하던 일이,', '*이 한 화면*에 들어왔습니다');
-  T.lead(d, '탭 6개입니다. 날짜·시각을 넣고 실행하면 _−20 ~ 40℃ 61행 신고값 표_ 가 ' +
-         '그대로 나옵니다.', { lines: 1 });
+  const { d } = T.shell(pptx, {});
+  const P = D.profile, R = P.rows;
+  d.text(meta.org, { x: G.L, y: G.SEC_Y, w: 600, px: 12, lh: 1.25, mono: true,
+                     color: C.dim2, cs: 1.8 });
+  d.text(meta.when, { x: 1008, y: G.SEC_Y, w: 200, px: 12, lh: 1.25, mono: true,
+                      color: C.dim2, cs: 1.8, align: 'right' });
 
-  /* 두 장을 같은 높이로 맞춰 나란히 — 높이를 맞춰야 한 쌍으로 읽힌다 */
-  const H = 320, GAP = 40;
-  const wW = Math.round(H * SHOT.win.w / SHOT.win.h);      // 476
-  const wC = Math.round(H * SHOT.curve.w / SHOT.curve.h);  // 617
-  const x0 = G.L, x1 = G.L + wW + GAP;
-  d.img(SHOT.win.file, x0, 246, wW, H);
-  d.img(SHOT.curve.file, x1, 246, wC, H);
+  T.title(d, '감사합니다', null, { y: 104, w: 700, px: 58 });
+  d.sub('매주 신고하는 숫자가, 이제 *' + D.n + '회 실적 위에서* 정해집니다.',
+        G.L, 186, 900, 1);
 
-  d.plab('무엇을 넣고 무엇이 나오나', x0, 576, wW, C.brass);
-  d.text('입력은 *날짜·시각* 4칸 → 아래에 61행 신고값 표',
-         { x: x0, y: 592, w: wW, px: 13, lh: 1.35 });
-  d.plab('무엇을 보고 판단하나', x1, 576, wC, C.brass);
-  d.text('~이론값~ 곡선과 *모델* 곡선, 그리고 실측점 ' + D.n + '회를 겹쳐 봅니다',
-         { x: x1, y: 592, w: wC, px: 13, lh: 1.35 });
+  /* 이 과제를 한 장에 — 이론값 곡선과 모델 곡선, 그리고 실측 40회 */
+  d.zone(G.L, 250, G.W, 300);
+  d.plab('외기온도별 출력  ·  단위 MW  ·  누적 ' + D.n + '회 실적으로 학습한 곡선',
+         96, 262, 700);
+  const t0 = R[0].t, t1 = R[R.length - 1].t;
+  const vs = R.map(r => r.theory).concat(R.map(r => r.real));
+  const lo = Math.floor(Math.min(...vs) / 20) * 20 - 5;
+  const hi = Math.ceil(Math.max(...vs) / 20) * 20 + 5;
+  const X = t => 150 + (t - t0) * (1000 / (t1 - t0));
+  const Y = v => 508 - (v - lo) * (222 / (hi - lo));
+  for (let v = lo + 5; v <= hi; v += 20) {
+    d.hline(150, Y(v), 1000, C.rule2, 1);
+    d.text(String(v), { x: 96, y: Y(v) - 7, w: 46, px: 10, lh: 1.3, mono: true,
+                        color: C.dim2, align: 'right' });
+  }
+  d.hline(150, 508, 1000, C.rule, 1);
+  for (let t = t0; t <= t1; t += 10) {
+    d.vline(X(t), 508, 5, C.dim2, 1);
+    d.text(t === t0 ? t + '℃' : String(t), { x: X(t) - 24, y: 516, w: 48, px: 10,
+      lh: 1.3, mono: true, color: C.dim2, align: 'center' });
+  }
+  for (let i = 0; i < R.length - 1; i++)
+    d.seg(X(R[i].t), Y(R[i].theory), X(R[i + 1].t), Y(R[i + 1].theory), C.slateL, 2.0, 'dash');
+  for (let i = 0; i < R.length - 1; i++)
+    d.seg(X(R[i].t), Y(R[i].real), X(R[i + 1].t), Y(R[i + 1].real), C.brass, 3.0);
+  /* 실측점은 그 회차의 이론값 위에 그 회차의 차이를 얹어 찍는다 */
+  const th = {}; R.forEach(r => { th[r.t] = r.theory; });
+  D.scatter.forEach(([t, c]) => {
+    const k = Math.max(t0, Math.min(t1, Math.round(t / 2) * 2));
+    d.dot(X(t), Y(th[k] + c), 3.4, C.ink);
+  });
+  [[700, C.slateL, '이론값 (보정 없음)', true], [930, C.brass, '모델이 만든 곡선', false]]
+    .forEach(([x, col, s, dash]) => {
+      d.hline(x, 285, 24, col, dash ? 2.0 : 3.0, dash ? 'dash' : 'solid');
+      d.text(s, { x: x + 32, y: 278, w: 200, px: 12, lh: 1.3, color: col });
+    });
+  d.dot(706, 305, 3.4, C.ink);
+  d.text('실제 테스트 ' + D.n + '회', { x: 720, y: 298, w: 200, px: 12, lh: 1.3,
+                                        color: C.ink });
 
-  d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '목업이 아니라 *실제 화면*입니다 — 다음 장에서 직접 띄우겠습니다.');
+  d.text('사람이 정하던 값이 아니라, 데이터가 만들어 내는 값입니다.',
+         { x: G.L, y: 568, w: G.W, px: 15, lh: 1.4, color: C.dim, align: 'center' });
+
+  d.hline(G.L, 634, G.W, C.rule, 1);
+  d.text(meta.dept + '  ·  ' + meta.authors.join(' · '),
+         { x: G.L, y: G.FOOT_Y, w: 600, px: 12, lh: 1.4, mono: true, color: C.dim, cs: 1.6 });
 };

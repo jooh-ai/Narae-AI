@@ -13,7 +13,7 @@ module.exports = (pptx, T, meta, D) => {
          '_온도를 따라 줄줄이 내려갑니다_.', { lines: 1 });
 
   /* 산점도 — 전폭 */
-  d.zone(G.L, 284, G.W, 262);
+  d.zone(G.L, 284, G.W, 256);
   d.plab('점 하나가 테스트 1회  ·  누적 ' + D.n + '회  ·  가로 외기온도 ℃ / ' +
          '세로 = 실제 − 이론값 (MW)', 96, 298, 760);
   const X = t => 130 + (t + 2) * 25.6, Y = c => 330 + (14 - c) * 9;
@@ -37,17 +37,25 @@ module.exports = (pptx, T, meta, D) => {
                                           color: C.dim, align: 'right' });
 
   /* 종전엔 이 폭을 정수 하나로 덮었다 */
-  d.zone(G.L, 564, G.W, 56);
-  d.plab('종전 · 담당자가 손으로 정한 값 16회  ·  전부 정수 하나', 96, 576, 440, C.slate);
+  /* [검토 반영] '왜 그런가' 가 빠져 있었다. 다만 흡입 공기 밀도·복수기 진공은
+     이론식이 이미 보정하고 있고(온도·대기압·습도·복수기압), 진공은 6장에서
+     기각됐다. 그래서 기전을 단정하지 않고 '표준 곡선과 실제 특성의 차이' 로
+     적는다 — 현장에서 확인된 기전이 나오면 그 문장으로 바꾼다. */
+  d.text('이론값은 *제작사 표준 성능 곡선*입니다. 우리 설비의 실제 특성과 온도에 따라 ' +
+         '어긋나고, 그 차이가 저온 (+) · 고온 (−) 로 남습니다.',
+         { x: 96, y: 546, w: 1088, px: 12.5, lh: 1.4, color: C.dim });
+
+  d.zone(G.L, 570, G.W, 54);
+  d.plab('종전 · 담당자가 손으로 정한 값 16회  ·  전부 정수 하나', 96, 582, 440, C.slate);
   const CW = 640 / 16;
   BLT.forEach(([cit, v], i) => {
     const x = 560 + i * CW, on = (cit === 7.3 || cit === 25.7);
-    d.text(String(v), { x, y: 574, w: CW, px: 17, lh: 1.3, mono: true, bold: true,
+    d.text(String(v), { x, y: 580, w: CW, px: 17, lh: 1.3, mono: true, bold: true,
                         color: on ? C.red : C.ink, align: 'center' });
-    d.text(cit.toFixed(1), { x, y: 596, w: CW, px: 9.5, lh: 1.3, mono: true,
+    d.text(cit.toFixed(1), { x, y: 602, w: CW, px: 9.5, lh: 1.3, mono: true,
                              color: on ? C.red : C.dim2, align: 'center' });
   });
-  d.text('7.3℃ 와 25.7℃ 에 똑같이 +5', { x: 96, y: 596, w: 440, px: 13, lh: 1.4, color: C.red });
+  d.text('7.3℃ 와 25.7℃ 에 똑같이 +5', { x: 96, y: 602, w: 440, px: 13, lh: 1.4, color: C.red });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
   T.foot(d, '고쳐야 할 것은 값의 크기가 아니라, *온도마다 다르게 주는 것*이었습니다.');

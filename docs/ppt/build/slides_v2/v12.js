@@ -1,57 +1,50 @@
-/* v2-12 · 개선 효과 — 요소 2개: 감소율 3수치 / 시운전 회차별 막대.
-   정량·정성 두 장을 한 장으로 합치고 정성 효과는 결론 한 줄로 남겼다.    */
+/* v2-12 · 향후 계획 및 수평 전개 — 요소 2개: 그대로/갈아끼움 대비 / 타임라인.
+   사업소 실명은 확정 전이므로 쓰지 않는다(BUILD_STATE 미결 항목).        */
 'use strict';
+const KEEP = ['차이를 배우고 방식을 고르는 부분', '의심하고 걸러내는 절차', '프로파일 생성과 화면'];
+const SWAP = ['설비별 이론식 (성능 곡선)', '설비 상수'];
+const PLAN = [
+  ['~ 2026.09', '위례 정착',        '누적 회차로 운영 중'],
+  ['2026.10~12', '절차 문서화',      '검증·가드 기준을 사내 문서로'],
+  ['2027 상반기', '같은 구조 1곳 시범', '이론식만 바꿔 나란히 운전'],
+  ['2027 하반기', '수평 전개',        '이론식 부분을 분리한 뒤 확대'],
+];
 module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
-  const { d } = T.shell(pptx, { sec: '효과', idx: 6, step: 6 });
-  const I = D.impact, K = I.cut, S = D.commission;
-  T.title(d, '일은 간단해지고,', '숫자는 *정확해졌습니다*');
-  T.lead(d, '같은 ' + D.n + '회를 종전 방식과 나란히 채점한 결과입니다.', { lines: 1 });
+  const { d } = T.shell(pptx, { sec: '수평 전개', idx: 7, step: 7 });
+  T.title(d, '구조를 둘로 나눈 덕분에,', '*이론식만 갈아끼우면* 옮겨집니다');
+  T.lead(d, '배우는 부분은 설비 종류와 상관이 없습니다. 사업소마다 다른 것은 _이론식_ 하나입니다.',
+         { lines: 1 });
 
-  /* 효과 두 갈래 — 일 처리 / 신고 정확도 */
-  d.zone(G.L, 284, G.W, 152);
-  d.vline(640, 306, 108, C.rule, 1);
+  /* 그대로 / 갈아끼움 */
+  d.zone(G.L, 284, G.W, 148);
+  d.vline(640, 306, 104, C.rule, 1);
   d.rect(G.L, 284, 568, 2, C.brass);
-  d.rect(640, 284, 568, 2, C.brass);
+  d.rect(640, 284, 568, 2, C.slate);
+  d.plab('그대로 가져가는 것', 96, 300, 500, C.brass);
+  d.plab('사업소마다 갈아끼우는 것', 664, 300, 500, C.slate);
+  KEEP.forEach((s, i) => d.text('·  ' + s, { x: 96, y: 326 + i * 30, w: 500, px: 15.5,
+                                             lh: 1.35, bold: true, color: C.ink }));
+  SWAP.forEach((s, i) => d.text('·  ' + s, { x: 664, y: 326 + i * 30, w: 500, px: 15.5,
+                                             lh: 1.35, bold: true, color: C.slateL }));
+  d.text('총 ' + KEEP.length + ' 덩어리', { x: 96, y: 416, w: 500, px: 11.5, lh: 1.2, color: C.dim });
+  d.text('바꿀 것은 ' + SWAP.length + ' 덩어리뿐', { x: 664, y: 416, w: 500, px: 11.5,
+                                                     lh: 1.2, color: C.dim });
 
-  d.plab('① 일 처리  ·  담당자 업무', 96, 300, 500);
-  d.bigUnit('4 → 1', '엑셀 4개 → 도구 1개', 96, 322, 44, C.brass, 15);
-  d.txt('순서를 지켜 파일 4개를 돌리던 일이 *날짜·시각 한 번*으로 끝납니다. ' +
-        '손으로 옮겨 적던 값 61개는 *0개*.', 96, 388, 520, 2);
-
-  d.plab('② 신고 정확도  ·  실제와 어긋난 정도', 664, 300, 500);
-  d.bigUnit(K.mae + '%', '감소', 664, 322, 44, C.brass, 15);
-  d.text('평균 ' + I.blanket.mae.toFixed(2) + ' → ' + I.gp.mae.toFixed(2) + ' MW',
-         { x: 900, y: 336, w: 284, px: 15, lh: 1.3, mono: true, bold: true, color: C.ink });
-  d.txt('실제가 못 미친 횟수 *' + I.blanket.short + ' → ' + I.gp.short + '회*   ·   ' +
-        '높게 신고한 양 *' + I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) +
-        ' MW*', 664, 388, 520, 2);
-
-  /* 시운전 — 예측을 먼저 남기고 실측과 대조 */
-  d.zone(G.L, 456, G.W, 168);
-  d.plab('시운전 ' + S.n + '회  ·  실측 전에 적어 둔 예측과 대조  ·  ' +
-         '세로 = 실제 − 예측 MW', 96, 470, 680);
-  d.text('편차 ' + (S.me >= 0 ? '+' : '−') + Math.abs(S.me).toFixed(3) +
-         '  ·  오차 ' + S.mae.toFixed(3) + '  ·  개선율 +' + Math.round(S.skill * 100) + '%',
-         { x: 790, y: 468, w: 394, px: 12.5, lh: 1.3, mono: true, bold: true,
-           color: C.brass, align: 'right' });
-
-  const ZERO = 536, PXMW = 20, BW = 46;
-  d.hline(140, ZERO, 1000, C.rule, 1);
-  [2, -2].forEach(v => d.hline(140, ZERO - v * PXMW, 1000, C.rule2, 1));
-  [[2, '+2'], [0, '0'], [-2, '−2']].forEach(([v, s]) => d.text(s,
-    { x: 96, y: ZERO - v * PXMW - 7, w: 36, px: 10, lh: 1.3, mono: true,
-      color: C.dim2, align: 'right' }));
-  S.rows.forEach((r, i) => {
-    const x = 158 + i * 110, h = Math.abs(r.diff) * PXMW, up = r.diff >= 0;
-    d.rect(x, up ? ZERO - h : ZERO, BW, Math.max(h, 2), up ? C.brass : C.red);
-    d.text((r.diff >= 0 ? '+' : '−') + Math.abs(r.diff).toFixed(2),
-           { x: x - 14, y: up ? ZERO - h - 17 : ZERO + h + 3, w: BW + 28, px: 10.5, lh: 1.2,
-             mono: true, bold: true, color: up ? C.brass : C.red, align: 'center' });
-    d.text(r.date.slice(5), { x: x - 14, y: 604, w: BW + 28, px: 10, lh: 1.2,
-                              mono: true, color: C.dim2, align: 'center' });
+  /* 타임라인 */
+  d.zone(G.L, 458, G.W, 166);
+  d.plab('전개 순서', 96, 472, 300);
+  d.hline(150, 542, 970, C.rule, 1.4);
+  PLAN.forEach(([when, what, how], i) => {
+    const x = 200 + i * 273, now = i === 0;
+    d.text(when, { x: x - 120, y: 500, w: 240, px: 11.5, lh: 1.2, mono: true, bold: true,
+                   color: now ? C.brass : C.dim2, align: 'center' });
+    d.dot(x, 542, now ? 7 : 5.5, now ? C.brass : C.steel);
+    d.text(what, { x: x - 120, y: 558, w: 240, px: 16.5, lh: 1.3, bold: true,
+                   color: now ? C.brass : C.ink, align: 'center' });
+    d.text(how, { x: x - 124, y: 584, w: 248, px: 12.5, lh: 1.35, color: C.dim, align: 'center' });
   });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '시간도 줄고 숫자도 맞았습니다 — 그리고 *왜 그 숫자인지 설명*할 수 있게 됐습니다.');
+  T.foot(d, '위례에서 검증한 절차 그대로 — *바꿀 것은 이론식 하나*입니다.');
 };
