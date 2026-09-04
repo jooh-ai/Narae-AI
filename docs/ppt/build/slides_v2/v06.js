@@ -30,6 +30,8 @@ module.exports = (pptx, T, meta, D) => {
     });
   d.text('③ 온도를 곡선(모델)으로 뺀 뒤  =  오른쪽 숫자',
          { x: 760, y: 314, w: 424, px: 12, lh: 1.2, color: C.brass, align: 'right' });
+  d.text('※ \'뺀다\' = 온도로 설명되는 몫을 먼저 걷어내고, 남은 것끼리 다시 재는 것',
+         { x: 96, y: 496, w: 700, px: 11, lh: 1.2, color: C.dim2 });
 
   const BX = v => 300 + Math.abs(v) * 640;
   d.vline(300, 344, 138, C.rule, 1);
@@ -59,7 +61,10 @@ module.exports = (pptx, T, meta, D) => {
            { x: 980, y: y + 4, w: 204, px: 12.5, lh: 1.2, bold: true,
              color: gone ? C.dim : C.red, align: 'right' });
   });
-  d.text('온도와의 r  ' + cand.map(r => r.label.slice(-3) + ' ' +
+  /* 종전에는 label.slice(-3) 로 뒤 3글자만 잘라 '상대습도' 가 '대습도' 로 나왔다.
+     짧은 이름을 따로 두고 쓴다. */
+  const SHORT = { cp_meas: '진공도', press: '대기압', rh: '습도' };
+  d.text('온도와의 r  ' + cand.map(r => (SHORT[r.key] || r.label) + ' ' +
          (r.vs_t >= 0 ? '+' : '−') + Math.abs(r.vs_t).toFixed(2)).join('   ·   ') +
          '  — 후보들이 서로 온도에 묶여 있다',
          { x: 96, y: 474, w: 1088, px: 11.5, lh: 1.2, mono: true, color: C.dim2 });

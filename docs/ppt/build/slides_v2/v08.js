@@ -17,16 +17,17 @@ module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
   const { d } = T.shell(pptx, { sec: '모델 선정', idx: 4, step: 4 });
   const M = D.methods, B = D.best, nm = k => NAME[k] || k;
-  T.title(d, '점을 그대로 잇지 않았습니다 —', '방식 *7가지를 겨뤄* 곡선을 골랐습니다');
-  T.lead(d, '한 회를 가리고 나머지로 맞혀보는 방식(LOOCV)으로 ' + D.n + '번 채점했습니다. ' +
+  T.title(d, '눈대중으로 고르지 않았습니다 —', '방식 *7가지를 겨뤄* 곡선을 골랐습니다');
+  T.lead(d, '한 회를 가리고 나머지로 맞혀보는 방식(LOOCV)으로 채점했습니다. ' +
          '세 지표 모두 *' + nm(B.key) + '* 가 1위입니다.');
 
   /* 7종 3지표 */
   d.zone(G.L, 284, G.W, 206);
-  d.plab('LOOCV 채점 결과  ·  종전(온도 구분 없이 하나의 값)은 MAE ' +
-         D.blanket.mae.toFixed(2) + ' MW 였습니다', 96, 296, 640);
-  d.text('MAE·RMSE 는 작을수록,  R² 는 1 에 가까울수록 좋습니다',
-         { x: 750, y: 294, w: 434, px: 11.5, lh: 1.2, color: C.dim, align: 'right' });
+  d.plab('LOOCV 채점 결과  ·  7가지가 모두 예측 가능한 ' + D.n_score +
+         '회 공통 집합  ·  종전(하나의 값)은 MAE ' + D.blanket.mae.toFixed(2) + ' MW',
+         96, 296, 780);
+  d.text('작을수록 좋음 · R² 는 1 에 가까울수록',
+         { x: 890, y: 294, w: 294, px: 11.5, lh: 1.2, color: C.dim, align: 'right' });
 
   const lo = Math.floor(Math.min(...M.map(m => m.mae)) * 20) / 20;
   const hi = Math.max(...M.map(m => m.mae));

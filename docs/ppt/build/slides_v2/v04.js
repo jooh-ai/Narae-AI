@@ -63,6 +63,13 @@ module.exports = (pptx, T, meta, D) => {
   d.text('높게 신고 — ' + dn.t + '℃ 에서 ' + (FLAT - dn.corr).toFixed(1) + ' MW 미달',
          { x: X(dn.t) - 274, y: (Y(bid(dn)) + Y(dn.real)) / 2 - 8, w: 260, px: 12.5,
            lh: 1.2, bold: true, color: C.red, align: 'right' });
+  /* 손실의 방향이 바뀌는 온도 — 이 그래프에서 가장 설명 가치가 큰 지점이다 */
+  const cross = R.find((r, i) => i > 0 && (R[i - 1].corr - FLAT) * (r.corr - FLAT) < 0);
+  if (cross) {
+    d.vline(X(cross.t), 330, 148, C.dim2, 1, 'dash');
+    d.text('여기서 방향이 바뀝니다 (' + cross.t + '℃)',
+           { x: X(cross.t) + 8, y: 332, w: 220, px: 11.5, lh: 1.2, color: C.dim });
+  }
   [[150, C.slateL, '종전 신고 (하나의 값)', true], [420, C.brass, '실제 능력', false]]
     .forEach(([x, col, s, dash]) => {
       d.hline(x, 318, 26, col, dash ? 2.2 : 2.6, dash ? 'dash' : 'solid');
@@ -83,5 +90,7 @@ module.exports = (pptx, T, meta, D) => {
     });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '어느 쪽으로 틀려도 손실입니다 — *정확도가 곧 수익*입니다.');
+  /* [검토 반영] 금액 환산 기준을 아직 못 받았다(계획서 §9 Q5). 근거 없이
+     '수익' 이라 단정하지 않는다 — 기준을 받으면 원 단위로 바꿔 넣는다. */
+  T.foot(d, '어느 쪽으로 틀려도 손실입니다 — *정확도가 곧 손익*입니다.');
 };

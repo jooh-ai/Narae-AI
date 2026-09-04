@@ -10,7 +10,7 @@ module.exports = (pptx, T, meta, D) => {
 
   T.title(d, '공급가능용량 산정,', '사람의 판단에서 *데이터로*', { y: 112, w: 590, px: 44 });
   d.sub('엑셀 4개로 하던 일을 *도구 하나*로,', G.L, 268, 590, 1);
-  d.sub('감으로 정한 값을 *온도별 학습*으로.', G.L, 302, 590, 1);
+  d.sub('하나로 정하던 값을 *온도별 학습*으로.', G.L, 302, 590, 1);
 
   /* 히어로 — 종전 수평선 vs 개선 곡선 */
   const ZX = 668, OX = ZX + 16, OY = 148;
@@ -35,8 +35,14 @@ module.exports = (pptx, T, meta, D) => {
   P.forEach(([a, b]) => d.rect(X(a) - 4, Y(b) - 4, 8, 8, C.brass));
   lab(sign(RBF[0]), X(58), 60, CY(RBF[0]) + 21, 12.5, C.brass);
   lab(sign(RBF[3]), X(398), 66, CY(RBF[3]) + 15, 12.5, C.brass, 'right');
-  d.text(T4[0] + '℃ 에서 ' + (RBF[0] - FLAT).toFixed(1) + ' MW 모자라고,  ' +
-         T4[3] + '℃ 에서 ' + (FLAT - RBF[3]).toFixed(1) + ' MW 넘칩니다',
+  /* [검토 반영] 4·9장과 같은 자리(실측이 있는 온도 범위의 최대/최소)에서
+     읽는다. 종전에는 표지만 30℃ 를 써서 같은 이야기가 장마다 다른 숫자로
+     보였다. */
+  const IN = D.profile.rows.filter(r => r.t >= D.cit_range[0] && r.t <= D.cit_range[1]);
+  const hiR = IN.reduce((a, b) => (b.corr > a.corr ? b : a));
+  const loR = IN.reduce((a, b) => (b.corr < a.corr ? b : a));
+  d.text(hiR.t + '℃ 에서 ' + (hiR.corr - FLAT).toFixed(1) + ' MW 모자라고,  ' +
+         loR.t + '℃ 에서 ' + (FLAT - loR.corr).toFixed(1) + ' MW 넘칩니다',
          { x: OX, y: 388, w: 500, px: 13.5, lh: 1.4, color: C.red });
   /* 기준선이 어디서 나온 값인지 그림 안에서 답한다 — 표지에서 처음 나오는 숫자다 */
   d.text('기준선 ' + sign(FLAT) + ' MW = 누적 ' + D.n +

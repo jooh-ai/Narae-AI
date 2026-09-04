@@ -1,7 +1,8 @@
 {
- "generated": "2026-09-02T16:04+00:00",
+ "generated": "2026-09-04T05:31+00:00",
  "source": "tool/wirye_capacity/data/measurements_seed.json",
  "n": 40,
+ "n_score": 39,
  "cit_range": [
   -1.9,
   37.9
@@ -174,8 +175,9 @@
  ],
  "blanket": {
   "flat": 2.455,
-  "mae": 3.802,
-  "rmse": 4.443,
+  "n_score": 39,
+  "mae": 3.895,
+  "rmse": 4.499,
   "worst": [
    {
     "date": "2026-01-13",
@@ -336,22 +338,22 @@
  "impact": {
   "blanket": {
    "label": "일괄 보정 (종전 방식)",
-   "mae": 3.802,
+   "mae": 3.895,
    "max": 10.759,
    "short": 15,
    "over": 69.5,
-   "opp": 75.5
+   "opp": 75.3
   },
   "gp": {
    "label": "GP (현재 툴 기본)",
-   "mae": 1.286,
+   "mae": 1.301,
    "max": 4.165,
    "short": 4,
    "over": 9.3,
-   "opp": 31.4
+   "opp": 30.6
   },
   "cut": {
-   "mae": 66,
+   "mae": 67,
    "short": 73,
    "over": 87
   }

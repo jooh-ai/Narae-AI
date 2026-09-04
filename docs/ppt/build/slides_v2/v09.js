@@ -38,14 +38,14 @@ module.exports = (pptx, T, meta, D) => {
     d.seg(X(R[i].t), Y1(R[i].theory), X(R[i + 1].t), Y1(R[i + 1].theory), C.slateL, 2.2, 'dash');
   for (let i = 0; i < R.length - 1; i++)
     d.seg(X(R[i].t), Y1(R[i].real), X(R[i + 1].t), Y1(R[i + 1].real), C.brass, 2.6);
-  [['이론값 (보정 없음)', C.slateL, true], ['모델이 만든 곡선', C.brass, false]]
+  [['이론 출력 (IGV 포함 · 보정 없음)', C.slateL, true], ['모델이 만든 곡선', C.brass, false]]
     .forEach(([s, col, dash], i) => {
       const y = 320 + i * 19;
       d.hline(918, y + 7, 26, col, dash ? 2.2 : 2.6, dash ? 'dash' : 'solid');
       d.text(s, { x: 952, y, w: 230, px: 12, lh: 1.3, color: col });
     });
-  d.text('두 곡선이 거의 붙어 보입니다 →  확대해 보겠습니다',
-         { x: 640, y: 400, w: 400, px: 12, lh: 1.3, color: C.dim, align: 'right' });
+  d.text('두 곡선이 거의 붙어 보입니다 — 아래는 그 차이만 확대한 것입니다',
+         { x: 560, y: 400, w: 480, px: 12, lh: 1.3, color: C.dim, align: 'right' });
 
   /* ── 아래: 차이만 확대 (실제 − 이론값) ── */
   d.hline(G.L, 436, G.W, C.rule, 1);
@@ -62,8 +62,8 @@ module.exports = (pptx, T, meta, D) => {
     d.text(t === t0 ? t + '℃' : String(t), { x: X(t) - 24, y: 534, w: 48, px: 10, lh: 1.3,
                                              mono: true, color: C.dim2, align: 'center' });
   }
-  d.text('차이 = 실제 − 이론값 (MW)', { x: 150, y: 441, w: 230, px: 11.5, lh: 1.2,
-                                        color: C.dim2 });
+  d.text('차이 = 보정값 (실제 − 이론값 − W)', { x: 150, y: 441, w: 260, px: 11.5,
+                                                 lh: 1.2, color: C.dim2 });
   d.dot(402, 447, 3.2, C.ink);
   d.text('점 = 테스트 ' + D.n + '회', { x: 414, y: 441, w: 170, px: 11.5, lh: 1.2,
                                         color: C.ink });
@@ -86,7 +86,7 @@ module.exports = (pptx, T, meta, D) => {
 
   /* 이 장에서 남길 문장 */
   d.zone(G.L, 564, G.W, 60);
-  d.text('이론값보다 *' + up.t + '℃ 는 ' + up.corr.toFixed(1) + ' MW 더*, *' + dn.t +
+  d.text('이론 출력보다 *' + up.t + '℃ 는 ' + up.corr.toFixed(1) + ' MW 더*, *' + dn.t +
          '℃ 는 ' + Math.abs(dn.corr).toFixed(1) + ' MW 덜* 나왔습니다.   ' +
          '종전에는 이 차이를 온도 구분 없이 ~하나의 값 +' + D.blanket.flat.toFixed(1) +
          '~ 로 덮었습니다.',

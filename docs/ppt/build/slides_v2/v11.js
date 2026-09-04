@@ -27,13 +27,17 @@ module.exports = (pptx, T, meta, D) => {
         '높게 신고한 양 *' + I.blanket.over.toFixed(1) + ' → ' + I.gp.over.toFixed(1) +
         ' MW*', 664, 388, 520, 2);
 
-  /* 시운전 — 예측을 먼저 남기고 실측과 대조 */
+  /* 시운전 — walk-forward 재현. [검토 반영] 종전에는 '실측 전에 적어 둔 예측'
+     이라고 적었는데 사실이 아니다. trial_log.json 의 pred_corr 가 전부 null 이다.
+     실제로 한 것은 각 회차를 그 앞의 데이터만으로 예측하는 것이고(뒤 회차를
+     보지 않는다), 이것도 충분히 방어되지만 '미리 적어 뒀다' 와는 다른 말이다. */
   d.zone(G.L, 456, G.W, 168);
-  d.plab('시운전 ' + S.n + '회  ·  실측 전에 적어 둔 예측과 대조  ·  ' +
-         '세로 = 실제 − 예측 MW', 96, 470, 680);
+  d.plab('시운전 ' + S.n + '회  ·  그 회차 앞의 데이터만으로 예측(walk-forward)  ·  ' +
+         '세로 = 실제 − 예측 MW', 96, 470, 700);
   d.text('편차 ' + (S.me >= 0 ? '+' : '−') + Math.abs(S.me).toFixed(3) +
-         '  ·  오차 ' + S.mae.toFixed(3) + '  ·  개선율 +' + Math.round(S.skill * 100) + '%',
-         { x: 790, y: 468, w: 394, px: 12.5, lh: 1.3, mono: true, bold: true,
+         '  ·  오차 ' + S.mae.toFixed(3) + '  ·  종전 대비 +' +
+         Math.round(S.skill * 100) + '%',
+         { x: 820, y: 468, w: 364, px: 12.5, lh: 1.3, mono: true, bold: true,
            color: C.brass, align: 'right' });
 
   const ZERO = 536, PXMW = 20, BW = 46;

@@ -49,37 +49,68 @@ WORST_N = 4                        # 오차 상위 몇 건을 장표에 싣는�
 PROF_T = tuple(range(-10, 41, 2))  # 곡선 비교 장표를 그리는 온도 (Tool [📈 출력곡선 비교])
 
 
-def blanket_loocv(recs: list[dict]) -> dict:
+def common_set(recs: list[dict]) -> list[int]:
+    """방식 7가지가 **모두** 예측할 수 있는 회차의 번호.
+
+    구간평균은 그 회차를 빼면 구간이 비는 자리에서 예측을 못 한다(20~25℃ 1건).
+    7가지를 같은 자리에서 겨루려면 그 회차를 빼야 공정하다 — select.loocv 가
+    이미 그렇게 한다. 장표의 모든 채점을 **이 집합 하나**로 통일한다.
+    그러지 않으면 같은 '예측 오차' 가 표에서는 1.301, 요약에서는 1.286 으로
+    나와 청중이 짚었을 때 답이 궁색해진다.
+    """
+    grid = {}
+    for m in select.METHODS:
+        col = []
+        for i in range(len(recs)):
+            train = [recs[k] for k in range(len(recs)) if k != i]
+            try:
+                col.append(select.predict(m, train, recs[i]["cit"]))
+            except Exception:                               # noqa: BLE001
+                col.append(None)
+        grid[m] = col
+    return [i for i in range(len(recs))
+            if all(grid[m][i] is not None for m in select.METHODS)]
+
+
+def blanket_loocv(recs: list[dict], sel: list[int]) -> dict:
     """종전 방식(일괄 보정)을 한 건씩 가려 채점한다.
-    일괄값은 나머지의 평균 = 최소제곱 최적 상수. method_compare 와 같은 정의다."""
+    일괄값은 나머지의 평균 = 최소제곱 최적 상수. method_compare 와 같은 정의다.
+
+    `flat` 만 전체 회차의 평균이다 — 이 값은 채점 결과가 아니라 '종전에는 이
+    숫자 하나였다' 는 설명용 상수이고, 그림의 기준선으로도 쓴다.
+    채점(mae·rmse·worst)은 `sel` 집합에서만 한다.
+    """
     ys = [r["corr"] for r in recs]
     n, tot = len(ys), sum(ys)
     err, rows = [], []
-    for r, y in zip(recs, ys):
+    for i in sel:
+        y = ys[i]
         pred = (tot - y) / (n - 1)
         e = pred - y                              # + 면 높게 신고 = 미달 위험
         err.append(e)
-        rows.append({"date": r["date"], "cit": r["cit"], "corr": y,
+        rows.append({"date": recs[i]["date"], "cit": recs[i]["cit"], "corr": y,
                      "pred": round(pred, 3), "err": round(e, 3)})
     rows.sort(key=lambda d: -abs(d["err"]))
     return {
         "flat": round(tot / n, 3),
-        "mae": round(sum(abs(e) for e in err) / n, 3),
-        "rmse": round((sum(e * e for e in err) / n) ** 0.5, 3),
+        "n_score": len(sel),
+        "mae": round(sum(abs(e) for e in err) / len(err), 3),
+        "rmse": round((sum(e * e for e in err) / len(err)) ** 0.5, 3),
         "worst": rows[:WORST_N],
     }
 
 
-def bid_impact(recs: list[dict]) -> dict:
+def bid_impact(recs: list[dict], sel: list[int]) -> dict:
     """종전 vs 개선을 입찰 관점으로 채점 — 미달 몇 건, 과대 신고 몇 MW.
-    밴드(±0.5%)·미달 판정은 method_compare._score 정의를 그대로 쓴다."""
+    밴드(±0.5%)·미달 판정은 method_compare._score 정의를 그대로 쓴다.
+    채점 집합은 `sel` — 7가지 비교표와 같은 자리에서 잰다(common_set 주석 참조)."""
     eng = MC.TheoryEngine()
     by = {n: b for n, b in MC.METHODS}
     out = {}
     for key, name in (("blanket", "일괄 보정 (종전 방식)"), ("gp", "GP (현재 툴 기본)")):
         build = by[name]
-        cases = [(r, build([recs[k] for k in range(len(recs)) if k != i])(r["cit"]))
-                 for i, r in enumerate(recs)]
+        cases = [(recs[i], build([recs[k] for k in range(len(recs)) if k != i])(recs[i]["cit"]))
+                 for i in sel]
         mae, worst, short, over, opp = MC._score(eng, cases)
         out[key] = {"label": name, "mae": round(mae, 3), "max": round(worst, 3),
                     "short": short, "over": round(over, 1), "opp": round(opp, 1)}
@@ -250,15 +281,17 @@ def main() -> None:
 
     # ④ 입찰 관점 — 미달 건수·과대 신고 누계.
     #    밴드(±0.5%)와 판정은 method_compare._score 정의를 그대로 쓴다.
-    impact = bid_impact(recs)
+    sel = common_set(recs)
+    impact = bid_impact(recs, sel)
 
-    flat = blanket_loocv(recs)
+    flat = blanket_loocv(recs, sel)
     best = methods[0]
 
     data = {
         "generated": datetime.now(timezone.utc).astimezone().isoformat(timespec="minutes"),
         "source": str(SEED.relative_to(ROOT)),
         "n": len(recs),
+        "n_score": len(sel),           # 채점에 쓴 회차 수 (7가지 공통 집합)
         "cit_range": [min(r["cit"] for r in recs), max(r["cit"] for r in recs)],
         "corr_range": [round(min(ys), 3), round(max(ys), 3)],
         "scatter": [[r["cit"], round(r["corr"], 3)] for r in recs],
@@ -278,6 +311,7 @@ def main() -> None:
     # ── 사람이 눈으로 확인하는 요약 ──────────────────────────────
     print(f"누적        {data['n']}건   보정값 {data['corr_range'][0]:+.2f} ~ "
           f"{data['corr_range'][1]:+.2f} MW   외기 {data['cit_range'][0]} ~ {data['cit_range'][1]}℃")
+    print(f"채점 집합   {len(sel)}회 (7가지 공통) / 누적 {len(recs)}회")
     print(f"종전 일괄   baseline {flat['flat']:+.2f}   LOOCV MAE {flat['mae']:.3f} · RMSE {flat['rmse']:.3f}")
     print(f"최적 방식   {best['label']}   MAE {best['mae']:.3f} · RMSE {best['rmse']:.3f} · R² {best['r2']:+.3f}")
     print("후보 순위   " + " / ".join(f"{m['label']} {m['mae']:.3f}" for m in methods))

@@ -8,14 +8,14 @@ module.exports = (pptx, T, meta, D) => {
   const { d } = T.shell(pptx, { sec: '문제', idx: 2, step: 2 });
   const more = Math.round(D.corr_range[1]), less = Math.round(-D.corr_range[0]);
   T.title(d, '이론값 하나로는 맞출 수 없습니다 —',
-          '겨울엔 *' + more + ' MW 더*, 여름엔 *' + less + ' MW 덜* 나옵니다');
-  T.lead(d, '이론값과 실제의 차이를 온도 축에 찍으면, 흩어진 게 아니라 ' +
-         '_온도를 따라 줄줄이 내려갑니다_.', { lines: 1 });
+          '보정값이 회차마다 *+' + more + ' ~ −' + less + ' MW* 로 갈립니다');
+  T.lead(d, '보정값은 _실제 − 이론값 − W(IGV)_ 입니다. 온도 축에 찍으면 흩어진 게 아니라 ' +
+         '온도를 따라 줄줄이 내려갑니다.', { lines: 1 });
 
   /* 산점도 — 전폭 */
   d.zone(G.L, 284, G.W, 256);
   d.plab('점 하나가 테스트 1회  ·  누적 ' + D.n + '회  ·  가로 외기온도 ℃ / ' +
-         '세로 = 실제 − 이론값 (MW)', 96, 298, 760);
+         '세로 = 보정값 = 실제 − 이론값 − W(IGV)  MW', 96, 298, 800);
   const X = t => 130 + (t + 2) * 25.6, Y = c => 330 + (14 - c) * 9;
   [12, 8, 4, -4].forEach(v => d.hline(130, Y(v), 1050, C.rule2, 1));
   d.hline(130, Y(0), 1050, C.rule, 1);
@@ -32,9 +32,14 @@ module.exports = (pptx, T, meta, D) => {
   const hot = D.blanket.worst.map(w => w.cit);
   D.scatter.forEach(([t, c]) => d.dot(X(t), Y(c), hot.indexOf(t) >= 0 ? 6 : 4.2,
                                       hot.indexOf(t) >= 0 ? C.red : C.body));
-  d.text('추울수록 실제가 더 나오고', { x: 190, y: 344, w: 260, px: 14, lh: 1.4, color: C.dim });
-  d.text('더울수록 실제가 덜 나옵니다', { x: 880, y: 470, w: 300, px: 14, lh: 1.4,
-                                          color: C.dim, align: 'right' });
+  d.text('추울수록 더 더해야 하고', { x: 190, y: 344, w: 260, px: 14, lh: 1.4, color: C.dim });
+  d.text('더울수록 빼야 합니다', { x: 880, y: 470, w: 300, px: 14, lh: 1.4,
+                                    color: C.dim, align: 'right' });
+  /* [검토 반영] 제목의 +13 / −5 는 평균이 아니라 가장 큰 한 회차 값이다.
+     겨울 회차는 2건뿐이라 평균으로 읽히면 과장이 된다. */
+  d.text('+' + more + ' 은 ' + D.cit_range[0] + '℃ 한 회차, −' + less +
+         ' 는 여름 한 회차 — 가장 큰 값입니다',
+         { x: 700, y: 344, w: 480, px: 11.5, lh: 1.3, color: C.dim2, align: 'right' });
 
   /* 종전엔 이 폭을 정수 하나로 덮었다 */
   /* [검토 반영] '왜 그런가' 가 빠져 있었다. 다만 흡입 공기 밀도·복수기 진공은
@@ -46,7 +51,7 @@ module.exports = (pptx, T, meta, D) => {
          { x: 96, y: 546, w: 1088, px: 12.5, lh: 1.4, color: C.dim });
 
   d.zone(G.L, 570, G.W, 54);
-  d.plab('종전 · 담당자가 손으로 정한 값 16회  ·  전부 정수 하나', 96, 582, 440, C.slate);
+  d.plab('종전 · 실제 적용한 값 16회  ·  회차순  ·  전부 정수 하나', 96, 582, 440, C.slate);
   const CW = 640 / 16;
   BLT.forEach(([cit, v], i) => {
     const x = 560 + i * CW, on = (cit === 7.3 || cit === 25.7);
