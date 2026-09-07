@@ -47,14 +47,27 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 DECK = HERE / "deck_data.json"
 
-# ── 입력값 — 사용자 제공(최근 30일 명세서 기준). 바뀌면 여기만 고친다 ──
-RCP = 11_580.0        # 기준용량가격 원/MW·h
-RCF = 0.9067          # 지역별 용량가격계수 (위례)
-TCF = 1.0             # 시간대별 계수 — 평균 1 로 가정 (※ 확인 필요)
-PCF = 1.0             # 성과연동 계수 — 1 로 가정 (※ 확인 필요)
-BETA = 0.0            # 용량가격 보정계수 β (※ 확인 필요)
-AVAIL = 1.0           # 연간 CP 적용시간 비율 (1.0 = 8,760h 전부. 정비·정지 미반영)
-HOURS = 8_760.0
+# ── 정본 단가 (2026-09-07 사용자 제시) ──────────────────────────────
+# "CP 용량요금을 kW당 150원으로 잡고, 이게 입찰한 날만 받는 요금이라.
+#  정비하면 입찰이 0이므로 못 받는다. 연간 30일(한 달) 정비를 가정하면
+#  CP 받는 기간은 11개월."
+#
+# 단위는 **원/kW·일** 이다. '월' 로 읽으면 150 × 11 = 1,650원/kW·년 =
+# 165만원/MW·년인데, 명세서 기준(RCP×RCF = 10,499.6원/MW·h = 252원/kW·일 =
+# 7,560원/kW·월)의 1/50 이라 앞뒤가 맞지 않는다. '일' 로 읽으면 150원/kW·일 로
+# 명세서 기준 252원/kW·일 의 60% — 시간대별 계수(TCF)·성과계수(PCF)를 반영한
+# 보수적 실효 단가로 자연스럽다.
+RATE_KW_DAY = 150.0        # 원/kW·일 — 입찰한 날에만 받는다
+MAINT_DAYS = 30.0          # 연간 정비 일수. 이 기간은 입찰 0 → CP 0
+YEAR_DAYS = 365.0
+BID_DAYS = YEAR_DAYS - MAINT_DAYS          # 335일 ≈ 11개월
+
+# ── 참고 단가 (앞서 받은 30일 명세서 분석) ─────────────────────────
+# 교차검증용이다. 정본과 얼마나 벌어지는지 보면 TCF×PCF 를 역산할 수 있다.
+RCP = 11_580.0             # 기준용량가격 원/MW·h
+RCF = 0.9067               # 지역별 용량가격계수 (위례)
+
+MW_PER_YEAR = RATE_KW_DAY * 1000 * BID_DAYS    # 1 MW 를 1년 인정받을 때 원
 
 
 def won(v: float) -> str:
@@ -68,11 +81,18 @@ def main() -> None:
     D = json.loads(DECK.read_text(encoding="utf-8"))
     I, n, ns = D["impact"], D["n"], D["n_score"]
 
-    hcf = RCP * RCF * TCF * PCF + BETA
-    print("── 단가 ──")
-    print(f"HCF = RCP {RCP:,.0f} × RCF {RCF} × TCF {TCF} × PCF {PCF} + β {BETA}"
-          f"  =  {hcf:,.1f} 원/MW·h")
-    print(f"1 MW 를 1년(8,760h) 내내 더 인정받으면  {won(hcf * HOURS * AVAIL)}/MW·년")
+    print("── 단가 (정본) ──")
+    print(f"{RATE_KW_DAY:,.0f} 원/kW·일  ×  입찰일 {BID_DAYS:,.0f}일"
+          f" (365 − 정비 {MAINT_DAYS:,.0f}일 ≈ 11개월)")
+    print(f"→ 1 MW 를 1년 더 인정받으면  {won(MW_PER_YEAR)}/MW·년")
+
+    ref = RCP * RCF                                  # 원/MW·h
+    ref_year = ref * 24 * BID_DAYS
+    print("\n── 교차검증 (30일 명세서 기준) ──")
+    print(f"RCP {RCP:,.0f} × RCF {RCF} = {ref:,.1f} 원/MW·h = {ref * 24 / 1000:,.0f} 원/kW·일")
+    print(f"같은 입찰일수로 환산하면 {won(ref_year)}/MW·년"
+          f"   → 정본은 그 {MW_PER_YEAR / ref_year:.0%} 수준")
+    print("  차이는 시간대별 계수(TCF)·성과계수(PCF)로 보이며, 정본이 더 보수적이다.")
 
     # ── 회당 평균 '낮게 신고한 양' ─────────────────────────────
     lo_b, lo_g = I["blanket"]["opp"], I["gp"]["opp"]      # 기회손실 누계 MW
@@ -81,11 +101,8 @@ def main() -> None:
     print(f"채점 {ns}회  ·  누계 {lo_b:.1f} → {lo_g:.1f} MW"
           f"   회당 평균 {per_b:.2f} → {per_g:.2f} MW")
 
-    # 테스트 1회의 보정값이 2주(336h) 동안 쓰인다. 연 26.1회 × 336h = 8,736h
-    # 이므로 '회당 평균 × 8,760h' 가 실제 운영 주기와 맞는다(머리말 참조).
-    y_b = per_b * HOURS * AVAIL * hcf
-    y_g = per_g * HOURS * AVAIL * hcf
-    print(f"\n── CP 환산 (연간) ──")
+    y_b, y_g = per_b * MW_PER_YEAR, per_g * MW_PER_YEAR
+    print("\n── CP 환산 (연간) ──")
     print(f"종전 방식으로 못 받던 용량요금   {won(y_b)}/년")
     print(f"현재 도구로 못 받는 용량요금     {won(y_g)}/년")
     print(f"→ 회수 효과                      {won(y_b - y_g)}/년"
@@ -97,18 +114,22 @@ def main() -> None:
     print(f"누계 {hi_b:.1f} → {hi_g:.1f} MW,  기준 미달 "
           f"{I['blanket']['short']} → {I['gp']['short']}회")
     print("Min() 구조상 높게 신고해도 CP 는 실제만큼만 나온다. 줄어든 것은")
-    print("미달 위험이다 — 금액 환산에는 페널티 단가·신뢰도계수 영향이 필요하다.")
+    print("미달 위험이다 — 금액 환산에는 페널티 단가가 따로 필요하다.")
 
-    # ── 민감도 — 가정이 흔들리면 얼마나 달라지나 ───────────────
+    # ── 민감도 ────────────────────────────────────────────────
     print("\n── 민감도 (회수 효과) ──")
-    print(f"{'적용시간 비율':>12s} {'연간 회수':>12s}   비고")
-    for av, note in ((1.00, "8,760h 전부 — 2주 주기와 일치"), (0.92, "정비 4주 제외"),
-                     (0.85, "정비·불시정지 포함"), (0.70, "보수적")):
-        v = (per_b - per_g) * HOURS * av * hcf
-        print(f"{av:>12.2f} {won(v):>12s}   {note}")
+    print(f"{'정비 일수':>10s} {'입찰일':>7s} {'연간 회수':>12s}")
+    for md in (0, 15, 30, 45, 60):
+        v = (per_b - per_g) * RATE_KW_DAY * 1000 * (YEAR_DAYS - md)
+        print(f"{md:>8.0f}일 {YEAR_DAYS - md:>6.0f}일 {won(v):>12s}")
+    print(f"\n{'단가':>10s} {'연간 회수':>12s}")
+    for rt in (120, 150, 200, 252):
+        v = (per_b - per_g) * rt * 1000 * BID_DAYS
+        tag = "  ← 정본" if rt == 150 else ("  ← 명세서 기준" if rt == 252 else "")
+        print(f"{rt:>8.0f}원 {won(v):>12s}{tag}")
 
-    print("\n※ 이 값은 **용량요금만** 이다. 에너지수익은 급전 지시로 정해지고,")
-    print("  SMP×MWh 는 매출이므로 넣지 않았다(파일 머리말 참조).")
+    print("\n※ 용량요금(CP)만이다. 에너지수익은 급전 지시로 정해지고 SMP×MWh 는")
+    print("  매출이므로 넣지 않았다(파일 머리말 참조).")
     print(f"※ 오차 지표(MAE {I['blanket']['mae']:.2f} → {I['gp']['mae']:.2f})는 양방향")
     print("  오차의 평균이다. 금액은 그중 '낮게 신고한 쪽' 만으로 계산했다.")
 
