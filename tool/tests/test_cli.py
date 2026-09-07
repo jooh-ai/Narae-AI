@@ -31,10 +31,10 @@ def test_preview_default_does_not_accumulate(tmp_path, capsys):
 
 def test_run_seed_then_count(tmp_path, capsys):
     db = str(tmp_path / "m.db")
-    # --seed 로 31건 적재 후 신규 1건(T05는 시드와 동일 데이터지만 별도 레코드)
+    # --seed 로 36건 적재 후 신규 1건(T05는 시드와 동일 데이터지만 별도 레코드)
     main(["run", "--date", "2025-T05", "--mock", "--seed", "--accumulate", "--db", db])
     out = capsys.readouterr().out
-    assert "누적 건수" in out and ": 32" in out
+    assert "누적 건수" in out and ": 37" in out
 
 
 def test_list_after_run(tmp_path, capsys):

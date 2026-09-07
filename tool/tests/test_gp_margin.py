@@ -148,7 +148,7 @@ def test_margin_rows_covers_all_bins():
     assert len(rows) == len(C.BINS)
     assert all(r["margin"] >= 0 for r in rows)
     hot = next(r for r in rows if r["bin"] == (30, 41))
-    assert hot["count"] == 9 and hot["sd"] > 1.5
+    assert hot["count"] == 11 and hot["sd"] > 1.5
 
 
 # ───────────────────────── Profile 통합 ─────────────────────────

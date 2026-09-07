@@ -89,7 +89,6 @@ python -m wirye_capacity check-rims --workbook "C:\경로\엑셀1.xlsx" --date 2
 python -m wirye_capacity run --date 2026-04-15 ^
        --opcua-host skes-rimspall1 ^
        --forecast "C:\경로\엑셀3-1.xlsx" ^
-       --bid-day "수요일, 4월 15일" ^
        --db %USERPROFILE%\wirye_commission.db --seed ^
        --out %USERPROFILE%\bid_20260415.xlsx
 ```
@@ -99,7 +98,8 @@ python -m wirye_capacity run --date 2026-04-15 ^
 
 **A: 엑셀1 경유(대안)** — `--opcua-host` 대신 `--workbook "C:\경로\엑셀1.xlsx"`(또는 exe 폴더 자동 감지).
 
-(`--bid-day` 라벨은 엑셀3-1 일자 첫 열 문자열 그대로. 생략 시 7일 중위 평균.)
+(적용 대기압은 예보 **3~7일차(테스트일 +2 ~ +6)** 중위 평균 − 8 로 고정이다.
+엑셀3 `온도 Profile`!M2 = `=AVERAGE(Y8:Y12)-8` 과 같은 규칙이라 고를 수 없다.)
 
 > **누적 반영은 선택입니다.** 위 명령은 **확인용**(보정값만 표시, 누적 미저장)입니다. 출력에
 > `[확인용(미반영)]` 표시. 이 테스트를 **누적에 반영**하려면 명령 끝에 **`--accumulate`** 를 붙이세요
@@ -119,6 +119,11 @@ python -m wirye_capacity run --date 2026-04-15 ^
 ## STEP 5 — 시운전 대조 (Commissioning, ±0.5 MW)
 
 **목적**: 기존 검증된 엑셀 결과를 "정답"으로 Tool 출력이 ±0.5 MW 내인지 확인.
+
+> 이 STEP 은 **계산 일치**(같은 입력 → 같은 값) 검사다. 아직 누적에 없는 새 테스트
+> 실적이 손에 있다면 **예측 정확도**까지 측정할 수 있다 — 회차별 절차는
+> [`COMMISSIONING.md`](COMMISSIONING.md) 참조. 그쪽은 반영 전에 예측을 기록하므로
+> 실입찰에서 재현되는 숫자가 나온다.
 
 ```bat
 :: 기준 = 기존 방식으로 만든 온도 Profile(엑셀4 또는 엑셀3). 같은 대기압·Deg 조건으로 비교.

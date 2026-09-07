@@ -1,0 +1,494 @@
+<title>공급가능용량 발표 디자인안</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@500;700;800&family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+  :root{
+    /* 확정 팔레트 — 기본 2색 + 강조 2색 (계획서 §5.2) */
+    --ground:#0E1419;      /* 배경: 거의 검정에 가까운 딥 네이비 */
+    --card:#18222B;        /* 카드 바탕 */
+    --card2:#141D25;       /* 카드 안쪽 한 톤 더 어둡게 */
+    --line:#263341;        /* 테두리 */
+    --ink:#F2F5F7;         /* 본문 글자 */
+    --dim:#8A99A8;         /* 보조 설명 (쿨한 슬레이트) */
+    --dim2:#5F6E7C;        /* 더 약한 보조 */
+    --mint:#2FE3A8;        /* 강조 1 — 개선·긍정·핵심 수치 */
+    --mint-d:#1B8C68;      /* 민트 어둡게 (막대 그라데 대체) */
+    --red:#EA002C;         /* 강조 2 — 위험·미달 */
+    --red-w:#FF5A72;       /* 어두운 바탕용 레드 (가독성) */
+    --slate:#6B7A88;       /* 종전 방식·비교군 */
+
+    --disp:'Gothic A1','Malgun Gothic','맑은 고딕',sans-serif;
+    --body:'Noto Sans KR','Malgun Gothic',sans-serif;
+    --mono:'JetBrains Mono',Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    background:var(--ground); color:var(--ink);
+    font-family:var(--body); margin:0; padding:0 0 64px;
+  }
+
+  /* ── 페이지 셸 ────────────────────────────────── */
+  .shell{max-width:1340px;margin:0 auto;padding:0 20px}
+  .pagehead{padding:44px 0 8px}
+  .kicker{
+    font-family:var(--mono); font-size:11px; font-weight:700;
+    letter-spacing:.24em; color:var(--mint); text-transform:uppercase;
+    display:flex; align-items:center; gap:10px;
+  }
+  .kicker::before{content:"";width:22px;height:1px;background:var(--mint)}
+  .pagehead h1{
+    font-family:var(--disp); font-weight:800; font-size:34px;
+    margin:14px 0 8px; letter-spacing:-.01em; text-wrap:balance;
+  }
+  .pagehead p{color:var(--dim);font-size:15px;line-height:1.7;margin:0;max-width:74ch}
+  .pagehead p b{color:var(--ink);font-weight:700}
+
+  .toolbar{display:flex;gap:8px;align-items:center;margin:22px 0 8px;flex-wrap:wrap}
+  .btn{
+    font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.1em;
+    background:var(--card);color:var(--dim);border:1px solid var(--line);
+    border-radius:4px;padding:8px 13px;cursor:pointer;text-transform:uppercase;
+  }
+  .btn:hover{color:var(--ink);border-color:var(--dim2)}
+  .btn[aria-pressed="true"]{background:var(--mint);color:#08110D;border-color:var(--mint)}
+  .btn:focus-visible{outline:2px solid var(--mint);outline-offset:2px}
+  .hint{font-size:12px;color:var(--dim2);margin-left:4px}
+
+  /* ── 슬라이드 프레임 ──────────────────────────── */
+  .slidewrap{margin:30px 0 0}
+  .slidecap{
+    display:flex;align-items:baseline;gap:12px;margin:0 0 10px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--dim2);
+    text-transform:uppercase;
+  }
+  .slidecap .n{color:var(--mint);font-weight:700}
+  .slidecap .t{font-family:var(--body);letter-spacing:0;text-transform:none;font-size:13px;color:var(--dim)}
+  .stage{position:relative;width:100%;overflow:hidden;border:1px solid var(--line);border-radius:6px;background:#000}
+  .slide{
+    position:relative;width:1280px;height:720px;transform-origin:0 0;
+    background:var(--ground);overflow:hidden;
+  }
+  /* 12컬럼 가이드 (검토용 토글) */
+  .guide{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .15s}
+  body.showguide .guide{opacity:1}
+  .guide .safe{position:absolute;left:72px;right:72px;top:53px;bottom:59px;border:1px dashed rgba(47,227,168,.42)}
+  .guide .col{position:absolute;top:53px;bottom:59px;background:rgba(47,227,168,.055)}
+
+  /* ── 슬라이드 공통 요소 ───────────────────────── */
+  .s-label{
+    position:absolute;left:72px;top:53px;
+    font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.2em;
+    color:var(--mint);text-transform:uppercase;display:flex;align-items:center;gap:9px;
+  }
+  .s-label::before{content:"";width:18px;height:1px;background:var(--mint)}
+  .s-title{
+    position:absolute;left:72px;top:82px;width:1000px;
+    font-family:var(--disp);font-weight:800;font-size:40px;line-height:1.24;
+    letter-spacing:-.015em;margin:0;
+  }
+  .s-title .em{color:var(--mint);display:block}
+  .s-lead{
+    position:absolute;left:72px;top:196px;width:1000px;
+    font-size:19px;line-height:1.62;color:var(--dim);margin:0;
+  }
+  .s-lead b{color:var(--mint);font-weight:700}
+  .s-lead .w{color:var(--ink);font-weight:700}
+  .s-foot{
+    position:absolute;left:72px;right:72px;bottom:34px;text-align:center;
+    font-size:16px;color:var(--dim);
+  }
+  .s-foot b{color:var(--mint);font-weight:700}
+  .dots{position:absolute;right:72px;top:56px;display:flex;gap:6px;align-items:center}
+  .dots i{width:6px;height:6px;border-radius:50%;background:var(--line);display:block}
+  .dots i.on{background:var(--mint);width:16px;border-radius:3px}
+
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:6px;
+    padding:22px 22px 18px;position:absolute;
+  }
+  .card .clab{
+    font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.18em;
+    color:var(--dim2);text-transform:uppercase;margin:0 0 12px;
+  }
+  .card h3{font-family:var(--disp);font-weight:700;font-size:21px;margin:0 0 10px;line-height:1.34}
+  .card p{font-size:14px;line-height:1.65;color:var(--dim);margin:0}
+  .card p b{color:var(--ink);font-weight:700}
+
+  .kpi{font-family:var(--disp);font-weight:800;line-height:1;letter-spacing:-.02em}
+  .kpi .u{font-size:.46em;font-weight:700;margin-left:3px;letter-spacing:0}
+  .kpilab{font-size:12px;color:var(--dim2);margin-top:7px;letter-spacing:.01em}
+
+  .chips{display:flex;gap:6px;align-items:center;margin-top:14px;flex-wrap:wrap}
+  .chip{
+    font-size:11px;color:var(--dim);background:var(--card2);
+    border:1px solid var(--line);border-radius:3px;padding:5px 9px;white-space:nowrap;
+  }
+  .chip.on{color:var(--mint);border-color:rgba(47,227,168,.4)}
+  .arw{color:var(--dim2);font-size:11px}
+
+  .num{font-variant-numeric:tabular-nums;font-family:var(--mono)}
+
+  /* 표지 */
+  .cover-rule{position:absolute;left:72px;top:0;width:3px;height:280px;background:linear-gradient(180deg,var(--mint),transparent)}
+  .cover-meta{font-family:var(--mono);font-size:12px;letter-spacing:.16em;color:var(--dim2);text-transform:uppercase}
+
+  table.mini{border-collapse:collapse;width:100%;font-size:13px}
+  table.mini th{
+    font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;
+    color:var(--dim2);text-transform:uppercase;text-align:right;padding:0 0 8px;border-bottom:1px solid var(--line);
+  }
+  table.mini th:first-child{text-align:left}
+  table.mini td{padding:7px 0;border-bottom:1px solid rgba(38,51,65,.5);text-align:right;color:var(--dim)}
+  table.mini td:first-child{text-align:left;color:var(--ink)}
+  table.mini tr.best td{color:var(--mint)}
+  table.mini tr.old td{color:var(--slate)}
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="shell">
+  <header class="pagehead">
+    <div class="kicker">Design Direction · A안 Deep Navy</div>
+    <h1>최종 발표 PPT — 디자인 샘플 3장</h1>
+    <p>참고 샘플의 문법(<b>어두운 바탕 · 민트 단일 강조 · 카드 구획 · 하단 결론 한 줄</b>)을
+      우리 팔레트로 옮겼습니다. 실제 수치를 그대로 넣었으니 톤과 정보 밀도를 함께 보실 수 있습니다.
+      확정되면 이 규격 그대로 <b>PowerPoint 15장</b>으로 옮깁니다.</p>
+    <div class="toolbar">
+      <button class="btn" id="g" aria-pressed="false">12컬럼 가이드</button>
+      <span class="hint">여백 0.75in · 12컬럼 정렬 확인용</span>
+    </div>
+  </header>
+
+  <!-- ══════════ 샘플 1 · 표지 ══════════ -->
+  <section class="slidewrap">
+    <div class="slidecap"><span class="n">Sample 01</span><span>표지</span>
+      <span class="t">— 톤·타이포·핵심 3수치 노출</span></div>
+    <div class="stage"><div class="slide">
+      <div class="guide"><div class="safe"></div></div>
+      <div class="cover-rule"></div>
+
+      <div style="position:absolute;left:72px;top:104px">
+        <div class="cover-meta">2026 상반기 · 위례열병합발전소</div>
+      </div>
+
+      <h1 class="s-title" style="top:150px;width:1060px;font-size:52px;line-height:1.2">
+        공급가능용량 산정,
+        <span class="em">사람의 판단에서 데이터로</span>
+      </h1>
+
+      <p style="position:absolute;left:72px;top:330px;width:820px;font-size:20px;
+                line-height:1.6;color:var(--dim);margin:0">
+        온도와 무관한 <span style="color:var(--ink);font-weight:700">보정값 하나</span>로 맞춰 온 입찰을,
+        온도별 실적을 스스로 학습하는 <b style="color:var(--mint)">예측 모델</b>로 바꿨습니다.
+      </p>
+
+      <!-- 핵심 3수치 -->
+      <div style="position:absolute;left:72px;top:452px;display:flex;gap:0;align-items:stretch">
+        <div style="padding-right:46px">
+          <div class="kpi num" style="font-size:56px;color:var(--mint)">66<span class="u">%↓</span></div>
+          <div class="kpilab">예측 오차 &nbsp;<span class="num">3.83 → 1.29</span> MW</div>
+        </div>
+        <div style="width:1px;background:var(--line)"></div>
+        <div style="padding:0 46px">
+          <div class="kpi num" style="font-size:56px;color:var(--mint)">79<span class="u">%↓</span></div>
+          <div class="kpilab">기준 미달 &nbsp;<span class="num">14 → 3</span>건</div>
+        </div>
+        <div style="width:1px;background:var(--line)"></div>
+        <div style="padding-left:46px">
+          <div class="kpi num" style="font-size:56px;color:var(--mint)">88<span class="u">%↓</span></div>
+          <div class="kpilab">과대 신고 &nbsp;<span class="num">65.4 → 7.6</span> MW</div>
+        </div>
+      </div>
+
+      <div style="position:absolute;left:72px;bottom:44px;right:72px;display:flex;
+                  justify-content:space-between;align-items:flex-end">
+        <div class="cover-meta">발표 10분 &nbsp;·&nbsp; Tool 시연 4분</div>
+        <div class="cover-meta" style="color:var(--dim2)">나래에너지서비스</div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ══════════ 샘플 2 · 한 장 요약 ══════════ -->
+  <section class="slidewrap">
+    <div class="slidecap"><span class="n">Sample 02</span><span>한 장 요약</span>
+      <span class="t">— 결론을 앞에 · KPI 카드 3열 · before/after</span></div>
+    <div class="stage"><div class="slide">
+      <div class="guide"><div class="safe"></div></div>
+      <div class="s-label">한 장 요약</div>
+      <div class="dots"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+      <h2 class="s-title">
+        판단 하나에 기대던 숫자를,
+        <span class="em">데이터가 스스로 갱신합니다</span>
+      </h2>
+
+      <p class="s-lead" style="width:1040px">
+        온도가 달라도 <span class="w">같은 보정값 하나</span>를 쓰던 방식을,
+        <b>온도별 실적을 학습하는 모델</b>로 바꿨습니다.
+        같은 데이터로 검증한 결과 <b>세 지표가 동시에</b> 좋아졌습니다.
+      </p>
+
+      <!-- KPI 3열 -->
+      <div class="card" style="left:72px;top:280px;width:362px;height:186px">
+        <p class="clab">예측 오차</p>
+        <div style="display:flex;align-items:baseline;gap:12px">
+          <div class="kpi num" style="font-size:48px;color:var(--mint)">1.29<span class="u">MW</span></div>
+          <div class="num" style="font-size:16px;color:var(--slate);text-decoration:line-through">3.83</div>
+        </div>
+        <div class="kpilab">평균적으로 몇 MW 틀리는가 (MAE)</div>
+        <!-- 미니 대비 막대 -->
+        <svg width="318" height="26" viewBox="0 0 318 26" style="margin-top:14px" role="img"
+             aria-label="종전 3.83 대비 개선 1.29">
+          <rect x="0" y="2" width="318" height="8" rx="2" fill="var(--slate)"></rect>
+          <rect x="0" y="15" width="107" height="8" rx="2" fill="var(--mint)"></rect>
+        </svg>
+      </div>
+
+      <div class="card" style="left:459px;top:280px;width:362px;height:186px">
+        <p class="clab">기준 미달</p>
+        <div style="display:flex;align-items:baseline;gap:12px">
+          <div class="kpi num" style="font-size:48px;color:var(--mint)">3<span class="u">건</span></div>
+          <div class="num" style="font-size:16px;color:var(--slate);text-decoration:line-through">14건</div>
+        </div>
+        <div class="kpilab">신고값보다 실제가 낮아 벌점이 걸리는 회차</div>
+        <svg width="318" height="26" viewBox="0 0 318 26" style="margin-top:14px" role="img"
+             aria-label="종전 14건 대비 개선 3건">
+          <g fill="var(--slate)">
+            <!-- 14 -->
+            <rect x="0" y="2" width="318" height="8" rx="2"></rect>
+          </g>
+          <rect x="0" y="15" width="68" height="8" rx="2" fill="var(--mint)"></rect>
+        </svg>
+      </div>
+
+      <div class="card" style="left:846px;top:280px;width:362px;height:186px">
+        <p class="clab">과대 신고</p>
+        <div style="display:flex;align-items:baseline;gap:12px">
+          <div class="kpi num" style="font-size:48px;color:var(--mint)">7.6<span class="u">MW</span></div>
+          <div class="num" style="font-size:16px;color:var(--slate);text-decoration:line-through">65.4</div>
+        </div>
+        <div class="kpilab">실제보다 높게 신고한 양의 합계</div>
+        <svg width="318" height="26" viewBox="0 0 318 26" style="margin-top:14px" role="img"
+             aria-label="종전 65.4 대비 개선 7.6">
+          <rect x="0" y="2" width="318" height="8" rx="2" fill="var(--slate)"></rect>
+          <rect x="0" y="15" width="37" height="8" rx="2" fill="var(--mint)"></rect>
+        </svg>
+      </div>
+
+      <!-- before / after 흐름 -->
+      <div style="position:absolute;left:72px;top:492px;right:72px;height:132px;
+                  border:1px solid var(--line);border-radius:6px;background:var(--card2);
+                  display:flex;align-items:center;padding:0 24px;gap:22px">
+        <div style="flex:1">
+          <div class="clab" style="color:var(--slate);margin-bottom:11px">종전 · 사람의 판단</div>
+          <div class="chips" style="margin:0">
+            <span class="chip">이론값 계산</span><span class="arw">→</span>
+            <span class="chip">실적과 비교</span><span class="arw">→</span>
+            <span class="chip" style="color:var(--slate)">보정값 <b>1개</b>를 정수로 결정</span>
+          </div>
+        </div>
+        <div style="font-size:22px;color:var(--mint)">→</div>
+        <div style="flex:1.08">
+          <div class="clab" style="color:var(--mint);margin-bottom:11px">현재 · 데이터의 학습</div>
+          <div class="chips" style="margin:0">
+            <span class="chip on">자동 취득</span><span class="arw">→</span>
+            <span class="chip on">온도별 학습</span><span class="arw">→</span>
+            <span class="chip on">최적 방식 재선정</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="s-foot">사람이 정하던 값이 아니라,
+        <b>36회차 실적이 스스로 만들어 내는 값</b>입니다.</div>
+    </div></div>
+  </section>
+
+  <!-- ══════════ 샘플 3 · 차트 ══════════ -->
+  <section class="slidewrap">
+    <div class="slidecap"><span class="n">Sample 03</span><span>데이터 슬라이드</span>
+      <span class="t">— 2단 축 막대 + 곡선 비교 · 정보 밀도 확인용</span></div>
+    <div class="stage"><div class="slide">
+      <div class="guide"><div class="safe"></div></div>
+      <div class="s-label">04 모델 개발</div>
+      <div class="dots"><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i></div>
+
+      <h2 class="s-title" style="width:1060px">
+        잇는 방식 7가지를 똑같은 조건에서 겨뤄
+        <span class="em">가장 잘 맞히는 하나를 골랐습니다</span>
+      </h2>
+
+      <p class="s-lead" style="width:1080px;top:200px">
+        <span class="w">정답을 한 건씩 가리고 나머지로 맞혀보는 방식</span>으로 36번 채점했습니다.
+        <b>GP · RBF</b>가 세 지표 모두 1위였습니다.
+      </p>
+
+      <!-- 좌: 종전 대비 + 7후보 확대 -->
+      <div class="card" style="left:72px;top:268px;width:648px;height:352px;padding:20px 22px 16px">
+        <p class="clab">평균 오차 비교 &nbsp;·&nbsp; 단위 MW</p>
+
+        <!-- 상단: 종전 vs 개선 -->
+        <svg width="604" height="86" viewBox="0 0 604 86" role="img"
+             aria-label="종전 일괄 3.833 대비 GP RBF 1.312">
+          <text x="0" y="12" font-size="11" fill="#8A99A8" font-family="JetBrains Mono,monospace">종전 · 일괄 보정</text>
+          <rect x="0" y="19" width="560" height="16" rx="2" fill="var(--slate)"></rect>
+          <text x="568" y="32" font-size="14" fill="#6B7A88" font-family="JetBrains Mono,monospace" font-weight="700">3.83</text>
+          <text x="0" y="60" font-size="11" fill="#2FE3A8" font-family="JetBrains Mono,monospace">개선 · GP · RBF</text>
+          <rect x="0" y="67" width="192" height="16" rx="2" fill="var(--mint)"></rect>
+          <text x="200" y="80" font-size="14" fill="#2FE3A8" font-family="JetBrains Mono,monospace" font-weight="700">1.31</text>
+        </svg>
+
+        <div style="height:1px;background:var(--line);margin:14px 0 12px"></div>
+
+        <p class="clab" style="margin-bottom:10px">
+          후보 7가지 정밀 비교 <span style="color:var(--mint)">(1.25 ~ 1.55 구간 확대)</span></p>
+
+        <!-- 하단: 7후보 확대 -->
+        <svg width="604" height="176" viewBox="0 0 604 176" role="img"
+             aria-label="후보 7가지 평균 오차 확대 비교">
+          <!-- 격자 -->
+          <g stroke="#263341" stroke-width="1">
+            <line x1="150" y1="4" x2="150" y2="152"></line>
+            <line x1="270" y1="4" x2="270" y2="152"></line>
+            <line x1="390" y1="4" x2="390" y2="152"></line>
+            <line x1="510" y1="4" x2="510" y2="152"></line>
+          </g>
+          <g font-family="JetBrains Mono,monospace" font-size="9" fill="#5F6E7C" text-anchor="middle">
+            <text x="150" y="167">1.30</text><text x="270" y="167">1.36</text>
+            <text x="390" y="167">1.42</text><text x="510" y="167">1.48</text>
+          </g>
+          <!-- 막대: x = 150 + (mae-1.30)*2000  (0.06MW = 120px) -->
+          <g font-family="'Noto Sans KR',sans-serif" font-size="11.5">
+            <!-- 1 RBF -->
+            <text x="0" y="14" fill="#2FE3A8" font-weight="700">GP · RBF</text>
+            <rect x="150" y="5" width="24" height="13" rx="2" fill="var(--mint)"></rect>
+            <text x="182" y="15" fill="#2FE3A8" font-family="JetBrains Mono,monospace" font-weight="700">1.312</text>
+            <!-- 2 RQ -->
+            <text x="0" y="35" fill="#8A99A8">Rational Quadratic</text>
+            <rect x="150" y="26" width="56" height="13" rx="2" fill="var(--mint-d)"></rect>
+            <text x="214" y="36" fill="#8A99A8" font-family="JetBrains Mono,monospace">1.328</text>
+            <!-- 3 M52 -->
+            <text x="0" y="56" fill="#8A99A8">Matérn 5/2</text>
+            <rect x="150" y="47" width="66" height="13" rx="2" fill="var(--mint-d)"></rect>
+            <text x="224" y="57" fill="#8A99A8" font-family="JetBrains Mono,monospace">1.333</text>
+            <!-- 4 M32 -->
+            <text x="0" y="77" fill="#8A99A8">Matérn 3/2</text>
+            <rect x="150" y="68" width="98" height="13" rx="2" fill="var(--mint-d)"></rect>
+            <text x="256" y="78" fill="#8A99A8" font-family="JetBrains Mono,monospace">1.349</text>
+            <!-- 5 exp -->
+            <text x="0" y="98" fill="#8A99A8">지수형</text>
+            <rect x="150" y="89" width="198" height="13" rx="2" fill="#3D5566"></rect>
+            <text x="356" y="99" fill="#8A99A8" font-family="JetBrains Mono,monospace">1.399</text>
+            <!-- 6 kernel reg -->
+            <text x="0" y="119" fill="#8A99A8">거리가중 평균</text>
+            <rect x="150" y="110" width="248" height="13" rx="2" fill="#3D5566"></rect>
+            <text x="406" y="120" fill="#8A99A8" font-family="JetBrains Mono,monospace">1.424</text>
+            <!-- 7 bin -->
+            <text x="0" y="140" fill="#8A99A8">온도구간 평균</text>
+            <rect x="150" y="131" width="366" height="13" rx="2" fill="var(--slate)"></rect>
+            <text x="524" y="141" fill="#8A99A8" font-family="JetBrains Mono,monospace">1.483</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- 우: 곡선 겹침 -->
+      <div class="card" style="left:744px;top:268px;width:464px;height:352px;padding:20px 22px 16px">
+        <p class="clab">방식별 보정 곡선 &nbsp;·&nbsp; 온도 0~35°C</p>
+        <svg width="420" height="196" viewBox="0 0 420 196" role="img"
+             aria-label="5가지 방식의 보정 곡선. 가운데는 거의 겹치고 양 끝에서 갈린다">
+          <!-- 0선 -->
+          <line x1="34" y1="152" x2="404" y2="152" stroke="#263341" stroke-dasharray="3 3"></line>
+          <text x="0" y="156" font-size="9" fill="#5F6E7C" font-family="JetBrains Mono,monospace">0</text>
+          <text x="0" y="34" font-size="9" fill="#5F6E7C" font-family="JetBrains Mono,monospace">+8</text>
+          <!-- x축 라벨 -->
+          <g font-size="9" fill="#5F6E7C" font-family="JetBrains Mono,monospace" text-anchor="middle">
+            <text x="34" y="188">0°C</text><text x="140" y="188">10</text>
+            <text x="246" y="188">20</text><text x="352" y="188">30</text>
+          </g>
+          <!-- 곡선 5개: y = 152 - corr*13.2 ; x = 34 + t*10.6 -->
+          <g fill="none" stroke-width="1.6" opacity=".62">
+            <polyline stroke="#4FD6C0" points="34,53 87,75 140,84 193,72 246,106 299,171 352,183 405,137"></polyline>
+            <polyline stroke="#54C9E0" points="34,52 87,74 140,85 193,72 246,107 299,171 352,185 405,138"></polyline>
+            <polyline stroke="#7CB8E8" points="34,53 87,74 140,85 193,72 246,108 299,170 352,185 405,140"></polyline>
+            <polyline stroke="#A9A8E0" points="34,53 87,76 140,88 193,74 246,111 299,171 352,184 405,143"></polyline>
+          </g>
+          <polyline fill="none" stroke="#2FE3A8" stroke-width="2.6"
+                    points="34,53 87,75 140,84 193,72 246,106 299,152 352,183 405,137"></polyline>
+          <!-- 차이 표시 -->
+          <g>
+            <line x1="34" y1="50" x2="34" y2="56" stroke="#8A99A8"></line>
+            <text x="42" y="46" font-size="10" fill="#8A99A8" font-family="JetBrains Mono,monospace">차이 0.11</text>
+            <line x1="405" y1="134" x2="405" y2="146" stroke="#FF5A72" stroke-width="1.6"></line>
+            <text x="398" y="128" font-size="10" fill="#FF5A72" text-anchor="end"
+                  font-family="JetBrains Mono,monospace">차이 0.43</text>
+          </g>
+        </svg>
+        <p style="font-size:13.5px;line-height:1.6;color:var(--dim);margin:8px 0 0">
+          가운데는 <b style="color:var(--ink);font-weight:700">거의 같고</b>,
+          <b style="color:var(--red-w);font-weight:700">양 끝에서만 갈립니다.</b>
+          그래서 눈으로는 고를 수 없고 수치로 채점해야 합니다.
+        </p>
+      </div>
+
+      <div class="s-foot">방식을 <b>감으로 정하지 않았습니다</b> —
+        같은 조건에서 채점해 <b>1위를 데이터가 지목</b>했습니다.</div>
+    </div></div>
+  </section>
+
+  <!-- 확인 요청 -->
+  <section style="margin:52px 0 0;border-top:1px solid var(--line);padding-top:36px">
+    <div class="kicker">Next</div>
+    <h2 style="font-family:var(--disp);font-weight:800;font-size:26px;margin:14px 0 18px">
+      이 방향으로 15장을 채울까요?</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
+      <div class="card" style="position:static">
+        <p class="clab">확인 1 · 강조색</p>
+        <p>참고 샘플의 <b style="color:var(--mint)">민트</b>를 주강조로 잡았습니다.
+          SK 레드는 <b style="color:var(--red-w)">위험·미달</b>에만 씁니다.
+          레드를 주강조로 바꾸는 것도 가능합니다.</p>
+      </div>
+      <div class="card" style="position:static">
+        <p class="clab">확인 2 · 정보 밀도</p>
+        <p>샘플 03이 가장 빽빽합니다. <b>이 정도가 적당</b>한지,
+          더 덜어낼지 알려주십시오. 15장 전체 기준이 됩니다.</p>
+      </div>
+      <div class="card" style="position:static">
+        <p class="clab">확인 3 · 제목 어투</p>
+        <p>제목을 라벨이 아니라 <b>문장</b>으로 썼습니다
+          (“…골랐습니다”). 격식을 더 갖춘 명사형이 나으면 바꿉니다.</p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  // 슬라이드는 1280×720 고정 좌표로 그려 PowerPoint 로 1:1 이식한다.
+  // 화면 폭에 맞춰 배율만 조정한다.
+  var SW = 1280, SH = 720;
+  function fit(){
+    document.querySelectorAll('.stage').forEach(function(st){
+      var sl = st.querySelector('.slide');
+      var s = st.clientWidth / SW;
+      sl.style.transform = 'scale(' + s + ')';
+      st.style.height = Math.round(SH * s) + 'px';
+    });
+  }
+  // 12컬럼 가이드 생성 (검토용)
+  document.querySelectorAll('.guide').forEach(function(g){
+    var L = 72, R = 72, gut = 17.28, n = 12;
+    var w = (SW - L - R - gut * (n - 1)) / n;
+    for (var i = 0; i < n; i++){
+      var d = document.createElement('div');
+      d.className = 'col';
+      d.style.left = (L + i * (w + gut)) + 'px';
+      d.style.width = w + 'px';
+      g.appendChild(d);
+    }
+  });
+  var btn = document.getElementById('g');
+  btn.addEventListener('click', function(){
+    var on = document.body.classList.toggle('showguide');
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  window.addEventListener('resize', fit);
+  fit();
+</script>

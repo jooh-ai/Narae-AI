@@ -16,6 +16,8 @@ TARGETS = [
     ("wirye_capacity/templates/excel3_profile_template.tpl", "xlsx"),   # DRM 회피 사본
     ("wirye_capacity/data/measurements_seed.json", "json"),
     ("wirye_capacity/data/base_table.json", "json"),
+    # 로고는 없어도 프로그램은 돈다(헤더가 이모지로 폴백) — 그래서 optional
+    ("wirye_capacity/data/logo.png", "png?"),
 ]
 
 
@@ -26,6 +28,9 @@ def check(root: Path) -> int:
     for rel, kind in TARGETS:
         found = next((b / rel for b in bases if (b / rel).exists()), None)
         if found is None:
+            if kind.endswith("?"):          # 없어도 되는 자산
+                print(f"  ➖ 없음(선택) {rel}")
+                continue
             print(f"  ❌ 없음      {rel}")
             bad += 1
             continue
@@ -49,6 +54,9 @@ def check(root: Path) -> int:
                 json.loads(found.read_text(encoding="utf-8"))
             except Exception as e:              # noqa: BLE001
                 ok, note = False, f"JSON 파싱 실패: {e}"
+        elif kind.startswith("png"):
+            if found.open("rb").read(8) != b"\x89PNG\r\n\x1a\n":
+                ok, note = False, "PNG 시그니처가 아님 — 손상"
         mark = "✅" if ok else "❌"
         print(f"  {mark} {size:>9,}바이트  {rel}" + (f"   ← {note}" if note else ""))
         if not ok:

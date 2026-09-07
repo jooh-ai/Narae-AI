@@ -54,11 +54,18 @@ def migrate_legacy_db(target: str | Path | None = None) -> str | None:
     import shutil
     dst = Path(target) if target else C.db_path()
     src = C.legacy_db_path()
-    if dst.exists() or not src.exists() or src.resolve() == dst.resolve():
+    # 이관은 폴더당 한 번만. 표식을 남기지 않으면, 사용자가 초기화하려고 DB 를 지웠을 때
+    # 홈 폴더 파일이 계속 되살아난다(2026-08 현장에서 실제로 그랬다 — 31건을 기대했는데
+    # 32건이 다시 들어왔다). '대상이 없으면 복사' 만으로는 의도를 구분할 수 없다.
+    marker = dst.parent / ".wirye_db_migrated"
+    if dst.exists() or marker.exists() or not src.exists():
+        return None
+    if src.resolve() == dst.resolve():
         return None
     try:
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
+        marker.write_text(f"migrated from {src}\n", encoding="utf-8")
     except OSError as e:                                    # noqa: BLE001
         return f"기존 DB 를 옮기지 못했습니다: {e}"
     return (f"기존 누적 DB 를 Tool 폴더로 옮겼습니다.\n"
@@ -130,15 +137,30 @@ class MeasurementStore:
 
     def compute_from_rims(self, connector, date: str, *, start: str = "17:00",
                           engine: TheoryEngine | None = None, deg: float = C.DEFAULT_DEG,
-                          season: str | None = None) -> TestRecord:
+                          season: str | None = None, w: float | None = None,
+                          rh: float | None = None) -> TestRecord:
         """RiMS에서 테스트 1건 자동취득 → 보정값 계산 (저장은 하지 않음 = 확인용).
 
         connector 는 .acquire(date, start)→AcquiredTest 인터페이스(mock/실제 동일).
+
+        w: IGV turn-up. None 이면 온도밴드 기본값(+6/+4/+2/0). IGV turn-up 을 실시하지
+           않은 시험은 반드시 0 을 준다 — 보정값 = CC실측 − 이론 − W 이므로, 안 한
+           turn-up 을 빼면 보정값이 그만큼 낮게 기록된다(2026-08 시운전에서 8건 중
+           3건이 미실시였고, 그 3건이 4~6 MW 낮게 나와 미달로 오판됐다).
+
+        rh: 상대습도 재정의(%). None 이면 취득값을 쓴다.
+
+           MBL 습도 센서가 드리프트 중이라(10개월에 10%p) 취득값이 담당자 표와 크게
+           어긋나는 회차가 있다. 2026-05-27 이 그랬다 — MBL 32.5% vs 담당자 표 74.1%.
+           습도 1개가 이론기준값 2.14 MW, 그대로 보정값 2.14 MW 를 움직이므로 조용히
+           넘길 수 없다. 사람이 옳은 값을 넣을 수 있게 이 인자를 둔다.
+           (자동 대체는 하지 않는다 — pick_rh() 주석 참조. 편차만으로는 못 가른다.)
         """
         acq = connector.acquire(date, start)
         return self.build_record(
-            cit=acq.cit, press=acq.pressure, cc_meas=acq.cc_meas, w=None,
-            rh=getattr(acq, "rh", None), cp_meas=getattr(acq, "cp_meas", None),
+            cit=acq.cit, press=acq.pressure, cc_meas=acq.cc_meas, w=w,
+            rh=getattr(acq, "rh", None) if rh is None else rh,
+            cp_meas=getattr(acq, "cp_meas", None),
             cp_design=getattr(acq, "cp_design", None),
             season=season or getattr(acq, "season", None), date=date,
             engine=engine, deg=deg)

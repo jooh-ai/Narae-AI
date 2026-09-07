@@ -10,7 +10,8 @@ import argparse
 from pathlib import Path
 
 from . import constants as C
-from .pipeline import run_pipeline
+from .config import correction_method
+from .pipeline import METHOD_LABEL, run_pipeline
 from .rims import MockRimsConnector
 from .store import MeasurementStore
 
@@ -96,13 +97,16 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--out", help="출력 엑셀3 입찰파일 경로")
     r.add_argument("--template", help="엑셀3 템플릿(입찰 양식) 경로. 미지정 시 번들 템플릿 사용")
     r.add_argument("--deg", type=float, default=C.DEFAULT_DEG)
-    r.add_argument("--bid-day", dest="bid_day", default=None,
-                   help="입찰 적용일(엑셀3-1 일자 라벨). 미지정 시 전체 중위 평균")
-    r.add_argument("--curve", action="store_true", help="커널 보정곡선 사용(기본: 구간 평균)")
+    r.add_argument("--curve", action="store_true", help="커널 보정곡선 사용")
     r.add_argument("--gp", action="store_true",
-                   help="GP(가우시안 프로세스) 보정곡선 — LOOCV 예측오차 최소(1.243 MW)")
+                   help="GP(가우시안 프로세스) 보정곡선 — LOOCV 예측오차 최소(1.33 MW)")
+    r.add_argument("--bin", dest="bin_", action="store_true",
+                   help="온도 구간평균 사용(엑셀4 방식)")
     r.add_argument("--margin", type=float, default=0.0, metavar="K",
                    help="미달 방지 안전마진 계수(0=미적용, 0.8 권장). 마진=K×구간실측변동")
+    r.add_argument("--no-igv", dest="no_igv", action="store_true",
+                   help="IGV Turn-up 미실시 시험 — 취득값만 보여 주고 누적에는 넣지 않는다"
+                        "(담당자 방침: IGV 실시 시험만 보정값에 사용)")
     r.add_argument("--accumulate", action="store_true",
                    help="이 테스트를 누적에 반영(저장). 기본은 확인용(미반영)")
     r.add_argument("--seed", action="store_true", help="DB가 비었으면 시드 32건 적재")
@@ -170,17 +174,23 @@ def main(argv: list[str] | None = None) -> int:
         from .profile import DEFAULT_TEMPLATE
         res = run_pipeline(date=args.date, store=store, output_path=args.out,
                            connector=_build_connector(args), forecast_path=args.forecast,
-                           deg=args.deg, bid_day=args.bid_day, accumulate=args.accumulate,
+                           deg=args.deg, accumulate=args.accumulate,
                            correction_method=("gp" if args.gp else
-                                              "curve" if args.curve else "bin"),
+                                              "curve" if args.curve else
+                                              "bin" if args.bin_ else
+                                              correction_method()),
                            margin_k=args.margin,
                            template_path=args.template or DEFAULT_TEMPLATE,
-                           start=args.start)
-        src = f"'{args.bid_day}'" if args.bid_day else "전체 중위 평균"
-        print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  (기준: {src})")
+                           start=args.start,
+                           igv=not args.no_igv)
+        print(f"적용 대기압 : {res.applied_pressure:.1f} mbar  "
+              f"(예보 3~7일차 중위 평균 − 8)")
+        print(f"보정 방법   : {METHOD_LABEL.get(res.correction_method, res.correction_method)}"
+              f"  — 누적 {res.measurement_count}건 전체에 적용")
         if res.new_record is not None:
             r = res.new_record
-            status = ("✅ 누적 반영됨" if res.reflected else
+            status = ("⛔ IGV 미실시 — 누적 제외(방침)" if res.igv_skipped else
+                      "✅ 누적 반영됨" if res.reflected else
                       "⚠ 이미 반영된 날짜 — 건너뜀" if res.duplicate_skipped else
                       "확인용(미반영)")
             rh_txt = f"RH {r.rh:.1f}%" if r.rh is not None else "RH 60%(고정)"
