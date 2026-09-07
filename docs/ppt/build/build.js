@@ -49,6 +49,18 @@ function main() {
   pptx.author = state.meta.authors.join(', ');
 
   let done = 0, todo = [];
+  /* 발표자 노트 — 슬라이드 모듈은 슬라이드 객체를 돌려주지 않으므로, 각 장을
+     만든 직후 pptx 가 방금 붙인 마지막 장에 노트를 단다. 노트 본문은 수치를
+     deck_data 에서 받아 만든다(notes.js) — 슬라이드와 노트가 어긋나면
+     발표 중에 들킨다. 노트 파일이 없는 판(18장판)은 조용히 건너뛴다. */
+  let NOTES = null;
+  try {
+    NOTES = require(path.join(SLIDE_DIR, 'notes.js'))(DATA, state.meta);
+  } catch (e) {
+    if (e.code !== 'MODULE_NOT_FOUND') throw e;
+  }
+  let noted = 0;
+
   for (const it of state.slides) {
     const f = path.join(SLIDE_DIR, it.file);
     const exists = fs.existsSync(f);
@@ -57,6 +69,11 @@ function main() {
     if (!listOnly) {
       if (exists) require(f)(pptx, T, state.meta, DATA);
       else placeholder(pptx, it);
+      const note = NOTES && NOTES[it.no];
+      if (note && pptx.slides.length) {
+        pptx.slides[pptx.slides.length - 1].addNotes(note);
+        noted++;
+      }
     }
   }
 
@@ -73,7 +90,8 @@ function main() {
 
   return pptx.writeFile({ fileName: OUT }).then(() => {
     const kb = (fs.statSync(OUT).size / 1024).toFixed(0);
-    console.log('출력  ' + path.relative(process.cwd(), OUT) + '  (' + kb + ' KB)');
+    console.log('출력  ' + path.relative(process.cwd(), OUT) + '  (' + kb + ' KB)'
+                + (noted ? '   발표자 노트 ' + noted + '장' : ''));
   });
 }
 main();
