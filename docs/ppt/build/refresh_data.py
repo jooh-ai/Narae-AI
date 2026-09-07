@@ -16,6 +16,9 @@
 method_compare._score · commission_stats.stats/skill — 장표용으로 따로 구현하지
 않는다. 그래야 Tool 화면에 뜨는 값과 장표 값이 어긋날 수 없다.
 
+한 번 돌리는 데 2분쯤 걸린다. 대부분은 varsel(변수 조합 5가지 × LOOCV 40회 ×
+회차마다 하이퍼파라미터 재선택)이다 — 6장 표를 정직하게 채우는 값이라 줄이지 않았다.
+
 계산하지 않고 손으로 두는 것 (기록이지 계산이 아니다)
     · BLT 적용값 16회차      담당자 실적표에서 옮겨 적은 값 (scripts/period_check.py)
     · 시운전 함정 3건        증상·크기·가드는 서술이다
@@ -43,6 +46,7 @@ import commission_stats as CS                        # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cp_value as CV                                # noqa: E402
 import method_compare as MC                          # noqa: E402
+import varsel as VS                                  # noqa: E402
 
 SEED = TOOL / "wirye_capacity" / "data" / "measurements_seed.json"
 OUT = Path(__file__).with_name("deck_data.json")
@@ -341,6 +345,7 @@ def main() -> None:
         "curves": curves,
         "profile": profile_cmp(recs, best["key"]),
         "causes": causes(recs),
+        "varsel": VS.compare(recs, sel),
         "learning": learning(recs),
         "cp": CV.summary(impact, len(sel)),
         "commission": commission(recs),
@@ -374,6 +379,21 @@ def main() -> None:
         f"{r['label']} 원시 {r['raw']:+.2f}" +
         (f" → 통제후 {r['part']:+.2f}" if r["part"] is not None else "")
         for r in cz["rows"]))
+    vs = data["varsel"]
+    vb = next(r for r in vs["rows"] if r["d"] == 1)
+    print(f"변수 선정   {vb['label']} 단독 RMSE {vb['rmse']:.3f} · MAE {vb['mae']:.3f} · "
+          f"R² {vb['r2']:+.3f} · AIC {vb['aic']:.1f}   "
+          f"(1위: RMSE {vs['best_rmse_is_base']} · MAE {vs['best_mae_is_base']} · "
+          f"AIC {vs['best_aic_is_base']})")
+    for r in vs["rows"]:
+        if r["d"] == 1:
+            continue
+        v = r["vs_base"]
+        print(f"            {r['label']:20s} RMSE {r['rmse']:.3f} MAE {r['mae']:.3f} "
+              f"AIC {r['aic']:7.1f}  ΔMAE {v['d_mae']:+.3f}±{v['se']:.3f} "
+              f"t={v['t']:+.2f} {'유의' if v['sig'] else '구분 안 됨'}")
+    if vs["any_sig"]:
+        print("            ⚠ 추가 변수 중 유의하게 더 좋은 조합이 생겼다 — 6장 결론을 다시 봐야 한다")
     pc = data["profile"]
     print(f"곡선 비교   {pc['t'][0]} ~ {pc['t'][-1]}℃  이론 vs 실제  차이 "
           f"{pc['gap_min']:+.2f} ~ {pc['gap_max']:+.2f} MW")

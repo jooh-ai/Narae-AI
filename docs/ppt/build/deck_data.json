@@ -1,5 +1,5 @@
 {
- "generated": "2026-09-07T03:05+00:00",
+ "generated": "2026-09-07T06:10+00:00",
  "source": "tool/wirye_capacity/data/measurements_seed.json",
  "n": 40,
  "n_score": 39,
@@ -626,6 +626,162 @@
    }
   ],
   "model_mae": 1.286
+ },
+ "varsel": {
+  "rows": [
+   {
+    "label": "외기 온도",
+    "keys": [
+     "cit"
+    ],
+    "d": 1,
+    "n": 39,
+    "rmse": 1.678,
+    "mae": 1.301,
+    "r2": 0.8536,
+    "aic": 155.42,
+    "k": 3,
+    "log_ml": -74.71,
+    "ls": [
+     8.0
+    ],
+    "vs_base": null
+   },
+   {
+    "label": "외기 온도 + 상대습도",
+    "keys": [
+     "cit",
+     "rh"
+    ],
+    "d": 2,
+    "n": 39,
+    "rmse": 1.706,
+    "mae": 1.293,
+    "r2": 0.8487,
+    "aic": 165.22,
+    "k": 4,
+    "log_ml": -78.61,
+    "ls": [
+     6.0,
+     14.0
+    ],
+    "vs_base": {
+     "d_mae": -0.008,
+     "se": 0.078,
+     "t": -0.1,
+     "sig": false
+    }
+   },
+   {
+    "label": "외기 온도 + 대기압",
+    "keys": [
+     "cit",
+     "press"
+    ],
+    "d": 2,
+    "n": 39,
+    "rmse": 1.721,
+    "mae": 1.33,
+    "r2": 0.8462,
+    "aic": 161.04,
+    "k": 4,
+    "log_ml": -76.52,
+    "ls": [
+     6.0,
+     14.0
+    ],
+    "vs_base": {
+     "d_mae": 0.029,
+     "se": 0.086,
+     "t": 0.34,
+     "sig": false
+    }
+   },
+   {
+    "label": "외기 온도 + 복수기 진공도",
+    "keys": [
+     "cit",
+     "cp_meas"
+    ],
+    "d": 2,
+    "n": 39,
+    "rmse": 1.787,
+    "mae": 1.404,
+    "r2": 0.834,
+    "aic": 162.53,
+    "k": 4,
+    "log_ml": -77.27,
+    "ls": [
+     8.0,
+     14.0
+    ],
+    "vs_base": {
+     "d_mae": 0.103,
+     "se": 0.054,
+     "t": 1.92,
+     "sig": false
+    }
+   },
+   {
+    "label": "전체 변수",
+    "keys": [
+     "cit",
+     "cp_meas",
+     "press",
+     "rh"
+    ],
+    "d": 4,
+    "n": 39,
+    "rmse": 1.867,
+    "mae": 1.44,
+    "r2": 0.819,
+    "aic": 173.04,
+    "k": 6,
+    "log_ml": -80.52,
+    "ls": [
+     6.0,
+     14.0,
+     14.0,
+     14.0
+    ],
+    "vs_base": {
+     "d_mae": 0.139,
+     "se": 0.1,
+     "t": 1.39,
+     "sig": false
+    }
+   }
+  ],
+  "pick": "외기 온도",
+  "pick_keys": [
+   "cit"
+  ],
+  "n_fit": 38,
+  "base": {
+   "label": "외기 온도",
+   "rmse": 1.678,
+   "mae": 1.301,
+   "r2": 0.8536,
+   "aic": 155.42,
+   "n": 39
+  },
+  "near": {
+   "label": "외기 온도 + 상대습도",
+   "rmse": 1.706,
+   "mae": 1.293,
+   "r2": 0.8487,
+   "aic": 165.22,
+   "vs_base": {
+    "d_mae": -0.008,
+    "se": 0.078,
+    "t": -0.1,
+    "sig": false
+   }
+  },
+  "any_sig": false,
+  "best_rmse_is_base": true,
+  "best_mae_is_base": false,
+  "best_aic_is_base": true
  },
  "learning": {
   "n": 28,
