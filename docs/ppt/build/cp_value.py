@@ -70,6 +70,29 @@ RCF = 0.9067               # 지역별 용량가격계수 (위례)
 MW_PER_YEAR = RATE_KW_DAY * 1000 * BID_DAYS    # 1 MW 를 1년 인정받을 때 원
 
 
+def summary(impact: dict, n_score: int) -> dict:
+    """장표가 쓰는 CP 금액 묶음. deck_data.json 의 'cp' 블록이 된다.
+
+    단가를 바꾸려면 이 파일 맨 위 RATE_KW_DAY 한 줄만 고친다 — 문서와
+    발표자료 수치가 함께 갱신된다.
+    """
+    per_b = impact["blanket"]["opp"] / n_score      # 회당 낮게 신고한 양 MW
+    per_g = impact["gp"]["opp"] / n_score
+    return {
+        "rate_kw_day": RATE_KW_DAY,
+        "maint_days": MAINT_DAYS,
+        "bid_days": BID_DAYS,
+        "mw_year": round(MW_PER_YEAR),              # 1 MW 연간 원
+        "per_before": round(per_b, 2),
+        "per_after": round(per_g, 2),
+        "lost_before": round(per_b * MW_PER_YEAR),  # 종전에 못 받던 원/년
+        "lost_after": round(per_g * MW_PER_YEAR),
+        "recover": round((per_b - per_g) * MW_PER_YEAR),
+        "basis": f"{RATE_KW_DAY:,.0f}원/kW·일 × 입찰일 {BID_DAYS:,.0f}일"
+                 f"(정비 {MAINT_DAYS:,.0f}일 제외)",
+    }
+
+
 def won(v: float) -> str:
     """원 → 읽기 쉬운 단위."""
     if abs(v) >= 1e8:

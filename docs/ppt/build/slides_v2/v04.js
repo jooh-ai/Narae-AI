@@ -19,6 +19,8 @@ module.exports = (pptx, T, meta, D) => {
   const { C, G, LW } = T;
   const { d } = T.shell(pptx, { sec: '왜 하는가', idx: 1, step: 1 });
   const P = D.profile, R = P.rows, FLAT = D.blanket.flat, B = D.impact.blanket;
+  const CP = D.cp;
+  const man = v => Math.round(v / 1e4).toLocaleString() + '만원';
   T.title(d, '테스트는 한 점,', '신고는 *61개 온도 전부*');
   T.lead(d, '그 빈 구간을 메우려고, 한 점에서 구한 보정값 하나를 61개 온도에 똑같이 ' +
          '적용한 것이 _일괄 보정_ 입니다.', { lines: 1 });
@@ -96,9 +98,12 @@ module.exports = (pptx, T, meta, D) => {
       d.text(s, { x: x + 34, y: 421, w: 240, px: 12, lh: 1.3, color: col });
     });
 
-  d.text('종전 누계 — 낮게 신고해 못 판 양 *' + B.opp.toFixed(1) + ' MW*   ·   ' +
-         '신고값을 못 채운 *' + B.short + '회* (과대 신고 ' + B.over.toFixed(1) + ' MW)',
-         { x: 96, y: 598, w: 1088, px: 13.5, lh: 1.3, color: C.body, align: 'center' });
+  d.text('종전 누계 — 낮게 신고해 못 판 양 *' + B.opp.toFixed(1) + ' MW*  =  용량요금 ' +
+         '*연 ' + man(CP.lost_before) + '*   ·   신고값을 못 채운 *' + B.short + '회*',
+         { x: 96, y: 592, w: 1088, px: 13.5, lh: 1.3, color: C.body, align: 'center' });
+  d.text('용량요금 기준 · ' + CP.basis + '  ·  높게 신고한 쪽은 정산식 Min() 상 ' +
+         '용량요금이 늘지 않아 금액에 넣지 않았습니다',
+         { x: 96, y: 610, w: 1088, px: 10.5, lh: 1.2, color: C.dim2, align: 'center' });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
   /* 금액 환산 기준을 아직 못 받았다(계획서 §9 Q5) — '수익' 이라 단정하지 않는다 */

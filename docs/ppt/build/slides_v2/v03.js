@@ -8,7 +8,8 @@ module.exports = (pptx, T, meta, D) => {
   T.lead(d, '일 처리는 *날짜·시각 한 번 입력*으로 끝나고, 신고 숫자는 *' + D.n +
          '회 실적*이 정합니다.', { w: 1060, lines: 1 });
 
-  const I = D.impact;
+  const I = D.impact, P = D.cp;
+  const man = v => Math.round(v / 1e4).toLocaleString() + '만원';
   [[72,  '예측 오차  ·  MAE', I.gp.mae.toFixed(2),  'MW',
     '← ' + I.blanket.mae.toFixed(2), C.slateL,
     '신고할 값을 미리 계산했을 때 실제와 벌어진 폭의 평균입니다. 작을수록 좋습니다.'],
@@ -41,6 +42,13 @@ module.exports = (pptx, T, meta, D) => {
   d.plab('현재  ·  도구 1개  ·  데이터의 학습', 664, 484, 500, C.brass);
   d.sub('온도별 곡선을 *데이터가 갱신*', 664, 508, 500, 1);
   d.txt('날짜·시각만 넣으면 바로 나옵니다.', 664, 552, 500, 1);
+  /* 금액은 '낮게 신고한 양' 만으로 낸다 — 높게 신고한 쪽은 정산식 Min() 때문에
+     용량요금이 늘지 않는다(docs/ppt/CP_VALUE.md §1). */
+  d.text('낮게 신고해 못 받던 *용량요금*  연 ' + man(P.lost_before) + '  →  ' +
+         man(P.lost_after) + '   ·   회수 *' + man(P.recover) + '/년*',
+         { x: 96, y: 578, w: 1088, px: 14.5, lh: 1.3, color: C.body, align: 'center' });
+  d.text('용량요금 기준 · ' + P.basis + ' · 에너지수익 미포함',
+         { x: 96, y: 600, w: 1088, px: 10.5, lh: 1.2, color: C.dim2, align: 'center' });
 
   /* [검토 반영] 세 수치가 '실제 신고 이력' 으로 읽히면 안 된다. 같은 실적에
      두 방식을 각각 적용해 나란히 채점한 재현값이다. 조건을 화면에 적는다. */

@@ -40,6 +40,8 @@ from wirye_capacity.gp import KERNELS, GPCorrectionCurve  # noqa: E402
 from wirye_capacity.profile import build_profile      # noqa: E402
 from wirye_capacity.theory import TheoryEngine        # noqa: E402
 import commission_stats as CS                        # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cp_value as CV                                # noqa: E402
 import method_compare as MC                          # noqa: E402
 
 SEED = TOOL / "wirye_capacity" / "data" / "measurements_seed.json"
@@ -340,6 +342,7 @@ def main() -> None:
         "profile": profile_cmp(recs, best["key"]),
         "causes": causes(recs),
         "learning": learning(recs),
+        "cp": CV.summary(impact, len(sel)),
         "commission": commission(recs),
     }
     OUT.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -357,6 +360,10 @@ def main() -> None:
     print(f"입찰 관점   평균오차 {b['mae']:.2f} → {g['mae']:.2f} MW ({cut['mae']}%↓)  ·  "
           f"미달 {b['short']} → {g['short']}건 ({cut['short']}%↓)  ·  "
           f"과대신고 {b['over']:.1f} → {g['over']:.1f} MW ({cut['over']}%↓)")
+    cp = data["cp"]
+    print(f"용량요금     {cp['basis']}  ·  1 MW = {cp['mw_year'] / 1e4:,.0f}만원/년  →  "
+          f"못 받던 {cp['lost_before'] / 1e4:,.0f}만 → {cp['lost_after'] / 1e4:,.0f}만  "
+          f"회수 {cp['recover'] / 1e4:,.0f}만원/년")
     lz = data["learning"]
     if lz.get("n"):
         print(f"학습 곡선   {lz['start']}회차부터 {lz['n']}건 walk-forward  ·  " +
