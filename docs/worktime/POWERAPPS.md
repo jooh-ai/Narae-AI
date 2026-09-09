@@ -24,6 +24,63 @@ Power Apps 는 앞 칸의 선택에 따라 뒤 칸을 **걸러낸다.**
 한 번에 보이는 최대 항목이 **18개**이고, 대부분은 1~5개다. 무엇보다
 **규칙에 없는 조합은 목록에 나타나지 않으므로 애초에 고를 수 없다.**
 
+## 0-1. SharePoint 목록 vs Dataverse for Teams
+
+사내에서 두 경로 다 열려 있음이 확인되었다. **HTML 도구의 재현도는 둘이 사실상 같다** —
+화면과 규칙 로직은 전부 Power Fx 이고 데이터 소스와 무관하다. 차이는 데이터 계층에서만
+나며, HTML 의 기능 중 데이터 계층에 의존하는 것은 셋뿐이다.
+
+| HTML 기능 | 데이터 계층 의존 | 판정 |
+|---|---|---|
+| 월 달력 · 셀 입력 팝업 · 화면 구성 | 없음 | 동일 |
+| 연쇄 드롭다운 (규칙 원천 차단) | 없음 — 조합표 조회만 | 동일 |
+| 30% 판정 · 조율 후보 (월 단위) | 약함 — 월 기록 수백 행 | 동일 |
+| 개인 총량 · OT 잔여 | 없음 | 동일 |
+| **탄력근무 3개월 집계** | **있음** | Dataverse 가 편하다 |
+| **"본인 것만 수정" 강제** | **있음** | Dataverse 는 데이터 계층에서, SharePoint 는 앱 로직으로만 |
+| **앱 없이 데이터 확인 · 엑셀 내보내기** | **있음** | **SharePoint 만 가능** |
+
+### 탄력근무 3개월이 갈리는 이유
+
+SharePoint 는 `Sum` · `CountRows` 같은 집계를 서버에 위임하지 못해 앱으로 끌어와 계산한다.
+따라서 `데이터 행 제한`(최대 2000)에 걸린다. 3개월 × 24명 = 최대 2232행이라 이론상 초과다.
+
+다만 이 설계는 **예외만 저장**한다(빈 기록 = 8시간 근무). 대정비 달에 OT 를 많이 써도
+월 400~500행 수준이라 3개월 1500행 안쪽이고, 넘더라도 **월별로 세 번 나눠 읽으면** 된다.
+
+```powerfx
+// SharePoint 에서 3개월을 안전하게 읽는 법 — 한 번에 읽지 않고 월별로 이어 붙인다
+Clear(colFlex);
+ForAll(Sequence(3) As Mo,
+    With({ ms: DateAdd(gvFlexStart, Mo.Value - 1, Months) },
+        Collect(colFlex,
+            Filter(근태기록,
+                근무일 >= ms,
+                근무일 <= DateAdd(DateAdd(ms, 1, Months), -1, Days)))
+    )
+);
+```
+
+Dataverse 는 집계가 위임되므로 이런 우회가 필요 없다.
+
+### 그래서 어느 쪽인가
+
+**SharePoint 목록을 권한다.** 재현도 차이가 위 우회 한 줄로 사라지는 반면,
+**앱이 잘못돼도 목록을 직접 열어 보고 고칠 수 있고 엑셀 내보내기가 기본**이라는 점은
+Dataverse 로는 얻을 수 없다. 처음 도입할 때 이 안전장치가 가장 크다.
+
+### 권하는 조합 — 앱은 Teams, 데이터는 SharePoint
+
+캡처로 확인된 **Teams 안의 Power Apps 스튜디오에서 앱을 만들고**, 데이터는
+**같은 팀 사이트의 SharePoint 목록**에 둔다. SharePoint 는 표준 커넥터라
+추가 라이선스가 필요 없다.
+
+- 앱은 Teams 탭으로 바로 열리고 (접근이 쉽다)
+- 데이터는 목록에서 눈으로 보이고 엑셀로 빠진다 (안전하다)
+
+나중에 승인 워크플로 · 형평성 집계처럼 확장이 커지면 Dataverse 로 옮긴다. 표·열 이름만
+바뀌고 Power Fx 는 거의 그대로여서 이전 부담이 크지 않다.
+
 ## 1. 데이터 — SharePoint 목록 5개
 
 두 팀이 함께 접근하는 Teams 채널(또는 SharePoint 사이트) 한 곳에 만든다.
@@ -384,12 +441,22 @@ If(ThisItem.시간 > 64, RGBA(179, 38, 30, 1), RGBA(22, 24, 29, 1))
 ### 4-8. 탄력근무 3개월 평균 52시간
 
 단위기간이 달을 넘기므로 `colRec` 대신 기간 전체를 따로 읽는다.
+SharePoint 는 집계를 위임하지 못하므로 **월별로 세 번 나눠 읽어** 행 제한을 피한다(§0-1).
 
 ```powerfx
 // btnFlexLoad.OnSelect — 시작 월을 dpFlex 로 고른다
 Set(gvFlexStart, Date(Year(dpFlex.SelectedDate), Month(dpFlex.SelectedDate), 1));
 Set(gvFlexEnd,   DateAdd(DateAdd(gvFlexStart, 3, Months), -1, Days));
-ClearCollect(colFlex, Filter(근태기록, 근무일 >= gvFlexStart, 근무일 <= gvFlexEnd));
+
+Clear(colFlex);
+ForAll(Sequence(3) As Mo,
+    With({ ms: DateAdd(gvFlexStart, Mo.Value - 1, Months) },
+        Collect(colFlex,
+            Filter(근태기록,
+                근무일 >= ms,
+                근무일 <= DateAdd(DateAdd(ms, 1, Months), -1, Days)))
+    )
+);
 
 // 단위기간 소정근로일 수
 Set(gvFlexDays,
