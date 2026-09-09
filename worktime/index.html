@@ -284,7 +284,7 @@ code{background:var(--off);border-radius:4px;padding:1px 5px;font-size:12px;
           <select id="vEnd"></select></div>
         <div class="fld"><label>석식 휴게</label>
           <select id="vDinner">
-            <option value="auto">자동(18:00 이후 근무 시 공제)</option>
+            <option value="auto">자동 (석식 창 이후까지 근무 시 공제)</option>
             <option value="yes">실시(30분 공제)</option>
             <option value="no">미실시(공제 없음)</option>
           </select></div>
@@ -355,6 +355,12 @@ code{background:var(--off);border-radius:4px;padding:1px 5px;font-size:12px;
         <span class="small muted">~</span>
         <input type="time" id="dOtE" step="60" style="width:98px">
         <span class="small muted mono" id="dOtCalc"></span></div>
+      <div class="fld"><label>OT 석식 휴게</label>
+        <select id="dOtDin">
+          <option value="auto">자동 (석식 창 이후까지 하면 공제)</option>
+          <option value="yes">실시 — 공제</option>
+          <option value="no">미실시 — 공제 없음</option>
+        </select></div>
       <div class="fld"><label>OT 직접 입력</label>
         <input type="number" id="dOt" step="0.25" min="0" max="14" style="width:82px">
         <span class="small muted">시간 — 위에 시각을 넣으면 자동 계산됩니다 (분 단위)</span></div>
@@ -385,7 +391,7 @@ const DEFAULTS = {
   core:     ['08:30','11:30'],  // 코어타임 (3시간) — 반드시 근로 또는 휴가로 덮여야 함
   window:   ['07:30','20:30'],  // 선택근로 사용 가능 범위 (앞 1h · 뒤 3h)
   lunch:    ['12:00','13:00'],  // 점심 휴게 — 항상 공제
-  dinner:   ['17:30','18:00'],  // 석식 휴게 — 실시한 경우에만 공제
+  dinnerMin: 30,                // 석식 휴게 길이 — 정규 근로 종료 직후 N분, 실시한 경우에만 공제
   unit:     30,                 // 최소 사용 단위 (분)
   minWork:  3,                  // 1일 최소 근로시간
   fullDay:  8,                  // 8시간 근무 = 30% 인원 충족 기준
@@ -400,11 +406,12 @@ const DEFAULTS = {
   flexMaxWeek: 64,              // 탄력 개별 주 최대 근로시간
   weekStart: 1,                 // 주 시작 요일 (1 = 월요일)
   judgeUnit: 'all',             // 30% 판정 단위 — 'all' 전체 합산 · 'group' 그룹별
+  leaveDayCap: 8.5,             // 반차·반반차 사용일의 인정시간(근로+휴가) 상한
 };
 
 /* 명부 선택 목록 */
 const TEAMS = ['발전운영팀','정비기술팀'];
-const PARTS = ['발전지원','기계','전기','제어','정비지원','발전팀장','정비팀장','—'];
+const PARTS = ['발전지원','기계','전기','제어','정비지원','발전팀장','정비팀장'];
 
 /* 구성원 명부 — 발전운영팀 + 정비기술팀 */
 const ROSTER0 = [
@@ -447,8 +454,9 @@ const HOLIDAYS0 = [
   '2026-08-15 광복절','2026-08-17 광복절 대체공휴일',
   '2026-09-24 추석 연휴','2026-09-25 추석','2026-09-26 추석 연휴',
   '2026-10-03 개천절','2026-10-05 개천절 대체공휴일','2026-10-09 한글날',
+  '2026-10-13 회사 창립기념일',
   '2026-12-25 성탄절',
-].join('\n');
+].sort().join('\n');
 
 /* 근무 유형 */
 const TYPES = {
@@ -489,30 +497,39 @@ function straddlesLunch(s, e, C){
   const ov = overlap(s, e, L[0], L[1]);
   return ov > 0 && ov < (L[1] - L[0]);
 }
-/* 석식 휴게 실시 여부 — 자동은 석식 종료 이후까지 근무한 경우만 공제 */
-function dinnerTaken(end, mode, C){
+/* 석식 휴게 창 — 그날 정규 근로 종료 직후 N분.
+   선택근로는 정규 08:30~17:30 → 17:30~18:00, 탄력근무 08:00~17:00 → 17:00~17:30. */
+function dinnerWin(C, reg){
+  const end = toMin((reg || C.regular)[1]);
+  return [end, end + (C.dinnerMin || 30)];
+}
+/* 석식 실시 여부 — 자동은 석식 창 종료 이후까지 이어진 경우만 공제 */
+function dinnerTaken(end, mode, dw){
   if (mode === 'yes') return true;
   if (mode === 'no')  return false;
-  return end > toMin(C.dinner[1]);
+  return end > dw[1];
 }
 /* OT 시간 — 시각(분 단위)이 있으면 자동 계산, 없으면 직접 입력값.
    선택적 근로는 30분 단위지만 OT 는 분 단위로 신청한다. */
-function otHours(e){
+function otHours(e, C, dw){
   if (!e) return 0;
   if (e.otStart && e.otEnd){
     let a = toMin(e.otStart), b = toMin(e.otEnd);
-    if (b <= a) b += 24 * 60;                 // 자정을 넘긴 OT
-    return Math.round((b - a) / 0.6) / 100;   // 소수점 2자리
+    if (b <= a) b += 24 * 60;                 // 자정을 넘긴 OT — 24시간 어느 때나 가능
+    let m = b - a;
+    if (C && dinnerTaken(b, e.otDinner || 'auto', dw || dinnerWin(C)))
+      m -= overlap(a, b, (dw || dinnerWin(C))[0], (dw || dinnerWin(C))[1]);
+    return Math.round(m / 0.6) / 100;         // 분 단위 → 소수점 2자리
   }
   return +e.ot || 0;
 }
 
 /* 실근로시간 (시간 단위) */
-function workNet(s, e, mode, C){
-  const L = [toMin(C.lunch[0]),  toMin(C.lunch[1])];
-  const D = [toMin(C.dinner[0]), toMin(C.dinner[1])];
+function workNet(s, e, mode, C, dw){
+  const L = [toMin(C.lunch[0]), toMin(C.lunch[1])];
+  const D = dw || dinnerWin(C);
   let m = (e - s) - overlap(s, e, L[0], L[1]);
-  if (dinnerTaken(e, mode, C)) m -= overlap(s, e, D[0], D[1]);
+  if (dinnerTaken(e, mode, D)) m -= overlap(s, e, D[0], D[1]);
   return m / 60;
 }
 /* 휴가 블록 산정 — 고정된 끝(anchor)에서 순 leaveH 시간이 되는 구간을 찾는다.
@@ -546,20 +563,23 @@ function solveLeaveBlock(anchor, leaveH, dir, C){
    ══════════════════════════════════════════════════════════════════ */
 function evalDay(entry, C, opt){
   opt = opt || {};
-  const isWorkday = opt.isWorkday !== false;
+  const isWorkday = opt.isWorkday !== false;   // 주말·공휴일에도 근무할 수 있다
   const flexMode  = !!opt.flexMode;
-  const T  = (entry && entry.type) || 'NONE';
-  const ty = TYPES[T] || TYPES.NONE;
-  const R  = {type:T, label:ty.label, work:0, credit:0, counts8h:false,
-              viol:[], block:null, excluded:false,
-              ot:otHours(entry), note:(entry && entry.note) || ''};
+  const reg = opt.flexReg || C.regular;        // 탄력근무는 단위기간의 정규 근로시간
+  const dw  = dinnerWin(C, reg);               // 석식 휴게 = 정규 종료 직후 N분
+  const T   = (entry && entry.type) || 'NONE';
+  const ty  = TYPES[T] || TYPES.NONE;
+  const R   = {type:T, label:ty.label, work:0, leave:0, credit:0, counts8h:false,
+               viol:[], block:null, excluded:false, dinner:dw,
+               ot:otHours(entry, C, dw), note:(entry && entry.note) || ''};
 
   const core = [toMin(C.core[0]),   toMin(C.core[1])];
   const win  = [toMin(C.window[0]), toMin(C.window[1])];
-  const reg  = [toMin(C.regular[0]),toMin(C.regular[1])];
+  const R0   = [toMin(reg[0]), toMin(reg[1])];
+  const L    = [toMin(C.lunch[0]), toMin(C.lunch[1])];
 
   if (T === 'ONLEAVE'){ R.excluded = true; return R; }
-  if (T === 'ANNUAL'){ R.credit = C.fullDay; return R; }
+  if (T === 'ANNUAL'){ R.leave = R.credit = C.fullDay; return R; }
   if (T === 'NONE'){
     if (!isWorkday) return R;                       // 휴일 · 미입력 = 근무 없음
     R.work = R.credit = C.fullDay;
@@ -570,16 +590,15 @@ function evalDay(entry, C, opt){
   if (T === 'TRIP' || T === 'EDU' || T === 'OTHER'){
     const hrs = (entry && entry.hours != null && entry.hours !== '')
       ? +entry.hours : C.fullDay;
-    R.work = R.credit = hrs;
-    return R;                                       // 사외 활동 → 30% 미충족
+    R.work = R.credit = hrs;                        // 사외 활동도 근로시간 — 30% 만 미충족
+    return R;
   }
 
   /* ── 시간 입력이 필요한 유형 ── */
   const hasWork = entry && entry.start && entry.end;
   if (!hasWork){
     if (T === 'WORK'){ R.viol.push('근무 시작·종료 시각을 입력하세요'); return R; }
-    // 반차/반반차/검진: 시간 미입력 → 휴가분만 인정
-    R.credit = (T === 'Q_AM' || T === 'Q_PM') ? C.quarter : C.halfDay;
+    R.leave = R.credit = (T === 'Q_AM' || T === 'Q_PM') ? C.quarter : C.halfDay;
     R.viol.push('근무 시각 미입력 — 휴가분만 반영');
     return R;
   }
@@ -587,72 +606,83 @@ function evalDay(entry, C, opt){
   const dmode = (entry && entry.dinner) || 'auto';
 
   if (s % C.unit || e % C.unit) R.viol.push(`${C.unit}분 단위로만 사용할 수 있습니다`);
-  if (e <= s) { R.viol.push('종료 시각이 시작 시각보다 빠릅니다'); return R; }
+  if (e <= s){ R.viol.push('종료 시각이 시작 시각보다 빠릅니다'); return R; }
 
-  const net = workNet(s, e, dmode, C);
+  const net = workNet(s, e, dmode, C, dw);
   R.work = net;
 
-  const insideBreak = t => [C.lunch, C.dinner].some(br =>
-    t > toMin(br[0]) && t < toMin(br[1]));
-  if (insideBreak(s) || insideBreak(e))
-    R.viol.push(`근무 시작·종료는 휴게시간(${C.lunch[0]}~${C.lunch[1]} · `
-              + `${C.dinner[0]}~${C.dinner[1]}) 중간일 수 없습니다`);
+  /* 휴게시간은 근무로 인정하지 않는다 — 그 안에서 시작하거나 끝날 수 없다.
+     시작은 휴게가 시작되는 시각도 안 된다(그 시각부터는 쉬는 시간이므로). */
+  const breaks = [L, dw];
+  if (breaks.some(br => s >= br[0] && s < br[1]))
+    R.viol.push(`휴게시간(${toStr(L[0])}~${toStr(L[1])} · ${toStr(dw[0])}~${toStr(dw[1])})에는 `
+              + `근무를 시작할 수 없습니다 — 휴게가 끝난 뒤로 잡으세요`);
+  if (breaks.some(br => e > br[0] && e < br[1]))
+    R.viol.push(`근무 종료는 휴게시간 중간일 수 없습니다`);
 
-  /* 선택근로 사용 범위 */
-  if (!flexMode && (s < win[0] || e > win[1]))
+  /* 선택근로 사용 범위 — 휴일 근무에는 적용하지 않는다 */
+  if (!flexMode && isWorkday && (s < win[0] || e > win[1]))
     R.viol.push(`선택근로 사용 범위(${C.window[0]}~${C.window[1]}) 밖입니다`);
 
   /* ── 유형별 휴가 블록 ── */
-  let leaveH = 0, blk = null;
-  if (T === 'HALF_AM'){ leaveH = C.halfDay; blk = solveLeaveBlock(s, leaveH, 'back', C); }
-  else if (T === 'HALF_PM'){ leaveH = C.halfDay; blk = solveLeaveBlock(e, leaveH, 'fwd', C); }
+  let leaveH = 0, blk = null, side = null;
+  if (T === 'HALF_AM'){ leaveH = C.halfDay; side = 'am';
+    blk = solveLeaveBlock(s, leaveH, 'back', C); }
+  else if (T === 'HALF_PM'){ leaveH = C.halfDay; side = 'pm';
+    blk = solveLeaveBlock(e, leaveH, 'fwd', C); }
   else if (T === 'Q_AM'){ leaveH = C.quarter;
-    blk = {span:[reg[0], reg[0] + C.quarter*60], straddle:false}; }
+    blk = {span:[R0[0], R0[0] + C.quarter*60], straddle:false}; }
   else if (T === 'Q_PM'){ leaveH = C.quarter;
-    blk = {span:[reg[1] - C.quarter*60, reg[1]], straddle:false}; }
+    blk = {span:[R0[1] - C.quarter*60, R0[1]], straddle:false}; }
   else if (T === 'CHECKUP'){ leaveH = C.halfDay;   // 건강검진 = 반차 4시간 인정
-    blk = (s > core[0]) ? solveLeaveBlock(s, leaveH, 'back', C)
+    side = (s > core[0]) ? 'am' : 'pm';
+    blk = side === 'am' ? solveLeaveBlock(s, leaveH, 'back', C)
                         : solveLeaveBlock(e, leaveH, 'fwd', C); }
 
   if (leaveH){
-    if (!blk){ R.viol.push(`${fmtH(leaveH)}시간 휴가를 배치할 수 없는 조합입니다`); }
+    if (!blk) R.viol.push(`${fmtH(leaveH)}시간 휴가를 배치할 수 없는 조합입니다`);
     else {
+      const [bs, be] = blk.span;
       R.block = blk.span;
       if (blk.outOfWindow)
         R.viol.push(`이 근무 시각에는 ${ty.label}를 배치할 수 없습니다 — `
-                  + `휴가 블록(${toStr(blk.span[0])}~${toStr(blk.span[1])})이 `
+                  + `휴가 블록(${toStr(bs)}~${toStr(be)})이 `
                   + `선택근로 사용 범위(${C.window[0]}~${C.window[1]}) 밖입니다`);
       else if (blk.straddle)
-        R.viol.push(`휴게시간 중합 — 휴가 블록(${toStr(blk.span[0])}~${toStr(blk.span[1])})이 `
+        R.viol.push(`휴게시간 중합 — 휴가 블록(${toStr(bs)}~${toStr(be)})이 `
                   + `점심 휴게와 일부만 겹칩니다`);
-      const half = (T === 'HALF_AM' || T === 'HALF_PM' || T === 'CHECKUP');
-      if (half && blk.span.some(t => t > core[0] && t < core[1]))
-        R.viol.push(`휴가 블록(${toStr(blk.span[0])}~${toStr(blk.span[1])})이 `
+      if (side && blk.span.some(t => t > core[0] && t < core[1]))
+        R.viol.push(`휴가 블록(${toStr(bs)}~${toStr(be)})이 `
                   + `코어타임(${C.core[0]}~${C.core[1]}) 중간에서 시작하거나 끝납니다 — `
                   + `코어타임은 나눌 수 없습니다`);
-      if (T === 'Q_AM' && s !== blk.span[1])
-        R.viol.push(`오전 반반차는 ${toStr(blk.span[0])}~${toStr(blk.span[1])} — `
-                  + `근무는 ${toStr(blk.span[1])}부터 시작해야 합니다`);
-      if (T === 'Q_PM' && e !== blk.span[0])
-        R.viol.push(`오후 반반차는 ${toStr(blk.span[0])}~${toStr(blk.span[1])} — `
-                  + `근무는 ${toStr(blk.span[0])}에 종료해야 합니다`);
+      /* 반차는 점심 시간대까지 이어져야 한다 — 오전 반차는 점심까지 쉬고 오후에 출근하고,
+         오후 반차는 점심 이후부터 쉰다. 07:30~11:30 오전 반차가 불가한 이유. */
+      if (side === 'am' && be < L[0])
+        R.viol.push(`오전 반차는 점심 휴게(${C.lunch[0]})까지 이어져야 합니다 — `
+                  + `${toStr(be)}에 끝나는 블록은 사용할 수 없습니다`);
+      if (side === 'pm' && bs < L[0])
+        R.viol.push(`오후 반차는 점심 휴게(${C.lunch[0]}) 이후부터 시작해야 합니다 — `
+                  + `${toStr(bs)}부터인 블록은 사용할 수 없습니다`);
+      if (T === 'Q_AM' && s !== be)
+        R.viol.push(`오전 반반차는 ${toStr(bs)}~${toStr(be)} — `
+                  + `근무는 ${toStr(be)}부터 시작해야 합니다`);
+      if (T === 'Q_PM' && e !== bs)
+        R.viol.push(`오후 반반차는 ${toStr(bs)}~${toStr(be)} — `
+                  + `근무는 ${toStr(bs)}에 종료해야 합니다`);
     }
   }
 
-  /* ── 코어타임: 근무 ∪ 휴가 블록이 08:30~11:30을 완전히 덮어야 함 ── */
-  if (!flexMode){
-    const segs = [[s,e]];
+  /* ── 코어타임 · 최소 근로 — 소정근로일에만 적용 ── */
+  if (!flexMode && isWorkday){
+    const segs = [[s, e]];
     if (R.block) segs.push(R.block);
-    const covered = coversRange(segs, core[0], core[1]);
-    if (!covered)
+    if (!coversRange(segs, core[0], core[1]))
       R.viol.push(`코어타임(${C.core[0]}~${C.core[1]}) 미충족 — `
                 + `해당 시간은 근로하거나 반차·반반차·연차로 처리해야 합니다`);
+    if (net < C.minWork)
+      R.viol.push(`1일 최소 근로 ${fmtH(C.minWork)}시간 미달 (${fmtH(net)}시간) — `
+                + `더 줄이려면 연차를 사용하세요`);
   }
-
-  /* ── 최소·최대 근로시간 ── */
-  if (net < C.minWork)
-    R.viol.push(`1일 최소 근로 ${fmtH(C.minWork)}시간 미달 (${fmtH(net)}시간) — `
-              + `더 줄이려면 연차를 사용하세요`);
   if (net > C.maxWork)
     R.viol.push(`1일 인정 한도 ${fmtH(C.maxWork)}시간 초과 (${fmtH(net)}시간)`);
 
@@ -665,12 +695,28 @@ function evalDay(entry, C, opt){
                 + `선택근로 시간과 OT 시간은 나눠서 입력하세요`);
   }
 
+  R.leave  = leaveH;
   R.credit = net + leaveH;
-  if (leaveH && R.credit > C.maxWork)
-    R.viol.push(`1일 인정시간 한도 ${fmtH(C.maxWork)}시간 초과 `
-              + `(근로 ${fmtH(net)}h + 휴가 ${fmtH(leaveH)}h = ${fmtH(R.credit)}h)`);
-  R.counts8h = !flexMode && T === 'WORK' && net >= C.fullDay;
+  /* 반차·반반차는 그날 8시간을 채우지 못할 때 쓰는 것이므로, 휴가를 끼고 하루 인정시간이
+     소정을 크게 넘을 수 없다 — 오후 반차 + 07:30~16:00(인정 11.5h) 같은 조합을 막는다. */
+  if (leaveH && R.credit > C.leaveDayCap)
+    R.viol.push(`${ty.label} 사용일 인정시간 한도 ${fmtH(C.leaveDayCap)}시간 초과 `
+              + `(근로 ${fmtH(net)}h + 휴가 ${fmtH(leaveH)}h = ${fmtH(R.credit)}h) — `
+              + `휴가를 쓰면서 이만큼 근로하는 조합은 성립하지 않습니다`);
+  /* 8시간 인정(30% 인원)은 순수 근무로만 — 휴가·출장·교육을 낀 날은 제외 */
+  R.counts8h = !flexMode && isWorkday && T === 'WORK' && net >= C.fullDay;
   return R;
+}
+
+/* 휴가 블록 표기 — 점심 휴게를 포함하면 그 사실을 함께 보여준다.
+   08:00~13:00 은 "08:00 부터 점심까지 4시간 + 13:00 출근"과 같은 말이다. */
+function blockLabel(span){
+  const c = C ? C() : DEFAULTS;
+  const net = leaveNet(span[0], span[1], c) / 60;
+  const L = [toMin(c.lunch[0]), toMin(c.lunch[1])];
+  const hasLunch = span[0] <= L[0] && span[1] >= L[1];
+  return `${toStr(span[0])}~${toStr(span[1])} (${fmtH(net)}시간`
+       + (hasLunch ? ` · 점심 ${c.lunch[0]}~${c.lunch[1]} 포함` : '') + ')';
 }
 
 /* 구간들의 합집합이 [a,b]를 완전히 덮는지 */
@@ -768,9 +814,10 @@ function partNeed(size){
   const c = C();
   return size <= c.partSmallSize ? c.partSmallMin : c.partMin;
 }
-function dayAgg(date, workday, flexMode){
+function dayAgg(date, workday, flexMode, flexReg){
   const rows = ST.roster.map(m => {
-    const ev = evalDay(getEntry(m.name, date), C(), {isWorkday:workday, flexMode});
+    const ev = evalDay(getEntry(m.name, date), C(),
+                       {isWorkday:workday, flexMode, flexReg});
     return {m, ev, excluded: m.onLeave || ev.excluded};
   });
   const act = rows.filter(r => !r.excluded);
@@ -861,7 +908,8 @@ function renderCal(){
   days.forEach(d => r2.appendChild(el('th', dayCls(d), DOW[d.dow])));
   thead.appendChild(r2);
 
-  const aggs = days.map(d => d.workday ? dayAgg(d.date, true, flexMode) : null);
+  const fxReg = fx && fx.regular;
+  const aggs = days.map(d => d.workday ? dayAgg(d.date, true, flexMode, fxReg) : null);
   const r3 = el('tr','sumrow');
   r3.appendChild(el('th','nm', flexMode ? '주 근로시간' : '8h 인원'));
   r3.appendChild(el('th','pt', flexMode ? '(탄력)' : '필요 인원'));
@@ -898,7 +946,7 @@ function renderCal(){
       tr.appendChild(el('td','pt', m.part));
       days.forEach(d => {
         const ev = evalDay(getEntry(m.name, d.date), C(),
-                           {isWorkday:d.workday, flexMode});
+                           {isWorkday:d.workday, flexMode, flexReg:fxReg});
         const cls = cellClass(d, ev, m, flexMode);
         const td = el('td', cls);
         const raw = getEntry(m.name, d.date);
@@ -1064,18 +1112,22 @@ function timeOpts(sel, val, lo, hi){
 }
 function openDlg(m, d, flexMode){
   const cur = getEntry(m.name, d.date);
-  DLG = {m, d, flexMode, e: cur ? {...cur} : {type:'NONE'}};
+  const fx = flexOf(d.date.slice(0,7));
+  DLG = {m, d, flexMode, flexReg: fx && fx.regular, e: cur ? {...cur} : {type:'NONE'}};
   $('#dlgTitle').textContent = `${d.date} (${DOW[d.dow]})`;
   $('#dlgWho').textContent = `${m.name} · ${m.part} · ${m.role}`
     + (d.holiday ? ` · ${d.holiday}` : '');
   $('#dOtS').value = DLG.e.otStart || '';
   $('#dOtE').value = DLG.e.otEnd || '';
+  $('#dOtDin').value = DLG.e.otDinner || 'auto';
   $('#dOt').value = DLG.e.ot || '';
   $('#dNote').value = DLG.e.note || '';
   $('#dRepeat').value = 1;
-  ['#dOtS','#dOtE','#dOt'].forEach(id => $(id).oninput = () => {
-    DLG.e.otStart = $('#dOtS').value; DLG.e.otEnd = $('#dOtE').value;
-    DLG.e.ot = +$('#dOt').value || 0;
+  ['#dOtS','#dOtE','#dOt','#dOtDin'].forEach(id => $(id).oninput = $(id).onchange = () => {
+    DLG.e.otStart  = $('#dOtS').value;
+    DLG.e.otEnd    = $('#dOtE').value;
+    DLG.e.otDinner = $('#dOtDin').value;
+    DLG.e.ot       = +$('#dOt').value || 0;
     drawVerdict();
   });
   drawDlgTypes(); drawDlgFields();
@@ -1107,7 +1159,7 @@ function drawDlgFields(){
   if (f.includes('dinner')){
     const g = el('div','fld'); g.appendChild(el('label', null, '석식 휴게'));
     const s = el('select');
-    [['auto','자동 (18:00 이후 근무 시 공제)'],['yes','실시 — 30분 공제'],
+    [['auto','자동 (석식 창 이후까지 근무 시 공제)'],['yes','실시 — 공제'],
      ['no','미실시 — 공제 없음']].forEach(([v,t]) => {
       const o = el('option', null, t); o.value = v; s.appendChild(o); });
     s.value = DLG.e.dinner || 'auto';
@@ -1129,15 +1181,18 @@ function drawDlgFields(){
 }
 function drawVerdict(){
   const box = $('#dlgVerdict'); box.innerHTML = '';
-  const ev = evalDay(DLG.e, C(), {isWorkday:DLG.d.workday, flexMode:DLG.flexMode});
+  const ev = evalDay(DLG.e, C(),
+    {isWorkday:DLG.d.workday, flexMode:DLG.flexMode, flexReg:DLG.flexReg});
   const ot = otHours(DLG.e);
   $('#dOtCalc').textContent = (DLG.e.otStart && DLG.e.otEnd)
     ? `= ${fmtH(ot)}시간` : '';
+  $('#dOtDin').parentNode.style.display =
+    (DLG.e.otStart && DLG.e.otEnd) ? '' : 'none';
 
   const v = el('div', 'verdict ' + (ev.viol.length ? 'bad' : 'ok'));
   const bits = [`실근로 <b>${fmtH(ev.work)}h</b>`, `총량 인정 <b>${fmtH(ev.credit)}h</b>`];
   if (ot) bits.push(`OT <b>${fmtH(ot)}h</b>`);
-  if (ev.block) bits.push(`휴가 <b>${toStr(ev.block[0])}~${toStr(ev.block[1])}</b>`);
+  if (ev.block) bits.push(`휴가 <b>${blockLabel(ev.block)}</b>`);
   if (!DLG.flexMode) bits.push(ev.counts8h ? '30% 인원 <b>충족</b>' : '30% 인원 <b>미충족</b>');
   v.innerHTML = bits.join(' · ');
   if (ev.viol.length){
@@ -1171,7 +1226,10 @@ function cleanEntry(e){
   if (f.includes('work')){ o.start = e.start; o.end = e.end; }
   if (f.includes('dinner')) o.dinner = e.dinner;
   if (f.includes('hours'))  o.hours  = e.hours;
-  if (e.otStart && e.otEnd){ o.otStart = e.otStart; o.otEnd = e.otEnd; }
+  if (e.otStart && e.otEnd){
+    o.otStart = e.otStart; o.otEnd = e.otEnd;
+    if (e.otDinner && e.otDinner !== 'auto') o.otDinner = e.otDinner;
+  }
   else if (e.ot) o.ot = e.ot;
   if (e.note) o.note = e.note;
   return o;
@@ -1195,6 +1253,7 @@ $('#dlg').addEventListener('close', () => {
   if (rv === 'ok'){
     const base = cleanEntry({...DLG.e,
       otStart: $('#dOtS').value, otEnd: $('#dOtE').value,
+      otDinner: $('#dOtDin').value,
       ot: +($('#dOt').value || 0) || 0,
       note: $('#dNote').value.trim()});
     const days = spanDates(DLG.d.date, +$('#dRepeat').value || 1);
@@ -1224,26 +1283,32 @@ function renderMe(){
   const ym = ST.month, days = monthDays(ym), fx = flexOf(ym), flexMode = !!fx;
   $('#meMonth').textContent = `${ym} · ${flexMode ? '탄력근무 단위기간' : '선택적 근로시간제'}`;
 
-  let credit = 0, work = 0, ot = 0, viol = 0, met = 0;
+  let work = 0, leave = 0, ot = 0, viol = 0, met = 0;
   const rows = days.map(d => {
-    const ev = evalDay(getEntry(m.name, d.date), C(), {isWorkday:d.workday, flexMode});
-    credit += ev.credit; work += ev.work; ot += ev.ot;
+    const ev = evalDay(getEntry(m.name, d.date), C(),
+                       {isWorkday:d.workday, flexMode, flexReg:fx && fx.regular});
+    work += ev.work; leave += ev.leave; ot += ev.ot;
     if (ev.viol.length) viol++;
     if (ev.counts8h) met++;
     return {d, ev};
   });
-  const quota = days.filter(d => d.workday).length * C().fullDay;
+  const base  = days.filter(d => d.workday).length * C().fullDay;
+  const quota = base - leave;          // 휴가를 쓰면 그만큼 월 총량이 줄어든다
 
   const k = $('#meKpis'); k.innerHTML = '';
-  k.appendChild(kpi('월 소정근로시간', `${fmtH(quota)}h`, '총량 기준'));
-  k.appendChild(kpi('인정시간 합계', `${fmtH(credit)}h`, '근로 + 휴가 인정분'));
-  const diff = credit - quota;
+  k.appendChild(kpi('월 소정근로시간', `${fmtH(base)}h`,
+    `${days.filter(d => d.workday).length}일 × ${C().fullDay}h`));
+  k.appendChild(kpi('휴가 사용', `${fmtH(leave)}h`, '연차 · 반차 · 반반차 · 건강검진'));
+  k.appendChild(kpi('조정 총량', `${fmtH(quota)}h`, `${fmtH(base)} − ${fmtH(leave)}`));
+  k.appendChild(kpi('실근로 합계', `${fmtH(work)}h`, '근무 · 출장 · 교육'));
+  const diff = work - quota;
   k.appendChild(kpi('총량 대비', `${diff >= 0 ? '+' : ''}${fmtH(diff)}h`,
     diff === 0 ? '일치' : (diff > 0 ? '적립' : '부족'),
     diff === 0 ? 'ok' : (diff > 0 ? 'warn' : 'bad')));
-  const limit = otLimitFor(ym);
-  const kOt = kpi('OT 누적', `${fmtH(ot)}h`, `한도 ${fmtH(limit)}h`);
-  k.appendChild(kOt);
+  const otBase = otLimitFor(ym);
+  const limit  = otBase + leave;      // 휴가를 쓰면 그 시간만큼 OT 가능시간이 늘어난다
+  k.appendChild(kpi('OT 누적', `${fmtH(ot)}h`,
+    `한도 ${fmtH(limit)}h = 기본 ${fmtH(otBase)} + 휴가 ${fmtH(leave)}`));
   const left = limit - ot;
   k.appendChild(kpi('OT 잔여', `${fmtH(left)}h`,
     left < 0 ? '한도 초과' : '사용 가능', left < 0 ? 'bad' : (left === 0 ? 'warn' : 'ok')));
@@ -1252,7 +1317,7 @@ function renderMe(){
 
   /* OT 한도는 달마다 다르므로 해당 월 값을 여기서 직접 넣는다 */
   const lim = $('#meOtLimit'); lim.innerHTML = '';
-  lim.appendChild(el('span','small muted', `${ym} OT 한도`));
+  lim.appendChild(el('span','small muted', `${ym} OT 기본 가능시간`));
   const li = el('input');
   li.type = 'number'; li.step = '0.5'; li.min = '0'; li.style.width = '86px';
   li.style.border = '1px solid var(--line)'; li.style.borderRadius = '6px';
@@ -1265,11 +1330,12 @@ function renderMe(){
   };
   lim.appendChild(li);
   lim.appendChild(el('span','small muted',
-    '시간 — 사내 HR 시스템의 해당 월 OT 가능 시간을 넣으세요 (비우면 기본값 사용)'));
+    '시간 — 사내 HR 시스템의 해당 월 기본 OT 가능 시간. '
+  + '휴가 사용분은 여기에 자동으로 더해집니다'));
 
   const t = $('#meTable'); t.innerHTML = '';
   const head = el('tr');
-  ['날짜','요일','유형','근무 시각','휴가 블록','실근로','인정','OT','30%','사유 · 위반']
+  ['날짜','요일','유형','근무 시각','휴가 블록','실근로','휴가','OT','30%','사유 · 위반']
     .forEach(h => head.appendChild(el('th', null, h)));
   t.appendChild(el('thead')).appendChild(head);
   const tb = el('tbody');
@@ -1285,7 +1351,7 @@ function renderMe(){
     tr.appendChild(el('td', null, (rawTime(getEntry(m.name, d.date)))));
     tr.appendChild(el('td', null, ev.block ? `${toStr(ev.block[0])}~${toStr(ev.block[1])}` : ''));
     tr.appendChild(el('td','num', ev.work ? fmtH(ev.work) : ''));
-    tr.appendChild(el('td','num', ev.credit ? fmtH(ev.credit) : ''));
+    tr.appendChild(el('td','num', ev.leave ? fmtH(ev.leave) : ''));
     tr.appendChild(el('td','num', ev.ot ? fmtH(ev.ot) : ''));
     tr.appendChild(el('td', null, !d.workday ? '' : (ev.counts8h ? '○' : '×')));
     tr.appendChild(el('td', null,
@@ -1316,7 +1382,8 @@ function flexWeeks(name){
   for (let d = new Date(P.start.getTime()); d <= P.end; d.setDate(d.getDate()+1)){
     const key = ymd(d), dow = d.getDay();
     const workday = dow !== 0 && dow !== 6 && !H[key];
-    const ev = evalDay(getEntry(name, key), C(), {isWorkday:workday, flexMode:true});
+    const ev = evalDay(getEntry(name, key), C(),
+                       {isWorkday:workday, flexMode:true, flexReg:P.f.regular});
     const hrs = ev.work + ev.ot;
     const wk = ymd(weekStartOf(d));
     if (!buckets.has(wk)) buckets.set(wk, {start:wk, days:0, hours:0, ot:0});
@@ -1445,8 +1512,7 @@ function runVerifier(){
   v.innerHTML =
     `<b>${ev.viol.length ? '사용할 수 없는 조합' : '사용 가능'}</b><br>`
     + `실근로 <b>${fmtH(ev.work)}시간</b> · 총량 인정 <b>${fmtH(ev.credit)}시간</b>`
-    + (ev.block ? `<br>휴가 블록 <b>${toStr(ev.block[0])}~${toStr(ev.block[1])}</b> `
-                + `(${fmtH(leaveNet(ev.block[0], ev.block[1], C())/60)}시간)` : '')
+    + (ev.block ? `<br>휴가 블록 <b>${blockLabel(ev.block)}</b>` : '')
     + `<br>30% 필수 8시간 인원 — <b>${ev.counts8h ? '충족' : '미충족'}</b>`;
   if (ev.viol.length){
     const ul = el('ul');
@@ -1457,7 +1523,7 @@ function runVerifier(){
 }
 
 function renderRuleDoc(){
-  const c = C(), box = $('#ruleDoc');
+  const c = C(), box = $('#ruleDoc'), dwin = dinnerWin(c);
   const R = [
     ['정규 근로시간', `<code>${c.regular[0]}~${c.regular[1]}</code> · 점심 휴게 `
       + `<code>${c.lunch[0]}~${c.lunch[1]}</code> 제외 ${c.fullDay}시간`],
@@ -1467,9 +1533,11 @@ function renderRuleDoc(){
       + `<code>08:00~11:00</code> 근무는 3시간이지만 <code>11:00~11:30</code>이 비어 사용할 수 없습니다.`],
     ['선택근로 사용 범위', `<code>${c.window[0]}~${c.window[1]}</code> (정규 앞 1시간 · 뒤 3시간). `
       + `전 구간 근무 시 점심 1시간과 석식 30분을 제외한 <b>${fmtH(c.maxWork)}시간</b>이 인정 상한입니다.`],
-    ['석식 휴게', `<code>${c.dinner[0]}~${c.dinner[1]}</code>는 <b>실시한 경우에만</b> 공제합니다. `
-      + `<code>08:00~18:00</code>은 석식 미실시 시 9시간, 실시 시 8.5시간. `
-      + `자동 판정은 ${c.dinner[1]} 이후까지 근무한 경우 실시로 봅니다.`],
+    ['석식 휴게', `<b>정규 근로 종료 직후 ${c.dinnerMin}분</b> — 선택근로는 `
+      + `<code>${toStr(dwin[0])}~${toStr(dwin[1])}</code>, 탄력근무 <code>08:00~17:00</code>이면 `
+      + `<code>17:00~17:30</code>. <b>실시한 경우에만</b> 공제하며 근무·OT 모두 선택할 수 있습니다 — `
+      + `<code>08:00~18:00</code>은 미실시 9시간 / 실시 8.5시간, 탄력 OT <code>17:00~20:00</code>은 `
+      + `미실시 3시간 / 실시 2.5시간. 자동 판정은 석식 창 종료 이후까지 이어진 경우 실시로 봅니다.`],
     ['사용 단위', `<b>${c.unit}분</b> 단위로만 조절합니다.`],
     ['1일 최소 근로', `<b>${fmtH(c.minWork)}시간</b>. 더 줄이려면 당일 연차를 사용해야 합니다.`],
     ['8시간 인정 (30% 인원)', `사내 실근로 ${c.fullDay}시간 이상 — `
@@ -1493,10 +1561,18 @@ function renderRuleDoc(){
       + `<code>08:30~17:30</code> 근무에 오전 반차를 붙이면 블록이 <code>04:30~08:30</code>이 되어 불가, `
       + `오후 반차는 <code>17:30~21:30</code>이 되어 불가. `
       + `<code>09:00~14:00</code>은 코어타임 중간(09:00)에서 시작해 불가.`],
-    ['휴게시간 경계', `근무 시작·종료는 <b>휴게시간 중간일 수 없습니다</b> — `
-      + `<code>08:00~12:30</code> 퇴근은 <code>08:00~13:00</code>과 인정시간이 같아 의미가 없습니다.`],
-    ['1일 인정시간 한도', `근로 + 휴가 인정분의 합이 <b>${fmtH(c.maxWork)}시간</b>을 넘을 수 없습니다 — `
-      + `<code>07:30~16:30</code> 근무(8h)에 오후 반차(4h)를 더하면 12시간이 되어 불가.`],
+    ['휴게시간 경계', `휴게시간은 근무로 인정하지 않으므로 그 안에서 <b>시작하거나 끝날 수 없습니다</b>. `
+      + `점심 <code>${c.lunch[0]}~${c.lunch[1]}</code> 에는 근무를 시작할 수 없고 `
+      + `(오전 반차 뒤에는 <b>${c.lunch[1]}에 출근</b>), <code>12:30</code> 퇴근도 불가합니다.`],
+    ['반차는 점심까지', `<b>오전 반차는 점심 휴게까지 이어져야</b> 하고, `
+      + `<b>오후 반차는 점심 휴게 이후부터</b> 시작해야 합니다. `
+      + `<code>07:30~11:30</code> 오전 반차는 점심에 못 미쳐 불가 — `
+      + `오전 반차는 <code>${c.regular[0]}</code>(또는 08:00)부터 점심까지 4시간을 쓰고 `
+      + `<code>${c.lunch[1]}</code>에 출근합니다.`],
+    ['반차 사용일 인정시간', `반차·반반차는 그날 8시간을 채우지 못할 때 쓰는 것이므로 `
+      + `하루 인정시간(근로 + 휴가)이 <b>${fmtH(c.leaveDayCap)}시간</b>을 넘을 수 없습니다 — `
+      + `<code>07:30~16:30</code> 근무(8h) + 오후 반차(4h) = 12시간은 성립하지 않습니다. `
+      + `<b>반차·반반차를 쓴 날은 30% 인원에서 제외</b>됩니다.`],
     ['OT (초과근로)', `선택적 근로는 ${c.unit}분 단위지만 <b>OT 는 분 단위</b>로 신청합니다. `
       + `OT 시작·종료 시각을 넣으면 시간이 자동 계산되고, `
       + `<b>근무 시각과 겹치면 경고</b>합니다. 선택근로 시간과 OT 시간은 나눠서 입력합니다 — `
@@ -1560,8 +1636,24 @@ const TESTS = [
    e:{type:'Q_PM',start:'08:30',end:'15:30'}, work:6, ok:true, blk:'15:30~17:30'},
   {t:'출장 — 시간과 무관하게 30% 인원 미충족',
    e:{type:'TRIP'}, work:8, ok:true, c8:false},
-  {t:'오전 반차 + 근무 11:30~16:30 → 블록 07:30~11:30',
-   e:{type:'HALF_AM',start:'11:30',end:'16:30'}, work:4, ok:true, blk:'07:30~11:30'},
+  {t:'오전 반차 + 근무 11:30~16:30 — 블록 07:30~11:30 은 점심에 못 미쳐 불가',
+   e:{type:'HALF_AM',start:'11:30',end:'16:30'}, ok:false, blk:'07:30~11:30'},
+  {t:'오전 반차 뒤 근무를 12:00 에 시작 — 점심 휴게에는 출근할 수 없음 (13:00 출근)',
+   e:{type:'HALF_AM',start:'12:00',end:'17:00'}, ok:false},
+  {t:'오후 반차 + 근무 07:30~16:00 — 근로 7.5h + 휴가 4h = 11.5h 로 반차일 한도 초과',
+   e:{type:'HALF_PM',start:'07:30',end:'16:00'}, ok:false},
+  {t:'오후 반차 + 근무 07:30~11:30 — 블록 11:30~16:30 은 점심 이전에 시작해 불가',
+   e:{type:'HALF_PM',start:'07:30',end:'11:30'}, ok:false},
+  {t:'휴일 근무 09:00~13:00 — 코어타임·최소근로 규칙을 적용하지 않음',
+   e:{type:'WORK',start:'09:00',end:'13:00'}, opt:{isWorkday:false}, work:3, ok:true},
+  {t:'탄력근무 08:00~17:00 + OT 17:00~20:00 · 석식 미실시 → 3시간',
+   e:{type:'NONE',otStart:'17:00',otEnd:'20:00',otDinner:'no'},
+   opt:{isWorkday:true, flexMode:true, flexReg:['08:00','17:00']}, ot:3},
+  {t:'탄력근무 08:00~17:00 + OT 17:00~20:00 · 석식 실시 → 2.5시간',
+   e:{type:'NONE',otStart:'17:00',otEnd:'20:00',otDinner:'yes'},
+   opt:{isWorkday:true, flexMode:true, flexReg:['08:00','17:00']}, ot:2.5},
+  {t:'OT 22:00~01:00 — 자정을 넘겨도 3시간',
+   e:{type:'NONE',otStart:'22:00',otEnd:'01:00'}, ot:3},
   {t:'오전 반차 + 근무 08:30~17:30 — 블록이 04:30~08:30 이 되어 사용 범위 밖',
    e:{type:'HALF_AM',start:'08:30',end:'17:30'}, ok:false},
   {t:'오후 반차 + 근무 08:30~17:30 — 블록이 17:30~21:30 이 되어 사용 범위 밖',
@@ -1586,7 +1678,7 @@ const RATIO_TESTS = [[30,9],[25,8],[23,7],[17,6],[16,5]];
 function runTests(){
   const rows = [];
   TESTS.forEach(tc => {
-    const ev = evalDay(tc.e, C(), {isWorkday:true});
+    const ev = evalDay(tc.e, C(), tc.opt || {isWorkday:true});
     const chk = [];
     if (tc.work != null) chk.push([`실근로 ${fmtH(tc.work)}h`, Math.abs(ev.work - tc.work) < 1e-9]);
     if (tc.ok != null)   chk.push([tc.ok ? '사용 가능' : '사용 불가', (ev.viol.length === 0) === tc.ok]);
@@ -1645,6 +1737,7 @@ function generateYearHolidays(y){
   const used = new Set(), rows = [];
   const add = (d, name) => { rows.push([ymd(d), name]); used.add(ymd(d)); };
   FIXED_HOLIDAYS.forEach(([mo, dd, name]) => add(new Date(y, mo-1, dd), name));
+  add(new Date(y, 9, 13), '회사 창립기념일');
   FIXED_HOLIDAYS.filter(x => x[3]).forEach(([mo, dd, name]) => {
     const d = new Date(y, mo-1, dd);
     if (d.getDay() !== 0 && d.getDay() !== 6) return;   // 토·일과 겹칠 때만 대체
@@ -1667,14 +1760,15 @@ function generateYearHolidays(y){
 const CFG_FIELDS = [
   ['regular','정규 근로시간','t2'], ['core','코어타임','t2'],
   ['window','선택근로 사용 범위','t2'], ['lunch','점심 휴게','t2'],
-  ['dinner','석식 휴게','t2'],
+  ['dinnerMin','석식 휴게 (분, 정규 종료 후)','n'],
   ['unit','최소 사용 단위 (분)','n'], ['minWork','1일 최소 근로 (h)','n'],
   ['fullDay','8시간 인정 기준 (h)','n'], ['maxWork','1일 인정 상한 (h)','n'],
   ['halfDay','반차 (h)','n'], ['quarter','반반차 (h)','n'],
   ['ratio','8시간 필수 비율','n'], ['managerMin','직책자 최소 인원','n'],
   ['partMin','파트 최소 인원','n'], ['partSmallSize','소규모 파트 기준 (명)','n'],
   ['partSmallMin','소규모 파트 최소 인원','n'],
-  ['otLimit','월 OT 한도 (h) ※사규 확인','n'],
+  ['otLimit','월 OT 기본 가능시간 (h) — 기본값','n'],
+  ['leaveDayCap','반차 사용일 인정 상한 (h)','n'],
   ['flexAvgWeek','탄력 평균 주 한도 (h)','n'],
   ['flexMaxWeek','탄력 개별 주 한도 (h)','n'],
   ['judgeUnit','30% 판정 단위','sel'],
@@ -1744,25 +1838,17 @@ function renderRoster(){
       i.onchange = () => { m[key] = i.value; save(); renderAll(); };
       td.appendChild(i); return td;
     };
-    const pick = (key, presets, label) => {
+    const pick = (key, presets) => {
       const td = el('td'), sel = el('select');
       [...new Set([...presets, m[key]].filter(Boolean))].forEach(v => {
         const o = el('option', null, v); o.value = v; sel.appendChild(o); });
-      const other = el('option', null, '＋ 직접 입력…');
-      other.value = '\u0000new'; sel.appendChild(other);
       sel.value = m[key] || presets[0];
-      sel.onchange = () => {
-        if (sel.value === '\u0000new'){
-          const v = prompt(`${label} 이름`, m[key] || '');
-          if (v && v.trim()) m[key] = v.trim();
-        } else m[key] = sel.value;
-        save(); renderAll();
-      };
+      sel.onchange = () => { m[key] = sel.value; save(); renderAll(); };
       td.appendChild(sel); return td;
     };
     tr.appendChild(txt('name','72px'));
-    tr.appendChild(pick('team', TEAMS, '팀'));
-    tr.appendChild(pick('part', PARTS, '파트'));
+    tr.appendChild(pick('team', TEAMS));
+    tr.appendChild(pick('part', PARTS));
     const rtd = el('td'), rs = el('select');
     ['팀장','파트장','구성원'].forEach(v => { const o = el('option', null, v); o.value = v; rs.appendChild(o); });
     rs.value = m.role; rs.onchange = () => { m.role = rs.value; save(); renderAll(); };
@@ -1804,7 +1890,7 @@ function exportJson(){
 function exportCsv(){
   const days = monthDays(ST.month), fx = flexOf(ST.month), flexMode = !!fx;
   const head = ['날짜','요일','그룹','팀','파트','직책','이름','유형','근무시작','근무종료',
-                '휴가블록','실근로','인정시간','OT시작','OT종료','OT','30%충족','사유·메모','위반'];
+                '휴가블록','실근로','휴가','OT시작','OT종료','OT','30%충족','사유·메모','위반'];
   const lines = [head.join(',')];
   const q = v => {
     const s = String(v == null ? '' : v);
@@ -1812,12 +1898,13 @@ function exportCsv(){
   };
   days.forEach(d => ST.roster.forEach(m => {
     const raw = getEntry(m.name, d.date);
-    const ev = evalDay(raw, C(), {isWorkday:d.workday, flexMode});
+    const ev = evalDay(raw, C(),
+                       {isWorkday:d.workday, flexMode, flexReg:fx && fx.regular});
     if (!raw) return;                   // 미입력(기본 8시간)은 내보내지 않음
     lines.push([d.date, DOW[d.dow], m.group, m.team, m.part, m.role, m.name, ev.label,
       raw && raw.start || '', raw && raw.end || '',
       ev.block ? `${toStr(ev.block[0])}~${toStr(ev.block[1])}` : '',
-      ev.work ? fmtH(ev.work) : '', ev.credit ? fmtH(ev.credit) : '',
+      ev.work ? fmtH(ev.work) : '', ev.leave ? fmtH(ev.leave) : '',
       raw.otStart || '', raw.otEnd || '',
       ev.ot ? fmtH(ev.ot) : '', d.workday ? (ev.counts8h ? 'O' : 'X') : '',
       ev.note, ev.viol.join(' / ')].map(q).join(','));
