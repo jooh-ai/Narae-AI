@@ -78,10 +78,29 @@ N = len(ROSTER)
 R0, R1 = 8, 8 + N - 1            # 구성원 행
 LEAD0, LEAD1 = 8, 13             # 직책자(A그룹) 행
 M0, M1 = 2, 1 + N                # 명부 행
-D0, D1 = 4, 34                   # 일자 열 (D ~ AH)
+DAYS = 31
+D0, D1 = 4, 34                   # 하루 1열인 시트(OT · 시간)의 일자 열 D ~ AH
 DL, DR = get_column_letter(D0), get_column_letter(D1)
 WEEKS = 6                        # 한 달에 걸치는 최대 주 수
 ROW_SUM = {'인원': 33, '필요': 34, '판정': 35, '직책자': 36}
+
+# 근태 시트는 하루가 3열 — 유형 / 출근 / 퇴근.
+# 한 칸에 106가지를 몰아넣지 않고 11 · 6 · 18개 드롭다운으로 쪼개기 위한 배치다.
+A0, ACOLS = 4, 3
+
+
+def acol(day, k=0):
+    # 근태 시트에서 day(1..31) 의 k(0=유형 · 1=출근 · 2=퇴근) 열 번호
+    return A0 + (day - 1) * ACOLS + k
+
+
+def aL(day, k=0):
+    return get_column_letter(acol(day, k))
+
+
+A_LAST = A0 + DAYS * ACOLS - 1
+# 「시간」 시트의 계산 블록 시작 행
+BLK = {'키': 8, '실근로': 36, '휴가': 64, '충족': 92, '후보': 120}
 
 
 def load_combos():
@@ -141,6 +160,19 @@ def sheet_codes(wb, combos):
     for i, d in enumerate(['일', '월', '화', '수', '목', '금', '토'], start=2):
         st(ws.cell(row=i, column=13, value=d), size=9)
 
+    # 근태 시트의 세 드롭다운 목록 — 한 칸에 106가지를 넣지 않기 위해 쪼갠다
+    order = ['근무', '오전반', '오후반', '오전반반', '오후반반', '검진',
+             '연차', '출장', '교육', '기타', '휴직']
+    seen = {r['label'] for r in combos}
+    kinds = [k for k in order if k in seen]
+    starts = sorted({r['start'] for r in combos if r['start']})
+    ends = sorted({r['end'] for r in combos if r['end']})
+    for col, title, items in [(15, '유형', kinds), (16, '출근', starts), (17, '퇴근', ends)]:
+        st(ws.cell(row=1, column=col, value=title), bold=True, fill=HEAD_BG, size=9)
+        for i, v in enumerate(items, start=2):
+            st(ws.cell(row=i, column=col, value=v), size=9)
+        ws.column_dimensions[get_column_letter(col)].width = 9
+
     for col, w in zip('ABCDEFGH', [17, 10, 13, 10, 9, 9, 14, 10]):
         ws.column_dimensions[col].width = w
     ws.column_dimensions['J'].width = 17
@@ -148,7 +180,8 @@ def sheet_codes(wb, combos):
     ws.column_dimensions['M'].width = 6
     ws.sheet_state = 'hidden'
     ws.protection.sheet = True
-    return len(combos), len(meets), len(swap)
+    return {'n': len(combos), 'meets': len(meets), 'swap': len(swap),
+            'kinds': len(kinds), 'starts': len(starts), 'ends': len(ends)}
 
 
 def sheet_roster(wb):
@@ -189,42 +222,74 @@ def sheet_holidays(wb):
     ws.protection.sheet = True
 
 
-def day_header(ws, title, note):
-    """연·월 입력 + 주 순번 · 일자 · 요일 · 휴일 행 (근태 · OT · 시간 공통)."""
-    st(ws.cell(row=1, column=1, value='연'), bold=True, align='right', border=False)
-    st(ws.cell(row=1, column=2, value=2026), bold=True, fill='FFFF00', locked=False)
-    st(ws.cell(row=2, column=1, value='월'), bold=True, align='right', border=False)
-    st(ws.cell(row=2, column=2, value=9), bold=True, fill='FFFF00', locked=False)
+def _ym_cells(ws, title, note, own):
+    if own:
+        st(ws.cell(row=1, column=1, value='연'), bold=True, align='right', border=False)
+        st(ws.cell(row=1, column=2, value=2026), bold=True, fill='FFFF00', locked=False)
+        st(ws.cell(row=2, column=1, value='월'), bold=True, align='right', border=False)
+        st(ws.cell(row=2, column=2, value=9), bold=True, fill='FFFF00', locked=False)
     ws.cell(row=1, column=4, value=title).font = Font(name=FONT, bold=True, size=13, color=NAV)
     ws.cell(row=2, column=4, value=note).font = Font(name=FONT, size=9, color=DIM)
-    st(ws.cell(row=3, column=1, value='주'), size=8, color=DIM, fill=HEAD_BG)
-
-    for col in range(D0, D1 + 1):
-        L = get_column_letter(col)
-        st(ws.cell(row=3, column=col,
-                   value=f'=IF({L}4="","",INT(({L}4-1+MOD(WEEKDAY(DATE($B$1,$B$2,1))+5,7))/7)+1)'),
-           size=8, color=DIM, fill=HEAD_BG)
-        st(ws.cell(row=4, column=col,
-                   value='=IF(MONTH(DATE($B$1,$B$2,COLUMN()-3))<>$B$2,"",COLUMN()-3)'),
-           bold=True, fill=HEAD_BG, size=9)
-        st(ws.cell(row=5, column=col,
-                   value=f'=IF({L}$4="","",INDEX(코드!$M$2:$M$8,WEEKDAY(DATE($B$1,$B$2,{L}$4))))'),
-           fill=HEAD_BG, size=9, color=DIM)
-        st(ws.cell(row=6, column=col,
-                   value=f'=IF({L}$4="","",IF(OR(WEEKDAY(DATE($B$1,$B$2,{L}$4),2)>5,'
-                         f'COUNTIF(공휴일!$A$2:$A$400,DATE($B$1,$B$2,{L}$4))>0),"휴일",""))'),
-           fill=HEAD_BG, size=8, color=DIM)
-        ws.column_dimensions[L].width = 13
+    for c, lab in [(1, '주'), (2, ''), (3, '')]:
+        st(ws.cell(row=3, column=c, value=lab), size=8, color=DIM, fill=HEAD_BG)
     for col, w in zip('ABC', [10, 10, 6]):
         ws.column_dimensions[col].width = w
+
+
+def _day_formulas(Y, M, L, d):
+    # 주 순번 · 일자 · 요일 · 휴일 — Y·M 은 연·월 셀 참조
+    return [
+        f'=IF({L}4="","",INT(({L}4-1+MOD(WEEKDAY(DATE({Y},{M},1))+5,7))/7)+1)',
+        f'=IF(MONTH(DATE({Y},{M},{d}))<>{M},"",{d})',
+        f'=IF({L}$4="","",INDEX(코드!$M$2:$M$8,WEEKDAY(DATE({Y},{M},{L}$4))))',
+        f'=IF({L}$4="","",IF(OR(WEEKDAY(DATE({Y},{M},{L}$4),2)>5,'
+        f'COUNTIF(공휴일!$A$2:$A$400,DATE({Y},{M},{L}$4))>0),"휴일",""))',
+    ]
+
+
+def hdr_wide(ws, title, note):
+    # 근태 시트 — 하루가 3열이라 머리글을 병합한다
+    _ym_cells(ws, title, note, own=True)
+    for d in range(1, DAYS + 1):
+        c0 = aL(d, 0)
+        for r, f in zip((3, 4, 5, 6), _day_formulas('$B$1', '$B$2', c0, d)):
+            st(ws.cell(row=r, column=acol(d, 0), value=f),
+               bold=(r == 4), fill=HEAD_BG, size=9 if r in (4, 5) else 8,
+               color=INK if r == 4 else DIM)
+            for k in (1, 2):
+                st(ws.cell(row=r, column=acol(d, k)), fill=HEAD_BG)
+            ws.merge_cells(start_row=r, start_column=acol(d, 0),
+                           end_row=r, end_column=acol(d, 2))
+        for k, lab in enumerate(['유형', '출근', '퇴근']):
+            st(ws.cell(row=7, column=acol(d, k), value=lab), bold=True, fill=HEAD_BG, size=8,
+               color=DIM)
+        ws.column_dimensions[aL(d, 0)].width = 8
+        ws.column_dimensions[aL(d, 1)].width = 6.5
+        ws.column_dimensions[aL(d, 2)].width = 6.5
+    for j, h in enumerate(['이름', '파트', '그룹'], start=1):
+        st(ws.cell(row=7, column=j, value=h), bold=True, fill=HEAD_BG, size=9)
     ws.freeze_panes = 'D8'
 
 
-def member_rows(ws):
+def hdr_narrow(ws, title, note):
+    # OT · 시간 시트 — 하루 1열. 연·월은 근태 시트를 따른다
+    _ym_cells(ws, title, note, own=False)
+    Y, M = '근태!$B$1', '근태!$B$2'
+    for d in range(1, DAYS + 1):
+        col = D0 + d - 1
+        L = get_column_letter(col)
+        for r, f in zip((3, 4, 5, 6), _day_formulas(Y, M, L, d)):
+            st(ws.cell(row=r, column=col, value=f), bold=(r == 4), fill=HEAD_BG,
+               size=9 if r in (4, 5) else 8, color=INK if r == 4 else DIM)
+        ws.column_dimensions[L].width = 8
     for j, h in enumerate(['이름', '파트', '그룹'], start=1):
         st(ws.cell(row=7, column=j, value=h), bold=True, fill=HEAD_BG, size=9)
+    ws.freeze_panes = 'D8'
+
+
+def member_rows(ws, base=R0):
     for i in range(N):
-        r, m = R0 + i, M0 + i
+        r, m = base + i, M0 + i
         st(ws.cell(row=r, column=1, value=f'=IF(명부!A{m}="","",명부!A{m})'),
            bold=True, align='left', size=9.5)
         st(ws.cell(row=r, column=2, value=f'=IF(명부!C{m}="","",명부!C{m})'),
@@ -233,90 +298,113 @@ def member_rows(ws):
            size=9, color=DIM)
 
 
-def sheet_attend(wb, nc, nmeets, nswap):
+def sheet_attend(wb, meta):
     ws = wb.create_sheet('근태')
-    day_header(ws, '근태 — 빈칸이 8시간 근무입니다. 못 채우는 날만 드롭다운에서 고르세요',
-               '노란 칸에 연·월을 넣으면 날짜와 요일이 바뀝니다 · '
-               '드롭다운에는 규칙을 통과하는 조합만 들어 있어 위반 입력이 불가능합니다')
+    hdr_wide(ws, '근태 — 빈칸이 8시간 근무입니다. 못 채우는 날만 채우세요',
+             '유형 · 출근 · 퇴근을 각각 고릅니다 (연차 · 출장 · 교육 · 휴직은 유형만) · '
+             '노란 칸에 연·월을 넣으면 날짜와 요일이 바뀝니다')
     member_rows(ws)
     for i in range(N):
-        for col in range(D0, D1 + 1):
-            st(ws.cell(row=R0 + i, column=col), size=9, locked=False)
+        for d in range(1, DAYS + 1):
+            st(ws.cell(row=R0 + i, column=acol(d, 0)), size=9, locked=False)
+            st(ws.cell(row=R0 + i, column=acol(d, 1)), size=9, color=DIM, locked=False)
+            st(ws.cell(row=R0 + i, column=acol(d, 2)), size=9, color=DIM, locked=False)
 
-    dv = DataValidation(type='list', formula1=f'=코드!$A$2:$A${nc+1}', allow_blank=True)
-    dv.error = '드롭다운에 있는 조합만 넣을 수 있습니다. 목록에 없으면 규칙 위반입니다.'
-    dv.errorTitle = '사용할 수 없는 조합'
-    dv.prompt = ('빈칸 = 8시간 근무.\n'
-                 '근무 0830-1730 · 오전반 1300-1700 처럼 유형과 시각을 함께 고릅니다.')
-    dv.promptTitle = '근무 조합'
-    ws.add_data_validation(dv)
-    dv.add(f'{DL}{R0}:{DR}{R1}')
+    dvs = []
+    for k, (col, cnt, msg) in enumerate([
+            (15, meta['kinds'],  '근무 · 오전반 · 오후반 · 오전반반 · 오후반반 · 검진 은 '
+                                 '출근·퇴근 시각도 함께 고르세요.'),
+            (16, meta['starts'], '출근 시각입니다. 유형이 연차·출장·교육·기타·휴직이면 비워 두세요.'),
+            (17, meta['ends'],   '퇴근 시각입니다.')]):
+        L = get_column_letter(col)
+        dv = DataValidation(type='list', formula1=f'=코드!${L}$2:${L}${cnt+1}',
+                            allow_blank=True)
+        dv.errorTitle, dv.error = '목록에 없는 값', '드롭다운에 있는 값만 넣을 수 있습니다.'
+        dv.promptTitle, dv.prompt = ['유형', '출근', '퇴근'][k], msg
+        ws.add_data_validation(dv)
+        dvs.append(dv)
+    for d in range(1, DAYS + 1):
+        for k in range(3):
+            dvs[k].add(f'{aL(d,k)}{R0}:{aL(d,k)}{R1}')
 
     active = f'명부!$B${M1+2}'
-    meets  = f'코드!$J$2:$J${nmeets+1}'
+    labels = {'인원': '8시간 인원', '필요': '필요 인원 (30%)',
+              '판정': '판정', '직책자': '직책자 8시간'}
     for key, r in ROW_SUM.items():
-        st(ws.cell(row=r, column=1, value={'인원': '8시간 인원', '필요': '필요 인원 (30%)',
-                                           '판정': '판정', '직책자': '직책자 8시간'}[key]),
-           bold=True, align='left', fill=HEAD_BG, size=9)
-        st(ws.cell(row=r, column=2), fill=HEAD_BG)
-        st(ws.cell(row=r, column=3), fill=HEAD_BG)
-    for col in range(D0, D1 + 1):
-        L = get_column_letter(col)
-        blanks = (f'SUMPRODUCT((명부!$F${M0}:$F${M1}<>"Y")*({L}${R0}:{L}${R1}=""))'
-                  f'+SUMPRODUCT(COUNTIF({L}${R0}:{L}${R1},{meets}))')
-        lead   = (f'SUMPRODUCT((명부!$F${M0}:$F${M0+5}<>"Y")*({L}${LEAD0}:{L}${LEAD1}=""))'
-                  f'+SUMPRODUCT(COUNTIF({L}${LEAD0}:{L}${LEAD1},{meets}))')
-        st(ws.cell(row=ROW_SUM['인원'], column=col,
-                   value=f'=IF({L}$6="휴일","",{blanks})'), bold=True, fill=HEAD_BG, size=9)
-        st(ws.cell(row=ROW_SUM['필요'], column=col,
-                   value=f'=IF({L}$6="휴일","",ROUNDUP({active}*0.3,0))'),
+        st(ws.cell(row=r, column=1, value=labels[key]), bold=True, align='left',
+           fill=HEAD_BG, size=9)
+        for c in (2, 3):
+            st(ws.cell(row=r, column=c), fill=HEAD_BG)
+    ok_blk, cand_blk = BLK['충족'], BLK['후보']
+    for d in range(1, DAYS + 1):
+        c0, T = aL(d, 0), get_column_letter(D0 + d - 1)
+        met = (f'SUMPRODUCT((명부!$F${M0}:$F${M1}<>"Y")*'
+               f'(시간!${T}${ok_blk}:${T}${ok_blk+N-1}))')
+        lead = (f'SUMPRODUCT((명부!$F${M0}:$F${M0+5}<>"Y")*'
+                f'(시간!${T}${ok_blk}:${T}${ok_blk+5}))')
+        st(ws.cell(row=ROW_SUM['인원'], column=acol(d, 0),
+                   value=f'=IF({c0}$6="휴일","",{met})'), bold=True, fill=HEAD_BG, size=9)
+        st(ws.cell(row=ROW_SUM['필요'], column=acol(d, 0),
+                   value=f'=IF({c0}$6="휴일","",ROUNDUP({active}*0.3,0))'),
            fill=HEAD_BG, size=9, color=DIM)
-        st(ws.cell(row=ROW_SUM['판정'], column=col,
-                   value=f'=IF({L}$6="휴일","",IF({L}{ROW_SUM["인원"]}>={L}{ROW_SUM["필요"]},'
-                         f'"충족","미달"))'), bold=True, size=9)
-        st(ws.cell(row=ROW_SUM['직책자'], column=col,
-                   value=f'=IF({L}$6="휴일","",{lead})'), size=9)
+        st(ws.cell(row=ROW_SUM['판정'], column=acol(d, 0),
+                   value=f'=IF({c0}$6="휴일","",'
+                         f'IF({c0}{ROW_SUM["인원"]}>={c0}{ROW_SUM["필요"]},"충족","미달"))'),
+           bold=True, size=9)
+        st(ws.cell(row=ROW_SUM['직책자'], column=acol(d, 0),
+                   value=f'=IF({c0}$6="휴일","",{lead})'), size=9)
+        for k in (1, 2):
+            for r in ROW_SUM.values():
+                st(ws.cell(row=r, column=acol(d, k)), fill=HEAD_BG, size=9)
+        ws.merge_cells(start_row=ROW_SUM['판정'], start_column=acol(d, 0),
+                       end_row=ROW_SUM['판정'], end_column=acol(d, 2))
 
-    grid = f'{DL}{R0}:{DR}{R1}'
-    # 미달인 날에 8시간으로 바꿔줄 수 있는 사람 — 출장·교육·연차는 후보가 아니다
-    ws.conditional_formatting.add(grid, FormulaRule(
-        formula=[f'AND({DL}${ROW_SUM["판정"]}="미달",'
-                 f'COUNTIF(코드!$K$2:$K${nswap+1},{DL}{R0})>0)'],
-        fill=PatternFill('solid', fgColor=CAND_BG),
-        font=Font(name=FONT, bold=True, size=9, color='8A5A00'), stopIfTrue=True))
-    ws.conditional_formatting.add(grid, FormulaRule(
-        formula=[f'{DL}$6="휴일"'], fill=PatternFill('solid', fgColor=OFF_BG)))
-    ws.conditional_formatting.add(grid, FormulaRule(
-        formula=[f'{DL}{R0}<>""'], fill=PatternFill('solid', fgColor=IN_BG)))
-    row_j = f'{DL}{ROW_SUM["판정"]}:{DR}{ROW_SUM["판정"]}'
-    ws.conditional_formatting.add(row_j, CellIsRule(
-        operator='equal', formula=['"미달"'], fill=PatternFill('solid', fgColor=BAD_BG),
-        font=Font(name=FONT, bold=True, size=9, color='B3261E')))
-    ws.conditional_formatting.add(row_j, CellIsRule(
-        operator='equal', formula=['"충족"'], fill=PatternFill('solid', fgColor=OK_BG),
-        font=Font(name=FONT, bold=True, size=9, color='0F7B4F')))
-    ws.conditional_formatting.add(
-        f'{DL}{ROW_SUM["직책자"]}:{DR}{ROW_SUM["직책자"]}',
-        CellIsRule(operator='lessThan', formula=['1'],
-                   fill=PatternFill('solid', fgColor=WARN_BG)))
+    # 날짜별 조건부 서식 — 휴일 음영 · 입력 표시 · 미달일의 조율 후보
+    for d in range(1, DAYS + 1):
+        c0, c2 = aL(d, 0), aL(d, 2)
+        T = get_column_letter(D0 + d - 1)
+        rng = f'{c0}{R0}:{c2}{R1}'
+        ws.conditional_formatting.add(rng, FormulaRule(
+            formula=[f'AND(${c0}${ROW_SUM["판정"]}="미달",시간!${T}{cand_blk}>0)'],
+            fill=PatternFill('solid', fgColor=CAND_BG),
+            font=Font(name=FONT, bold=True, size=9, color='8A5A00'), stopIfTrue=True))
+        ws.conditional_formatting.add(rng, FormulaRule(
+            formula=[f'${c0}$6="휴일"'], fill=PatternFill('solid', fgColor=OFF_BG)))
+        ws.conditional_formatting.add(rng, FormulaRule(
+            formula=[f'AND(${c0}{R0}<>"",시간!${T}{BLK["실근로"]}+시간!${T}{BLK["휴가"]}=0)'],
+            fill=PatternFill('solid', fgColor=BAD_BG),
+            font=Font(name=FONT, bold=True, size=9, color='B3261E')))
+        ws.conditional_formatting.add(rng, FormulaRule(
+            formula=[f'${c0}{R0}<>""'], fill=PatternFill('solid', fgColor=IN_BG)))
+        jr = f'{c0}{ROW_SUM["판정"]}:{c2}{ROW_SUM["판정"]}'
+        ws.conditional_formatting.add(jr, CellIsRule(
+            operator='equal', formula=['"미달"'], fill=PatternFill('solid', fgColor=BAD_BG),
+            font=Font(name=FONT, bold=True, size=9, color='B3261E')))
+        ws.conditional_formatting.add(jr, CellIsRule(
+            operator='equal', formula=['"충족"'], fill=PatternFill('solid', fgColor=OK_BG),
+            font=Font(name=FONT, bold=True, size=9, color='0F7B4F')))
+        ws.conditional_formatting.add(
+            f'{c0}{ROW_SUM["직책자"]}:{c2}{ROW_SUM["직책자"]}',
+            CellIsRule(operator='lessThan', formula=['1'],
+                       fill=PatternFill('solid', fgColor=WARN_BG)))
 
     ws.cell(row=38, column=1,
             value='판정이 「미달」인 날은 노랗게 강조된 칸이 조율 후보입니다 — '
                   '그 사람이 8시간 근무로 바꾸면 충족됩니다 (출장·교육·연차는 후보에서 제외). '
-                  '직책자 8시간이 0이면 팀장·파트장 중 한 명이 8시간을 맡아야 합니다.').font = \
+                  '빨간 칸은 규칙에 없는 조합이니 유형·출근·퇴근을 다시 고르세요.').font = \
         Font(name=FONT, size=9, color=DIM)
     ws.protection.sheet = True
 
 
 def sheet_ot(wb):
     ws = wb.create_sheet('OT')
-    day_header(ws, 'OT — 날짜별 초과근로 시간',
+    hdr_narrow(ws, 'OT — 날짜별 초과근로 시간',
                '1시간 45분은 1.75 로 넣습니다 (분 단위 신청) · '
                '월 합계와 잔여는 「개인요약」 시트에서 봅니다')
     member_rows(ws)
     for i in range(N):
         for col in range(D0, D1 + 1):
-            st(ws.cell(row=R0 + i, column=col), size=9, fmt='0.##', locked=False)
+            st(ws.cell(row=R0 + i, column=col), size=9, fmt='0.##;;', locked=False)
     ws.conditional_formatting.add(f'{DL}{R0}:{DR}{R1}', CellIsRule(
         operator='greaterThan', formula=['0'], fill=PatternFill('solid', fgColor=IN_BG)))
     ws.cell(row=R1 + 3, column=1,
@@ -326,27 +414,48 @@ def sheet_ot(wb):
     ws.protection.sheet = True
 
 
-def sheet_hours(wb, nc):
-    """계산용 — 근태 시트의 코드를 실근로시간으로 바꾼다 (빈칸 = 소정근로일이면 8시간)."""
+def sheet_hours(wb, meta):
+    # 계산용 — 근태 시트의 유형·출근·퇴근을 조합 코드로 합친 뒤 조합표에서 값을 읽는다
     ws = wb.create_sheet('시간')
-    day_header(ws, '시간 (계산용) — 근태 시트의 코드를 실근로시간으로 바꾼 값입니다',
+    hdr_narrow(ws, '시간 (계산용) — 근태 시트를 조합표와 대조한 값입니다',
                '이 시트는 직접 고치지 마세요')
-    member_rows(ws)
+    n, nswap = meta['n'], meta['swap']
+    CODE = f'코드!$A$2:$A${n+1}'
+    for name, row0 in BLK.items():
+        st(ws.cell(row=row0 - 1, column=1, value=name), bold=True, align='left',
+           fill=HEAD_BG, size=9)
+        member_rows(ws, base=row0)
     for i in range(N):
-        r = R0 + i
-        for col in range(D0, D1 + 1):
-            L = get_column_letter(col)
-            st(ws.cell(row=r, column=col,
-                       value=f'=IF(근태!{L}$4="",0,IF(근태!{L}{r}="",'
-                             f'IF(근태!{L}$6="휴일",0,8),'
-                             f'IFERROR(INDEX(코드!$D$2:$D${nc+1},'
-                             f'MATCH(근태!{L}{r},코드!$A$2:$A${nc+1},0)),0)))'),
-               size=9, fmt='0.##')
+        ar = R0 + i
+        for d in range(1, DAYS + 1):
+            col = D0 + d - 1
+            T = get_column_letter(col)
+            c0, c1, c2 = aL(d, 0), aL(d, 1), aL(d, 2)
+            key = f'{T}{BLK["키"]+i}'
+            st(ws.cell(row=BLK['키'] + i, column=col,
+                       value=f'=IF(근태!{c0}{ar}="","",IF(근태!{c1}{ar}="",근태!{c0}{ar},'
+                             f'근태!{c0}{ar}&" "&SUBSTITUTE(근태!{c1}{ar},":","")&"-"&'
+                             f'SUBSTITUTE(근태!{c2}{ar},":","")))'), size=8, align='left')
+            st(ws.cell(row=BLK['실근로'] + i, column=col,
+                       value=f'=IF({key}="",IF({T}$6="휴일",0,8),'
+                             f'IFERROR(INDEX(코드!$D$2:$D${n+1},MATCH({key},{CODE},0)),0))'),
+               size=8, fmt='0.##')
+            st(ws.cell(row=BLK['휴가'] + i, column=col,
+                       value=f'=IF({key}="",0,'
+                             f'IFERROR(INDEX(코드!$E$2:$E${n+1},MATCH({key},{CODE},0)),0))'),
+               size=8, fmt='0.##')
+            st(ws.cell(row=BLK['충족'] + i, column=col,
+                       value=f'=IF({T}$6="휴일",0,IF({key}="",1,'
+                             f'IFERROR(INDEX(코드!$F$2:$F${n+1},MATCH({key},{CODE},0)),0)))'),
+               size=8)
+            st(ws.cell(row=BLK['후보'] + i, column=col,
+                       value=f'=IF({key}="",0,'
+                             f'IF(COUNTIF(코드!$K$2:$K${nswap+1},{key})>0,1,0))'), size=8)
     ws.sheet_state = 'hidden'
     ws.protection.sheet = True
 
 
-def sheet_summary(wb, nc, nmeets):
+def sheet_summary(wb, meta):
     ws = wb.create_sheet('개인요약')
     ws.cell(row=1, column=1, value='개인요약 — 월 총량 · OT 잔여 · 주별 근로시간').font = \
         Font(name=FONT, bold=True, size=13, color=NAV)
@@ -361,41 +470,35 @@ def sheet_summary(wb, nc, nmeets):
     for j, h in enumerate(cols, start=1):
         st(ws.cell(row=7, column=j, value=h), bold=True, fill=HEAD_BG, size=9)
         ws.column_dimensions[get_column_letter(j)].width = 11 if j > 3 else 10
+    member_rows(ws)
 
-    A = f'근태!$D$4:$AH$4'          # 일자
-    H = f'근태!$D$6:$AH$6'          # 휴일
-    W = f'근태!$D$3:$AH$3'          # 주 순번
-    CODE = f'코드!$A$2:$A${nc+1}'
-    LEAVE = f'코드!$E$2:$E${nc+1}'
-    MEET = f'코드!$J$2:$J${nmeets+1}'
+    A = f'시간!$D$4:$AH$4'
+    H = f'시간!$D$6:$AH$6'
+    W = f'시간!$D$3:$AH$3'
     for i in range(N):
-        r, m = R0 + i, M0 + i
-        row = f'근태!$D${r}:$AH${r}'
-        st(ws.cell(row=r, column=1, value=f'=IF(명부!A{m}="","",명부!A{m})'),
-           bold=True, align='left', size=9.5)
-        st(ws.cell(row=r, column=2, value=f'=IF(명부!C{m}="","",명부!C{m})'),
-           align='left', size=9, color=DIM)
-        st(ws.cell(row=r, column=3, value=f'=IF(명부!E{m}="","",명부!E{m})'), size=9, color=DIM)
+        r = R0 + i
+        work  = f'시간!$D${BLK["실근로"]+i}:$AH${BLK["실근로"]+i}'
+        leave = f'시간!$D${BLK["휴가"]+i}:$AH${BLK["휴가"]+i}'
+        meet  = f'시간!$D${BLK["충족"]+i}:$AH${BLK["충족"]+i}'
+        ot    = f'OT!$D${r}:$AH${r}'
         st(ws.cell(row=r, column=4, value=f'=SUMPRODUCT(({A}<>"")*({H}=""))'), size=9)
         st(ws.cell(row=r, column=5, value=f'=D{r}*8'), size=9, fmt='0.##')
-        st(ws.cell(row=r, column=6,
-                   value=f'=SUMPRODUCT(COUNTIF({row},{CODE}),{LEAVE})'), size=9, fmt='0.##')
+        st(ws.cell(row=r, column=6, value=f'=SUM({leave})'), size=9, fmt='0.##')
         st(ws.cell(row=r, column=7, value=f'=E{r}-F{r}'), bold=True, size=9, fmt='0.##',
            fill=HEAD_BG)
-        st(ws.cell(row=r, column=8, value=f'=SUM(시간!$D${r}:$AH${r})'), bold=True, size=9,
-           fmt='0.##', fill=HEAD_BG)
-        st(ws.cell(row=r, column=9, value=f'=H{r}-G{r}'), bold=True, size=9, fmt='+0.##;-0.##;0')
-        st(ws.cell(row=r, column=10, value=f'=SUM(OT!$D${r}:$AH${r})'), size=9, fmt='0.##')
+        st(ws.cell(row=r, column=8, value=f'=SUM({work})'), bold=True, size=9, fmt='0.##',
+           fill=HEAD_BG)
+        st(ws.cell(row=r, column=9, value=f'=H{r}-G{r}'), bold=True, size=9,
+           fmt='+0.##;-0.##;0')
+        st(ws.cell(row=r, column=10, value=f'=SUM({ot})'), size=9, fmt='0.##')
         st(ws.cell(row=r, column=11, value=None), fill='FFFF00', size=9, fmt='0.##',
            locked=False)
         st(ws.cell(row=r, column=12, value=f'=K{r}+F{r}'), size=9, fmt='0.##', color=DIM)
         st(ws.cell(row=r, column=13, value=f'=L{r}-J{r}'), bold=True, size=9, fmt='0.##')
-        st(ws.cell(row=r, column=14,
-                   value=f'=SUMPRODUCT(({H}="")*({A}<>"")*({row}=""))'
-                         f'+SUMPRODUCT(COUNTIF({row},{MEET}))'), size=9)
+        st(ws.cell(row=r, column=14, value=f'=SUM({meet})'), size=9)
         for w in range(1, WEEKS + 1):
             st(ws.cell(row=r, column=14 + w,
-                       value=f'=SUMPRODUCT(({W}={w})*(시간!$D${r}:$AH${r}+OT!$D${r}:$AH${r}))'),
+                       value=f'=SUMPRODUCT(({W}={w})*({work}))+SUMPRODUCT(({W}={w})*({ot}))'),
                size=9, fmt='0.##;;')
         first, last = get_column_letter(15), get_column_letter(14 + WEEKS)
         st(ws.cell(row=r, column=15 + WEEKS, value=f'=MAX({first}{r}:{last}{r})'),
@@ -403,10 +506,9 @@ def sheet_summary(wb, nc, nmeets):
         st(ws.cell(row=r, column=16 + WEEKS,
                    value=f'=IF({get_column_letter(15+WEEKS)}{r}>64,"초과","적합")'), size=9)
 
-    dif = get_column_letter(9)
+    dif, rem = get_column_letter(9), get_column_letter(13)
     ws.conditional_formatting.add(f'{dif}{R0}:{dif}{R1}', CellIsRule(
         operator='lessThan', formula=['0'], fill=PatternFill('solid', fgColor=WARN_BG)))
-    rem = get_column_letter(13)
     ws.conditional_formatting.add(f'{rem}{R0}:{rem}{R1}', CellIsRule(
         operator='lessThan', formula=['0'], fill=PatternFill('solid', fgColor=BAD_BG),
         font=Font(name=FONT, bold=True, size=9, color='B3261E')))
@@ -424,7 +526,7 @@ def sheet_summary(wb, nc, nmeets):
     ws.protection.sheet = True
 
 
-def sheet_guide(wb, nc, source):
+def sheet_guide(wb, meta, source):
     ws = wb.create_sheet('사용안내', 0)
     L = [
         ('위례 근태 관리 — Teams · OneDrive 공동 편집용', 14, True, NAV),
@@ -438,10 +540,11 @@ def sheet_guide(wb, nc, source):
         ('', 10, False, INK),
         ('■ 근태 시트 — 자기 이름 행에서 날짜 칸을 고릅니다', 11, True, NAV),
         ('   · 빈칸이 8시간 근무입니다. 8시간을 채우는 날은 아무것도 넣지 마세요.', 10, False, INK),
-        (f'   · 드롭다운에는 규칙을 통과하는 {nc}가지 조합만 들어 있습니다. '
-         '「근무 0830-1730」「오전반 1300-1700」처럼 유형과 시각을 함께 고릅니다.', 10, False, INK),
-        ('   · 목록에 없는 조합은 규칙 위반이라 아예 넣을 수 없습니다 — '
-         '코어타임·휴게시간·반차 배치 규칙이 드롭다운 자체에 반영되어 있습니다.', 10, False, INK),
+        (f"   · 유형 {meta['kinds']}가지 · 출근 {meta['starts']}가지 · "
+         f"퇴근 {meta['ends']}가지를 각각 고르면 됩니다. "
+         '연차·출장·교육·기타·휴직은 유형만 고르고 시각은 비워 둡니다.', 10, False, INK),
+        ('   · 규칙에 없는 조합(예: 오전반 + 08:30 출근)은 빨갛게 표시됩니다 — '
+         '유형·출근·퇴근을 다시 고르세요.', 10, False, INK),
         ('   · 맨 아래 판정 행이 빨갛게 되면 그날 30%가 미달입니다. '
          '노랗게 강조된 칸이 조율 후보 — 그 사람이 8시간으로 바꾸면 충족됩니다.', 10, False, INK),
         ('   · 노란 칸(B1·B2)에 연·월을 넣으면 날짜와 요일이 자동으로 바뀝니다.', 10, False, INK),
@@ -466,7 +569,7 @@ def sheet_guide(wb, nc, source):
         ('', 10, False, INK),
         ('시트 보호가 걸려 있지만 암호는 없습니다. 수식을 고쳐야 하면 '
          '[검토] → [시트 보호 해제] 를 누르세요.', 9, False, DIM),
-        (f'근무 조합 {nc}가지는 index.html 의 규칙 엔진에서 직접 뽑았습니다 ({source}). '
+        (f"근무 조합 {meta['n']}가지는 index.html 의 규칙 엔진에서 직접 뽑았습니다 ({source}). "
          '규칙이 바뀌면 python worktime/build_xlsx.py 로 다시 만드세요.', 9, False, DIM),
     ]
     for i, (txt, sz, bold, col) in enumerate(L, start=1):
@@ -480,19 +583,21 @@ def build(path):
     combos, source = load_combos()
     wb = Workbook()
     wb.remove(wb.active)
-    nc, nmeets, nswap = sheet_codes(wb, combos)
-    sheet_attend(wb, nc, nmeets, nswap)
+    meta = sheet_codes(wb, combos)
+    sheet_attend(wb, meta)
     sheet_ot(wb)
-    sheet_summary(wb, nc, nmeets)
-    sheet_hours(wb, nc)
+    sheet_summary(wb, meta)
+    sheet_hours(wb, meta)
     sheet_roster(wb)
     sheet_holidays(wb)
-    sheet_guide(wb, nc, source)
+    sheet_guide(wb, meta, source)
     wb.move_sheet('코드', offset=len(wb.sheetnames))
     wb.move_sheet('시간', offset=len(wb.sheetnames))
     wb.active = 0
     wb.save(path)
-    print(f'{path}  ({nc}개 조합 · 30% 충족 {nmeets}건 · 조율 후보 {nswap}건 · {source})')
+    print(f"{path}  (조합 {meta['n']} · 30% 충족 {meta['meets']} · 조율 후보 "
+          f"{meta['swap']} · 드롭다운 유형 {meta['kinds']}·출근 {meta['starts']}·"
+          f"퇴근 {meta['ends']} · {source})")
     return path
 
 
