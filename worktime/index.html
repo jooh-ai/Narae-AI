@@ -88,11 +88,14 @@ thead .nm{z-index:40;background:#fafbfc}
   padding:0 6px!important;min-width:66px;max-width:66px;color:var(--dim);
   font-size:11px;text-align:left!important;border-right:2px solid var(--line)!important}
 thead .pt{z-index:40;background:#fafbfc}
-td.d,th.d{min-width:34px;max-width:34px;height:28px}
+td.d,th.d{min-width:64px;max-width:64px;height:31px}
 th.wknd,td.wknd{background:var(--off);color:#9aa0a8}
 th.holi,td.holi{background:#fbeef0;color:#a4606a}
 td.d button{width:100%;height:100%;border:0;background:none;padding:0;
-  font:inherit;font-size:11px;color:inherit;line-height:28px}
+  font:inherit;color:inherit;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;line-height:1.15}
+td.d .l1{font-size:10.5px;font-weight:600;letter-spacing:-.3px}
+td.d .l2{font-size:8.5px;opacity:.72;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
 td.d button:hover{outline:2px solid var(--accent);outline-offset:-2px}
 td.full{background:var(--ok-bg);color:var(--ok);font-weight:600}
 td.part{background:var(--warn-bg);color:var(--warn)}
@@ -219,6 +222,7 @@ code{background:var(--off);border-radius:4px;padding:1px 5px;font-size:12px;
   <div class="card">
     <h2>선택적 근로 총량 · OT 잔여</h2>
     <div class="kpis" id="meKpis"></div>
+    <div class="row" id="meOtLimit" style="margin-top:11px"></div>
   </div>
   <div class="card">
     <h2>일별 내역</h2>
@@ -320,7 +324,12 @@ code{background:var(--off);border-radius:4px;padding:1px 5px;font-size:12px;
   <div class="card">
     <h2>공휴일 — 월 소정근로시간 산정에 사용</h2>
     <div class="row"><textarea id="holiText" rows="6" style="flex:1;min-width:280px;border:1px solid var(--line);border-radius:7px;padding:8px;font:12px ui-monospace,Menlo,monospace"></textarea></div>
-    <p class="help" style="margin:8px 0 0">한 줄에 <code>YYYY-MM-DD 명칭</code>. 사내 휴무일·창립기념일도 여기에 추가하세요.</p>
+    <div class="row" style="margin-top:9px">
+      <button class="btn sm" id="genHoli">＋ 연도 추가 (양력 공휴일 자동)</button>
+      <span class="small muted">설날 · 추석 · 부처님오신날은 음력이라 확인 후 직접 입력해야 합니다</span>
+    </div>
+    <p class="help" style="margin:8px 0 0">한 줄에 <code>YYYY-MM-DD 명칭</code>.
+      <code>#</code> 로 시작하는 줄은 주석입니다. 사내 휴무일·창립기념일도 여기에 추가하세요.</p>
   </div>
   <div class="card">
     <h2>구성원 명부 <span class="small muted" id="rosterCount"></span></h2>
@@ -341,9 +350,14 @@ code{background:var(--off);border-radius:4px;padding:1px 5px;font-size:12px;
     <div class="db">
       <div class="types" id="dlgTypes"></div>
       <div id="dlgFields"></div>
-      <div class="fld"><label>OT 시간</label>
-        <input type="number" id="dOt" step="0.5" min="0" max="12" style="width:82px">
-        <span class="small muted">시간 (0.5 단위)</span></div>
+      <div class="fld"><label>OT 시각</label>
+        <input type="time" id="dOtS" step="60" style="width:98px">
+        <span class="small muted">~</span>
+        <input type="time" id="dOtE" step="60" style="width:98px">
+        <span class="small muted mono" id="dOtCalc"></span></div>
+      <div class="fld"><label>OT 직접 입력</label>
+        <input type="number" id="dOt" step="0.25" min="0" max="14" style="width:82px">
+        <span class="small muted">시간 — 위에 시각을 넣으면 자동 계산됩니다 (분 단위)</span></div>
       <div class="fld"><label>사유·메모</label>
         <input type="text" id="dNote" placeholder="예: 발전소 정기점검 출장"></div>
       <div class="fld"><label>연속 적용</label>
@@ -385,16 +399,21 @@ const DEFAULTS = {
   flexAvgWeek: 52,              // 탄력 단위기간 평균 주 근로시간 한도
   flexMaxWeek: 64,              // 탄력 개별 주 최대 근로시간
   weekStart: 1,                 // 주 시작 요일 (1 = 월요일)
+  judgeUnit: 'all',             // 30% 판정 단위 — 'all' 전체 합산 · 'group' 그룹별
 };
+
+/* 명부 선택 목록 */
+const TEAMS = ['발전운영팀','정비기술팀'];
+const PARTS = ['발전지원','기계','전기','제어','정비지원','발전팀장','정비팀장','—'];
 
 /* 구성원 명부 — 발전운영팀 + 정비기술팀 */
 const ROSTER0 = [
-  ['김동환','발전운영팀','—',       '팀장',  'A',0],
+  ['김동환','발전운영팀','발전팀장','팀장',  'A',0],
   ['임태균','발전운영팀','발전지원','파트장','A',0],
   ['양시웅','발전운영팀','발전지원','구성원','C',0],
   ['한준우','발전운영팀','발전지원','구성원','C',0],
   ['권민중','발전운영팀','발전지원','구성원','C',0],
-  ['고재민','정비기술팀','—',       '팀장',  'A',0],
+  ['고재민','정비기술팀','정비팀장','팀장',  'A',0],
   ['정병철','정비기술팀','기계',    '파트장','A',0],
   ['박상호','정비기술팀','기계',    '구성원','B',0],
   ['최규석','정비기술팀','기계',    '구성원','B',0],
@@ -433,18 +452,18 @@ const HOLIDAYS0 = [
 
 /* 근무 유형 */
 const TYPES = {
-  NONE:    {label:'8시간 근무', short:'8',    cls:'full', fields:[]},
-  WORK:    {label:'선택근로',   short:'',     cls:'part', fields:['work','dinner']},
-  HALF_AM: {label:'오전 반차',  short:'반전', cls:'none', fields:['work']},
-  HALF_PM: {label:'오후 반차',  short:'반후', cls:'none', fields:['work']},
-  Q_AM:    {label:'오전 반반차',short:'¼전', cls:'none', fields:['work']},
-  Q_PM:    {label:'오후 반반차',short:'¼후', cls:'none', fields:['work']},
-  ANNUAL:  {label:'연차',       short:'연',   cls:'none', fields:[]},
-  TRIP:    {label:'출장',       short:'출',   cls:'none', fields:['hours']},
-  EDU:     {label:'교육',       short:'교',   cls:'none', fields:['hours']},
-  CHECKUP: {label:'건강검진',   short:'검',   cls:'none', fields:['work']},
-  OTHER:   {label:'기타',       short:'기',   cls:'none', fields:['hours']},
-  ONLEAVE: {label:'휴직',       short:'휴',   cls:'none', fields:[]},
+  NONE:    {label:'8시간 근무', short:'8시간',   cls:'full', fields:[]},
+  WORK:    {label:'선택근로',   short:'선택근로',cls:'part', fields:['work','dinner']},
+  HALF_AM: {label:'오전 반차',  short:'오전반',  cls:'none', fields:['work']},
+  HALF_PM: {label:'오후 반차',  short:'오후반',  cls:'none', fields:['work']},
+  Q_AM:    {label:'오전 반반차',short:'오전반반',cls:'none', fields:['work']},
+  Q_PM:    {label:'오후 반반차',short:'오후반반',cls:'none', fields:['work']},
+  ANNUAL:  {label:'연차',       short:'연차',    cls:'none', fields:[]},
+  TRIP:    {label:'출장',       short:'출장',    cls:'none', fields:['hours']},
+  EDU:     {label:'교육',       short:'교육',    cls:'none', fields:['hours']},
+  CHECKUP: {label:'건강검진',   short:'건강검진',cls:'none', fields:['work']},
+  OTHER:   {label:'기타',       short:'기타',    cls:'none', fields:['hours']},
+  ONLEAVE: {label:'휴직',       short:'휴직',    cls:'none', fields:[]},
 };
 const TYPE_ORDER = ['NONE','WORK','HALF_AM','HALF_PM','Q_AM','Q_PM',
                     'ANNUAL','TRIP','EDU','CHECKUP','OTHER','ONLEAVE'];
@@ -476,6 +495,18 @@ function dinnerTaken(end, mode, C){
   if (mode === 'no')  return false;
   return end > toMin(C.dinner[1]);
 }
+/* OT 시간 — 시각(분 단위)이 있으면 자동 계산, 없으면 직접 입력값.
+   선택적 근로는 30분 단위지만 OT 는 분 단위로 신청한다. */
+function otHours(e){
+  if (!e) return 0;
+  if (e.otStart && e.otEnd){
+    let a = toMin(e.otStart), b = toMin(e.otEnd);
+    if (b <= a) b += 24 * 60;                 // 자정을 넘긴 OT
+    return Math.round((b - a) / 0.6) / 100;   // 소수점 2자리
+  }
+  return +e.ot || 0;
+}
+
 /* 실근로시간 (시간 단위) */
 function workNet(s, e, mode, C){
   const L = [toMin(C.lunch[0]),  toMin(C.lunch[1])];
@@ -485,10 +516,13 @@ function workNet(s, e, mode, C){
   return m / 60;
 }
 /* 휴가 블록 산정 — 고정된 끝(anchor)에서 순 leaveH 시간이 되는 구간을 찾는다.
-   dir='back' → [x, anchor] (오전 휴가) · dir='fwd' → [anchor, x] (오후 휴가) */
+   dir='back' → [x, anchor] (오전 휴가) · dir='fwd' → [anchor, x] (오후 휴가)
+   블록은 선택근로 사용 범위(07:30~20:30) 안에 있어야 한다 — 범위 밖 후보밖에 없으면
+   outOfWindow 로 표시해 "이 근무 시각에는 배치할 수 없음"을 알린다. */
 function solveLeaveBlock(anchor, leaveH, dir, C){
   const want = leaveH * 60, cands = [];
-  for (let k = 1; k <= 26; k++){
+  const win = [toMin(C.window[0]), toMin(C.window[1])];
+  for (let k = 1; k <= 30; k++){
     const x = dir === 'back' ? anchor - k*C.unit : anchor + k*C.unit;
     if (x < 0 || x > 24*60) break;
     const s = dir === 'back' ? x : anchor;
@@ -496,8 +530,11 @@ function solveLeaveBlock(anchor, leaveH, dir, C){
     if (leaveNet(s, e, C) === want) cands.push([s, e]);
   }
   if (!cands.length) return null;
-  const clean = cands.find(([s,e]) => !straddlesLunch(s, e, C));
-  return { span: clean || cands[0], straddle: !clean };
+  const inWin = cands.filter(([s,e]) => s >= win[0] && e <= win[1]);
+  const pool  = inWin.length ? inWin : cands;
+  const clean = pool.find(([s,e]) => !straddlesLunch(s, e, C));
+  const span  = clean || pool[0];
+  return { span, straddle: !clean, outOfWindow: !inWin.length };
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -515,7 +552,7 @@ function evalDay(entry, C, opt){
   const ty = TYPES[T] || TYPES.NONE;
   const R  = {type:T, label:ty.label, work:0, credit:0, counts8h:false,
               viol:[], block:null, excluded:false,
-              ot:(entry && +entry.ot) || 0, note:(entry && entry.note) || ''};
+              ot:otHours(entry), note:(entry && entry.note) || ''};
 
   const core = [toMin(C.core[0]),   toMin(C.core[1])];
   const win  = [toMin(C.window[0]), toMin(C.window[1])];
@@ -555,6 +592,12 @@ function evalDay(entry, C, opt){
   const net = workNet(s, e, dmode, C);
   R.work = net;
 
+  const insideBreak = t => [C.lunch, C.dinner].some(br =>
+    t > toMin(br[0]) && t < toMin(br[1]));
+  if (insideBreak(s) || insideBreak(e))
+    R.viol.push(`근무 시작·종료는 휴게시간(${C.lunch[0]}~${C.lunch[1]} · `
+              + `${C.dinner[0]}~${C.dinner[1]}) 중간일 수 없습니다`);
+
   /* 선택근로 사용 범위 */
   if (!flexMode && (s < win[0] || e > win[1]))
     R.viol.push(`선택근로 사용 범위(${C.window[0]}~${C.window[1]}) 밖입니다`);
@@ -575,9 +618,18 @@ function evalDay(entry, C, opt){
     if (!blk){ R.viol.push(`${fmtH(leaveH)}시간 휴가를 배치할 수 없는 조합입니다`); }
     else {
       R.block = blk.span;
-      if (blk.straddle)
+      if (blk.outOfWindow)
+        R.viol.push(`이 근무 시각에는 ${ty.label}를 배치할 수 없습니다 — `
+                  + `휴가 블록(${toStr(blk.span[0])}~${toStr(blk.span[1])})이 `
+                  + `선택근로 사용 범위(${C.window[0]}~${C.window[1]}) 밖입니다`);
+      else if (blk.straddle)
         R.viol.push(`휴게시간 중합 — 휴가 블록(${toStr(blk.span[0])}~${toStr(blk.span[1])})이 `
                   + `점심 휴게와 일부만 겹칩니다`);
+      const half = (T === 'HALF_AM' || T === 'HALF_PM' || T === 'CHECKUP');
+      if (half && blk.span.some(t => t > core[0] && t < core[1]))
+        R.viol.push(`휴가 블록(${toStr(blk.span[0])}~${toStr(blk.span[1])})이 `
+                  + `코어타임(${C.core[0]}~${C.core[1]}) 중간에서 시작하거나 끝납니다 — `
+                  + `코어타임은 나눌 수 없습니다`);
       if (T === 'Q_AM' && s !== blk.span[1])
         R.viol.push(`오전 반반차는 ${toStr(blk.span[0])}~${toStr(blk.span[1])} — `
                   + `근무는 ${toStr(blk.span[1])}부터 시작해야 합니다`);
@@ -604,7 +656,19 @@ function evalDay(entry, C, opt){
   if (net > C.maxWork)
     R.viol.push(`1일 인정 한도 ${fmtH(C.maxWork)}시간 초과 (${fmtH(net)}시간)`);
 
-  R.credit   = net + leaveH;
+  if (entry.otStart && entry.otEnd){
+    let oa = toMin(entry.otStart), ob = toMin(entry.otEnd);
+    if (ob <= oa) ob += 24 * 60;
+    if (overlap(s, e, oa, ob) > 0)
+      R.viol.push(`OT 시각(${entry.otStart}~${entry.otEnd})이 `
+                + `근무 시각(${entry.start}~${entry.end})과 겹칩니다 — `
+                + `선택근로 시간과 OT 시간은 나눠서 입력하세요`);
+  }
+
+  R.credit = net + leaveH;
+  if (leaveH && R.credit > C.maxWork)
+    R.viol.push(`1일 인정시간 한도 ${fmtH(C.maxWork)}시간 초과 `
+              + `(근로 ${fmtH(net)}h + 휴가 ${fmtH(leaveH)}h = ${fmtH(R.credit)}h)`);
   R.counts8h = !flexMode && T === 'WORK' && net >= C.fullDay;
   return R;
 }
@@ -628,8 +692,8 @@ const KEY = 'wirye.worktime.v1';
 let ST = load();
 
 function blank(){
-  return {cfg:{...DEFAULTS}, roster:ROSTER0.map(m => ({...m})),
-          holidays:HOLIDAYS0, entries:{}, flex:null,
+  return {v:2, cfg:{...DEFAULTS}, roster:ROSTER0.map(m => ({...m})),
+          holidays:HOLIDAYS0, entries:{}, flex:null, otLimits:{},
           month:ymd(new Date()).slice(0,7), group:'', who:ROSTER0[0].name};
 }
 function load(){
@@ -637,7 +701,16 @@ function load(){
     const raw = localStorage.getItem(KEY);
     if (!raw) return blank();
     const s = JSON.parse(raw), b = blank();
-    return {...b, ...s, cfg:{...DEFAULTS, ...(s.cfg||{})}};
+    const st = {...b, ...s, cfg:{...DEFAULTS, ...(s.cfg||{})},
+                otLimits:s.otLimits || {}};
+    if (!s.v || s.v < 2){            // 팀장 파트 표기 보정
+      st.roster.forEach(m => {
+        if (m.role === '팀장' && (!m.part || m.part === '—'))
+          m.part = m.team === '발전운영팀' ? '발전팀장' : '정비팀장';
+      });
+      st.v = 2;
+    }
+    return st;
   }catch(err){ console.warn('저장된 데이터를 읽지 못했습니다', err); return blank(); }
 }
 function save(){
@@ -645,6 +718,11 @@ function save(){
   catch(err){ console.warn('저장 실패', err); }
 }
 const C = () => ST.cfg;
+/* 월 OT 한도 — 월마다 다르므로 월별 값을 우선, 없으면 기본값 */
+const otLimitFor = ym => {
+  const v = ST.otLimits && ST.otLimits[ym];
+  return (v == null || v === '') ? C().otLimit : +v;
+};
 const eKey = (name, date) => `${name}|${date}`;
 const getEntry = (name, date) => ST.entries[eKey(name, date)] || null;
 function setEntry(name, date, val){
@@ -658,7 +736,7 @@ const activeRoster = () => ST.roster.filter(m => !m.onLeave);
 function holidayMap(){
   const m = {};
   String(ST.holidays || '').split('\n').forEach(line => {
-    const t = line.trim(); if (!t) return;
+    const t = line.trim(); if (!t || t.startsWith('#')) return;
     const mt = t.match(/^(\d{4}-\d{2}-\d{2})\s*(.*)$/);
     if (mt) m[mt[1]] = mt[2] || '공휴일';
   });
@@ -697,16 +775,44 @@ function dayAgg(date, workday, flexMode){
   });
   const act = rows.filter(r => !r.excluded);
   const met = act.filter(r => r.ev.counts8h);
-  const parts = {};
+  const parts = {}, groups = {};
   act.forEach(r => {
+    const g = r.m.group || '?';
+    groups[g] = groups[g] || {size:0, met:0};
+    groups[g].size++;
+    if (r.ev.counts8h) groups[g].met++;
     const p = r.m.part;
-    if (!p || p === '—') return;
+    if (!p || p === '—' || r.m.role === '팀장') return;   // 팀장은 파트 소속이 아니다
     parts[p] = parts[p] || {size:0, met:0};
     parts[p].size++;
     if (r.ev.counts8h) parts[p].met++;
   });
-  return {rows, active:act.length, need:Math.ceil(act.length * C().ratio),
-          met:met.length, mgr:met.filter(r => r.m.role !== '구성원').length, parts};
+  const need = Math.ceil(act.length * C().ratio);
+  const groupShort = Object.entries(groups)
+    .filter(([g,v]) => v.met < Math.ceil(v.size * C().ratio))
+    .map(([g,v]) => `${g} ${v.met}/${Math.ceil(v.size * C().ratio)}`);
+  return {rows, active:act.length, need, met:met.length,
+          mgr:met.filter(r => r.m.role !== '구성원').length,
+          parts, groups, groupShort,
+          ok: C().judgeUnit === 'group' ? !groupShort.length : met.length >= need};
+}
+
+/* 판정 단위별 필요 인원 비교 — 그룹화가 실제로 유리한지 보기 위한 값 */
+function needComparison(){
+  const act = activeRoster(), r = C().ratio;
+  const all = Math.ceil(act.length * r);
+  const byG = ['A','B','C'].reduce((t, g) => {
+    const n = act.filter(m => m.group === g).length;
+    return t + (n ? Math.ceil(n * r) : 0);
+  }, 0);
+  const buckets = {};
+  act.forEach(m => {
+    const k = m.role === '팀장' ? '팀장' : m.part;
+    if (!k || k === '—') return;
+    buckets[k] = (buckets[k] || 0) + 1;
+  });
+  const byP = Object.values(buckets).reduce((t, n) => t + Math.ceil(n * r), 0);
+  return {all, byG, byP};
 }
 /* 그룹별 인원 정렬 */
 const GROUP_LABEL = {A:'A그룹 · 직책자 (팀장 · 파트장)',
@@ -763,9 +869,11 @@ function renderCal(){
     const a = aggs[i];
     if (!a){ const td = el('td', dayCls(d), '—'); r3.appendChild(td); return; }
     if (flexMode){ r3.appendChild(el('td','d','—')); return; }
-    const ok = a.met >= a.need;
-    const td = el('td', 'd ' + (ok ? 'meet' : 'short'), `${a.met}/${a.need}`);
-    td.title = `충족 ${a.met}명 / 필요 ${a.need}명 (모수 ${a.active}명)`;
+    const td = el('td', 'd ' + (a.ok ? 'meet' : 'short'), `${a.met}/${a.need}`);
+    td.title = [`충족 ${a.met}명 / 필요 ${a.need}명 (모수 ${a.active}명)`,
+      '그룹별 — ' + Object.entries(a.groups)
+        .map(([g,v]) => `${g} ${v.met}/${Math.ceil(v.size*C().ratio)}`).join(' · '),
+      `판정 단위: ${C().judgeUnit === 'group' ? '그룹별' : '전체 합산'}`].join('\n');
     r3.appendChild(td);
   });
   thead.appendChild(r3);
@@ -793,9 +901,13 @@ function renderCal(){
                            {isWorkday:d.workday, flexMode});
         const cls = cellClass(d, ev, m, flexMode);
         const td = el('td', cls);
-        const b = el('button', null, cellText(ev, d, flexMode));
+        const raw = getEntry(m.name, d.date);
+        const [l1, l2] = cellLines(ev, d, raw, flexMode);
+        const b = el('button');
         b.type = 'button';
-        b.title = cellTitle(m, d, ev);
+        if (l1) b.appendChild(el('span','l1', l1));
+        if (l2) b.appendChild(el('span','l2', l2));
+        b.title = cellTitle(m, d, ev, raw);
         b.onclick = () => openDlg(m, d, flexMode);
         td.appendChild(b); tr.appendChild(td);
       });
@@ -819,23 +931,27 @@ function cellClass(d, ev, m, flexMode){
   if (ev.viol.length) cls += ' viol';
   return cls;
 }
-function cellText(ev, d, flexMode){
-  if (ev.type === 'ONLEAVE') return '휴';
-  if (flexMode){
-    if (!d.workday && !ev.ot && ev.type === 'NONE') return '';
-    const base = ev.type === 'NONE' ? fmtH(ev.work) : (TYPES[ev.type].short || fmtH(ev.work));
-    return ev.ot ? `${base}+${fmtH(ev.ot)}` : base;
+/* 셀 2줄: 1행 = 유형·근로시간(+OT), 2행 = 실제 근무 시각 */
+function cellLines(ev, d, raw, flexMode){
+  if (ev.type === 'ONLEAVE') return ['휴직', ''];
+  const otTag = ev.ot ? ` OT${fmtH(ev.ot)}` : '';
+  const range = (raw && raw.start && raw.end) ? `${raw.start}~${raw.end}` : '';
+  if (ev.type === 'NONE'){
+    if (!d.workday && !ev.ot) return ['', ''];
+    if (flexMode) return [fmtH(ev.work) + 'h' + otTag, ''];
+    return [otTag.trim(), ''];
   }
-  if (ev.type === 'NONE') return '';
-  if (ev.type === 'WORK') return fmtH(ev.work);
-  return TYPES[ev.type].short;
+  if (ev.type === 'WORK') return [fmtH(ev.work) + 'h' + otTag, range];
+  return [TYPES[ev.type].short + otTag, range];
 }
-function cellTitle(m, d, ev){
+function cellTitle(m, d, ev, raw){
   const L = [`${m.name} · ${d.date}(${DOW[d.dow]})`, ev.label];
   if (d.holiday) L.push(d.holiday);
+  if (raw && raw.start && raw.end) L.push(`근무 ${raw.start}~${raw.end}`);
   if (ev.work) L.push(`실근로 ${fmtH(ev.work)}h`);
   if (ev.credit) L.push(`인정 ${fmtH(ev.credit)}h`);
-  if (ev.ot) L.push(`OT ${fmtH(ev.ot)}h`);
+  if (ev.ot) L.push(`OT ${fmtH(ev.ot)}h`
+    + (raw && raw.otStart ? ` (${raw.otStart}~${raw.otEnd})` : ''));
   if (ev.block) L.push(`휴가 ${toStr(ev.block[0])}~${toStr(ev.block[1])}`);
   if (ev.note) L.push(ev.note);
   if (ev.viol.length) L.push('⚠ ' + ev.viol.join(' / '));
@@ -862,12 +978,16 @@ function renderCalKpis(days, aggs, flexMode){
   box.appendChild(kpi('월 소정근로시간', `${fmtH(wd.length * C().fullDay)}h`,
     `${wd.length}일 × ${C().fullDay}h`));
   if (!flexMode){
-    const bad = aggs.filter((a,i) => a && a.met < a.need).length;
-    const mgrBad = aggs.filter((a,i) => a && a.mgr < C().managerMin).length;
+    const bad = aggs.filter(a => a && !a.ok).length;
+    const mgrBad = aggs.filter(a => a && a.mgr < C().managerMin).length;
     box.appendChild(kpi('30% 미달일', `${bad}일`, bad ? '조율 필요' : '전일 충족',
       bad ? 'bad' : 'ok'));
     box.appendChild(kpi('직책자 미달일', `${mgrBad}일`,
       `직책자 ${C().managerMin}명 이상 필요`, mgrBad ? 'warn' : 'ok'));
+    const cmp = needComparison();
+    box.appendChild(kpi('판정 단위 비교',
+      `${cmp.all} · ${cmp.byG} · ${cmp.byP}`,
+      `전체 합산 · 그룹별 합계 · 파트별 합계 (현재 ${C().judgeUnit === 'group' ? '그룹별' : '전체 합산'})`));
   }
 }
 
@@ -891,6 +1011,7 @@ function renderShortList(days, aggs, flexMode){
     const a = aggs[i]; if (!a) return;
     const why = [];
     if (a.met < a.need) why.push(`30% 미달 ${a.met}/${a.need}명`);
+    if (a.groupShort.length) why.push(`그룹 미달: ${a.groupShort.join(', ')}`);
     if (a.mgr < C().managerMin) why.push(`직책자 ${a.mgr}명`);
     const pb = Object.entries(a.parts)
       .filter(([p,v]) => v.met < partNeed(v.size))
@@ -935,7 +1056,7 @@ function renderShortList(days, aggs, flexMode){
 let DLG = null;
 function timeOpts(sel, val, lo, hi){
   sel.innerHTML = '';
-  const a = lo != null ? lo : 6*60, b = hi != null ? hi : 22*60;
+  const a = lo != null ? lo : 6*60, b = hi != null ? hi : 23*60 + 30;
   for (let m = a; m <= b; m += C().unit){
     const o = el('option', null, toStr(m)); o.value = toStr(m); sel.appendChild(o);
   }
@@ -947,9 +1068,16 @@ function openDlg(m, d, flexMode){
   $('#dlgTitle').textContent = `${d.date} (${DOW[d.dow]})`;
   $('#dlgWho').textContent = `${m.name} · ${m.part} · ${m.role}`
     + (d.holiday ? ` · ${d.holiday}` : '');
+  $('#dOtS').value = DLG.e.otStart || '';
+  $('#dOtE').value = DLG.e.otEnd || '';
   $('#dOt').value = DLG.e.ot || '';
   $('#dNote').value = DLG.e.note || '';
   $('#dRepeat').value = 1;
+  ['#dOtS','#dOtE','#dOt'].forEach(id => $(id).oninput = () => {
+    DLG.e.otStart = $('#dOtS').value; DLG.e.otEnd = $('#dOtE').value;
+    DLG.e.ot = +$('#dOt').value || 0;
+    drawVerdict();
+  });
   drawDlgTypes(); drawDlgFields();
   $('#dlg').showModal();
 }
@@ -1002,8 +1130,13 @@ function drawDlgFields(){
 function drawVerdict(){
   const box = $('#dlgVerdict'); box.innerHTML = '';
   const ev = evalDay(DLG.e, C(), {isWorkday:DLG.d.workday, flexMode:DLG.flexMode});
+  const ot = otHours(DLG.e);
+  $('#dOtCalc').textContent = (DLG.e.otStart && DLG.e.otEnd)
+    ? `= ${fmtH(ot)}시간` : '';
+
   const v = el('div', 'verdict ' + (ev.viol.length ? 'bad' : 'ok'));
   const bits = [`실근로 <b>${fmtH(ev.work)}h</b>`, `총량 인정 <b>${fmtH(ev.credit)}h</b>`];
+  if (ot) bits.push(`OT <b>${fmtH(ot)}h</b>`);
   if (ev.block) bits.push(`휴가 <b>${toStr(ev.block[0])}~${toStr(ev.block[1])}</b>`);
   if (!DLG.flexMode) bits.push(ev.counts8h ? '30% 인원 <b>충족</b>' : '30% 인원 <b>미충족</b>');
   v.innerHTML = bits.join(' · ');
@@ -1013,6 +1146,24 @@ function drawVerdict(){
     v.appendChild(ul);
   }
   box.appendChild(v);
+
+  /* 07:30~22:30 처럼 OT 를 포함해 한 번에 적은 경우 — 초과분을 OT 로 떼어낸다 */
+  const win1 = toMin(C().window[1]);
+  if (!DLG.flexMode && DLG.e.end && toMin(DLG.e.end) > win1 && !DLG.e.otStart){
+    const over = fmtH((toMin(DLG.e.end) - win1) / 60);
+    const b = el('button','btn sm', `${C().window[1]} 이후 ${over}시간을 OT 로 분리`);
+    b.type = 'button';
+    b.style.marginTop = '7px';
+    b.onclick = () => {
+      DLG.e.otStart = C().window[1];
+      DLG.e.otEnd   = DLG.e.end;
+      DLG.e.end     = C().window[1];
+      $('#dOtS').value = DLG.e.otStart;
+      $('#dOtE').value = DLG.e.otEnd;
+      drawDlgFields();
+    };
+    box.appendChild(b);
+  }
 }
 /* 유형에 쓰이지 않는 입력 필드는 저장하지 않는다 */
 function cleanEntry(e){
@@ -1020,7 +1171,8 @@ function cleanEntry(e){
   if (f.includes('work')){ o.start = e.start; o.end = e.end; }
   if (f.includes('dinner')) o.dinner = e.dinner;
   if (f.includes('hours'))  o.hours  = e.hours;
-  if (e.ot)   o.ot   = e.ot;
+  if (e.otStart && e.otEnd){ o.otStart = e.otStart; o.otEnd = e.otEnd; }
+  else if (e.ot) o.ot = e.ot;
   if (e.note) o.note = e.note;
   return o;
 }
@@ -1042,10 +1194,11 @@ $('#dlg').addEventListener('close', () => {
   if (!DLG) return;
   if (rv === 'ok'){
     const base = cleanEntry({...DLG.e,
+      otStart: $('#dOtS').value, otEnd: $('#dOtE').value,
       ot: +($('#dOt').value || 0) || 0,
       note: $('#dNote').value.trim()});
     const days = spanDates(DLG.d.date, +$('#dRepeat').value || 1);
-    const bare = base.type === 'NONE' && !base.ot && !base.note;
+    const bare = base.type === 'NONE' && !otHours(base) && !base.note;
     days.forEach(dt => setEntry(DLG.m.name, dt, bare ? null : {...base}));
   } else if (rv === 'clear'){
     setEntry(DLG.m.name, DLG.d.date, null);
@@ -1088,12 +1241,31 @@ function renderMe(){
   k.appendChild(kpi('총량 대비', `${diff >= 0 ? '+' : ''}${fmtH(diff)}h`,
     diff === 0 ? '일치' : (diff > 0 ? '적립' : '부족'),
     diff === 0 ? 'ok' : (diff > 0 ? 'warn' : 'bad')));
-  k.appendChild(kpi('OT 누적', `${fmtH(ot)}h`, `한도 ${fmtH(C().otLimit)}h`));
-  const left = C().otLimit - ot;
+  const limit = otLimitFor(ym);
+  const kOt = kpi('OT 누적', `${fmtH(ot)}h`, `한도 ${fmtH(limit)}h`);
+  k.appendChild(kOt);
+  const left = limit - ot;
   k.appendChild(kpi('OT 잔여', `${fmtH(left)}h`,
     left < 0 ? '한도 초과' : '사용 가능', left < 0 ? 'bad' : (left === 0 ? 'warn' : 'ok')));
   if (!flexMode) k.appendChild(kpi('8시간 근무일', `${met}일`, '30% 인원 기여'));
   k.appendChild(kpi('규칙 위반', `${viol}일`, viol ? '확인 필요' : '없음', viol ? 'bad' : 'ok'));
+
+  /* OT 한도는 달마다 다르므로 해당 월 값을 여기서 직접 넣는다 */
+  const lim = $('#meOtLimit'); lim.innerHTML = '';
+  lim.appendChild(el('span','small muted', `${ym} OT 한도`));
+  const li = el('input');
+  li.type = 'number'; li.step = '0.5'; li.min = '0'; li.style.width = '86px';
+  li.style.border = '1px solid var(--line)'; li.style.borderRadius = '6px';
+  li.style.padding = '4px 7px';
+  li.value = limit;
+  li.onchange = () => {
+    ST.otLimits[ym] = li.value === '' ? undefined : +li.value;
+    if (li.value === '') delete ST.otLimits[ym];
+    save(); renderMe();
+  };
+  lim.appendChild(li);
+  lim.appendChild(el('span','small muted',
+    '시간 — 사내 HR 시스템의 해당 월 OT 가능 시간을 넣으세요 (비우면 기본값 사용)'));
 
   const t = $('#meTable'); t.innerHTML = '';
   const head = el('tr');
@@ -1158,6 +1330,14 @@ function flexWeeks(name){
   return {P, weeks, total, days, avg, max,
           okAvg: avg <= C().flexAvgWeek, okMax: max <= C().flexMaxWeek};
 }
+/* 단위기간 표기 — 같은 해면 "2026년 9월~11월", 해를 넘기면 양쪽 모두 표기 */
+function periodLabel(P){
+  const a = P.start, b = P.end;
+  return a.getFullYear() === b.getFullYear()
+    ? `${a.getFullYear()}년 ${a.getMonth()+1}월~${b.getMonth()+1}월`
+    : `${a.getFullYear()}년 ${a.getMonth()+1}월~${b.getFullYear()}년 ${b.getMonth()+1}월`;
+}
+
 function renderFlex(){
   const P = flexPeriod();
   $('#flexStart').value  = ST.flex ? ST.flex.start : ST.month;
@@ -1183,8 +1363,10 @@ function renderFlex(){
     $('#flexWeeks').innerHTML = ''; $('#flexWhoName').textContent = '';
     return;
   }
+  const pl = periodLabel(P);
   const head = el('tr');
-  ['구성원','파트','기간 총 근로','평균 주 근로','최대 주','평균 52h','최대 64h']
+  ['구성원','파트',`기간 총 근로 (${pl})`,`평균 주 근로 (${pl})`,
+   '최대 주','평균 52h','최대 64h']
     .forEach(h => head.appendChild(el('th', null, h)));
   t.appendChild(el('thead')).appendChild(head);
   const tb = el('tbody');
@@ -1209,7 +1391,8 @@ function renderFlex(){
   /* 주별 상세 */
   const nm = who.value || ST.who;
   who.value = nm;
-  $('#flexWhoName').textContent = `${nm} · ${ymd(P.start)} ~ ${ymd(P.end)}`;
+  $('#flexWhoName').textContent =
+    `${nm} · ${periodLabel(P)} (${ymd(P.start)} ~ ${ymd(P.end)})`;
   const r = flexWeeks(nm);
   const wt = $('#flexWeeks'); wt.innerHTML = '';
   const h2 = el('tr');
@@ -1295,14 +1478,29 @@ function renderRuleDoc(){
       + `(4시간 근로 + 4시간 출장도 미충족).`],
     ['30% 필수 인원', `모수(휴직 제외) × ${c.ratio} <b>올림</b>. `
       + `30명 → 9명 · 25명 → 7.5 → 8명 · 23명 → 6.9 → 7명. `
-      + `직책자(팀장 · 파트장) 중 <b>${c.managerMin}명 이상</b>이 8시간에 포함되어야 합니다.`],
+      + `직책자(팀장 · 파트장) 중 <b>${c.managerMin}명 이상</b>이 8시간에 포함되어야 합니다. `
+      + `현재 판정 단위는 <b>${c.judgeUnit === 'group' ? '그룹별(A·B·C 각각)' : '전체 합산(두 팀 기준)'}</b> — `
+      + `설정에서 바꿀 수 있습니다. 올림은 한 번만 할수록 유리하므로 `
+      + `전체 합산이 그룹별보다, 그룹별이 파트별보다 필요 인원이 적습니다.`],
     ['파트 최소 인원', `파트당 <b>${c.partMin}명</b> (구성원 ${c.partSmallSize}명 이하 파트는 ${c.partSmallMin}명). `
       + `3개 그룹(A · B · C)으로 묶어 운영하며 <b>팀장 승인 시 유예</b> 가능 — 이 도구는 경고로만 표시합니다.`],
     ['반차 (4시간)', `휴가 블록의 <b>순 시간이 정확히 ${fmtH(c.halfDay)}시간</b>이어야 하고, `
       + `점심 휴게를 <b>완전히 포함하거나 전혀 걸치지 않아야</b> 합니다 — `
       + `<code>07:30~12:30</code>은 점심과 30분만 겹쳐(휴게시간 중합) 불가. `
-      + `또한 휴가 블록이 <b>코어타임 중간에서 시작할 수 없습니다</b> — `
-      + `<code>09:00~14:00</code>은 <code>08:30~09:00</code>이 코어타임에 남아 불가.`],
+      + `휴가 블록은 근무 시각에서 역산합니다(오전은 근무 시작에서 뒤로, 오후는 근무 종료에서 앞으로).`],
+    ['휴가 블록 배치', `블록은 <b>선택근로 사용 범위(${c.window[0]}~${c.window[1]}) 안</b>에 있어야 하고, `
+      + `<b>코어타임을 나눌 수 없습니다</b>(양 끝이 코어타임 중간에 올 수 없음). `
+      + `<code>08:30~17:30</code> 근무에 오전 반차를 붙이면 블록이 <code>04:30~08:30</code>이 되어 불가, `
+      + `오후 반차는 <code>17:30~21:30</code>이 되어 불가. `
+      + `<code>09:00~14:00</code>은 코어타임 중간(09:00)에서 시작해 불가.`],
+    ['휴게시간 경계', `근무 시작·종료는 <b>휴게시간 중간일 수 없습니다</b> — `
+      + `<code>08:00~12:30</code> 퇴근은 <code>08:00~13:00</code>과 인정시간이 같아 의미가 없습니다.`],
+    ['1일 인정시간 한도', `근로 + 휴가 인정분의 합이 <b>${fmtH(c.maxWork)}시간</b>을 넘을 수 없습니다 — `
+      + `<code>07:30~16:30</code> 근무(8h)에 오후 반차(4h)를 더하면 12시간이 되어 불가.`],
+    ['OT (초과근로)', `선택적 근로는 ${c.unit}분 단위지만 <b>OT 는 분 단위</b>로 신청합니다. `
+      + `OT 시작·종료 시각을 넣으면 시간이 자동 계산되고, `
+      + `<b>근무 시각과 겹치면 경고</b>합니다. 선택근로 시간과 OT 시간은 나눠서 입력합니다 — `
+      + `<code>07:30~20:30</code> 근무 + OT <code>20:30~22:30</code>.`],
     ['반반차 (2시간)', `정규 근로시간 앞뒤로만 — 오전 <code>${c.regular[0]}~`
       + `${toStr(toMin(c.regular[0]) + c.quarter*60)}</code> · 오후 `
       + `<code>${toStr(toMin(c.regular[1]) - c.quarter*60)}~${c.regular[1]}</code>.`],
@@ -1362,6 +1560,26 @@ const TESTS = [
    e:{type:'Q_PM',start:'08:30',end:'15:30'}, work:6, ok:true, blk:'15:30~17:30'},
   {t:'출장 — 시간과 무관하게 30% 인원 미충족',
    e:{type:'TRIP'}, work:8, ok:true, c8:false},
+  {t:'오전 반차 + 근무 11:30~16:30 → 블록 07:30~11:30',
+   e:{type:'HALF_AM',start:'11:30',end:'16:30'}, work:4, ok:true, blk:'07:30~11:30'},
+  {t:'오전 반차 + 근무 08:30~17:30 — 블록이 04:30~08:30 이 되어 사용 범위 밖',
+   e:{type:'HALF_AM',start:'08:30',end:'17:30'}, ok:false},
+  {t:'오후 반차 + 근무 08:30~17:30 — 블록이 17:30~21:30 이 되어 사용 범위 밖',
+   e:{type:'HALF_PM',start:'08:30',end:'17:30'}, ok:false},
+  {t:'오후 반차 + 근무 07:30~10:30 — 블록이 코어타임 중간(10:30)에서 시작',
+   e:{type:'HALF_PM',start:'07:30',end:'10:30'}, ok:false},
+  {t:'오후 반차 + 근무 07:30~16:30 — 근로 8h + 휴가 4h = 12h 로 1일 한도 초과',
+   e:{type:'HALF_PM',start:'07:30',end:'16:30'}, ok:false},
+  {t:'근무 08:00~12:30 — 점심 휴게 중간 퇴근 불가',
+   e:{type:'WORK',start:'08:00',end:'12:30'}, ok:false},
+  {t:'OT 20:30~22:30 — 선택근로 07:30~20:30 뒤에 붙인 2시간',
+   e:{type:'WORK',start:'07:30',end:'20:30',otStart:'20:30',otEnd:'22:30'},
+   work:11.5, ok:true, ot:2},
+  {t:'OT 18:00~19:45 — 분 단위 신청 (1.75시간)',
+   e:{type:'WORK',start:'08:30',end:'17:30',otStart:'18:00',otEnd:'19:45'},
+   work:8, ok:true, ot:1.75},
+  {t:'OT 시각이 근무 시각과 겹치면 불가',
+   e:{type:'WORK',start:'08:30',end:'20:30',otStart:'19:00',otEnd:'21:00'}, ok:false},
 ];
 const RATIO_TESTS = [[30,9],[25,8],[23,7],[17,6],[16,5]];
 
@@ -1373,6 +1591,7 @@ function runTests(){
     if (tc.work != null) chk.push([`실근로 ${fmtH(tc.work)}h`, Math.abs(ev.work - tc.work) < 1e-9]);
     if (tc.ok != null)   chk.push([tc.ok ? '사용 가능' : '사용 불가', (ev.viol.length === 0) === tc.ok]);
     if (tc.c8 != null)   chk.push([`30% ${tc.c8 ? '충족' : '미충족'}`, ev.counts8h === tc.c8]);
+    if (tc.ot != null)   chk.push([`OT ${fmtH(tc.ot)}h`, Math.abs(ev.ot - tc.ot) < 1e-9]);
     if (tc.blk)          chk.push([`블록 ${tc.blk}`,
       ev.block ? `${toStr(ev.block[0])}~${toStr(ev.block[1])}` === tc.blk : false]);
     rows.push({t:tc.t, chk, got:describe(ev)});
@@ -1415,6 +1634,33 @@ function describe(ev){
   return b.join(' · ');
 }
 
+/* 양력 고정 공휴일 — [월, 일, 명칭, 대체공휴일 적용 여부]
+   설날 · 추석 · 부처님오신날은 음력이라 여기서 계산할 수 없다. */
+const FIXED_HOLIDAYS = [
+  [1,1,'신정',false], [3,1,'삼일절',true], [5,1,'근로자의 날',false],
+  [5,5,'어린이날',true], [6,6,'현충일',false], [8,15,'광복절',true],
+  [10,3,'개천절',true], [10,9,'한글날',true], [12,25,'성탄절',true],
+];
+function generateYearHolidays(y){
+  const used = new Set(), rows = [];
+  const add = (d, name) => { rows.push([ymd(d), name]); used.add(ymd(d)); };
+  FIXED_HOLIDAYS.forEach(([mo, dd, name]) => add(new Date(y, mo-1, dd), name));
+  FIXED_HOLIDAYS.filter(x => x[3]).forEach(([mo, dd, name]) => {
+    const d = new Date(y, mo-1, dd);
+    if (d.getDay() !== 0 && d.getDay() !== 6) return;   // 토·일과 겹칠 때만 대체
+    const n = new Date(d.getTime());
+    do { n.setDate(n.getDate() + 1); }
+    while (n.getDay() === 0 || n.getDay() === 6 || used.has(ymd(n)));
+    add(n, name + ' 대체공휴일');
+  });
+  rows.sort((a, b) => a[0] < b[0] ? -1 : 1);
+  return [`# ── ${y}년 (양력 공휴일 자동 생성) ──`]
+    .concat(rows.map(([d, n]) => `${d} ${n}`))
+    .concat([`# ${y}년 설날 · 추석 · 부처님오신날은 음력이라 자동 계산되지 않습니다 `
+           + `— 확인 후 직접 추가하세요`, ''])
+    .join('\n');
+}
+
 /* ══════════════════════════════════════════════════════════════════
    11. 설정 · 명부
    ══════════════════════════════════════════════════════════════════ */
@@ -1431,25 +1677,35 @@ const CFG_FIELDS = [
   ['otLimit','월 OT 한도 (h) ※사규 확인','n'],
   ['flexAvgWeek','탄력 평균 주 한도 (h)','n'],
   ['flexMaxWeek','탄력 개별 주 한도 (h)','n'],
+  ['judgeUnit','30% 판정 단위','sel'],
 ];
+const CFG_OPTIONS = {judgeUnit:[['all','전체 합산 (두 팀 기준)'],['group','그룹별 (A·B·C 각각)']]};
 function renderCfg(){
   const box = $('#cfgForm'); box.innerHTML = '';
   const grid = el('div');
   grid.style.display = 'grid';
-  grid.style.gridTemplateColumns = 'repeat(auto-fit,minmax(260px,1fr))';
-  grid.style.gap = '2px 18px';
+  grid.style.gridTemplateColumns = 'repeat(auto-fit,minmax(360px,1fr))';
+  grid.style.gap = '3px 22px';
   CFG_FIELDS.forEach(([k, label, kind]) => {
     const g = el('div','fld');
-    const lb = el('label', null, label); lb.style.width = '170px'; g.appendChild(lb);
+    const lb = el('label', null, label);
+    lb.style.width = '178px'; lb.style.flex = 'none';
+    g.appendChild(lb);
     if (kind === 't2'){
       ['0','1'].forEach(i => {
-        const s = el('select'); timeOpts(s, C()[k][+i], 0, 23*60+30);
-        s.dataset.cfg = k; s.dataset.idx = i; s.style.width = '84px'; g.appendChild(s);
-        if (i === '0') g.appendChild(el('span','small muted','~'));
+        const sel = el('select'); timeOpts(sel, C()[k][+i], 0, 23*60+30);
+        sel.dataset.cfg = k; sel.dataset.idx = i; sel.style.width = '88px';
+        if (i === '1') g.appendChild(el('span','small muted','~'));
+        g.appendChild(sel);
       });
+    } else if (kind === 'sel'){
+      const sel = el('select'); sel.dataset.cfg = k; sel.dataset.kind = 'sel';
+      CFG_OPTIONS[k].forEach(([v,t]) => {
+        const o = el('option', null, t); o.value = v; sel.appendChild(o); });
+      sel.value = C()[k]; g.appendChild(sel);
     } else {
       const i = el('input'); i.type = 'number'; i.step = 'any';
-      i.value = C()[k]; i.dataset.cfg = k; i.style.width = '92px'; g.appendChild(i);
+      i.value = C()[k]; i.dataset.cfg = k; i.style.width = '96px'; g.appendChild(i);
     }
     grid.appendChild(g);
   });
@@ -1461,6 +1717,7 @@ function saveCfg(){
   $$('#cfgForm [data-cfg]').forEach(n => {
     const k = n.dataset.cfg;
     if (n.dataset.idx != null) ST.cfg[k][+n.dataset.idx] = n.value;
+    else if (n.dataset.kind === 'sel') ST.cfg[k] = n.value;
     else ST.cfg[k] = +n.value;
   });
   ST.holidays = $('#holiText').value;
@@ -1487,9 +1744,25 @@ function renderRoster(){
       i.onchange = () => { m[key] = i.value; save(); renderAll(); };
       td.appendChild(i); return td;
     };
+    const pick = (key, presets, label) => {
+      const td = el('td'), sel = el('select');
+      [...new Set([...presets, m[key]].filter(Boolean))].forEach(v => {
+        const o = el('option', null, v); o.value = v; sel.appendChild(o); });
+      const other = el('option', null, '＋ 직접 입력…');
+      other.value = '\u0000new'; sel.appendChild(other);
+      sel.value = m[key] || presets[0];
+      sel.onchange = () => {
+        if (sel.value === '\u0000new'){
+          const v = prompt(`${label} 이름`, m[key] || '');
+          if (v && v.trim()) m[key] = v.trim();
+        } else m[key] = sel.value;
+        save(); renderAll();
+      };
+      td.appendChild(sel); return td;
+    };
     tr.appendChild(txt('name','72px'));
-    tr.appendChild(txt('team','88px'));
-    tr.appendChild(txt('part','72px'));
+    tr.appendChild(pick('team', TEAMS, '팀'));
+    tr.appendChild(pick('part', PARTS, '파트'));
     const rtd = el('td'), rs = el('select');
     ['팀장','파트장','구성원'].forEach(v => { const o = el('option', null, v); o.value = v; rs.appendChild(o); });
     rs.value = m.role; rs.onchange = () => { m.role = rs.value; save(); renderAll(); };
@@ -1531,7 +1804,7 @@ function exportJson(){
 function exportCsv(){
   const days = monthDays(ST.month), fx = flexOf(ST.month), flexMode = !!fx;
   const head = ['날짜','요일','그룹','팀','파트','직책','이름','유형','근무시작','근무종료',
-                '휴가블록','실근로','인정시간','OT','30%충족','사유·메모','위반'];
+                '휴가블록','실근로','인정시간','OT시작','OT종료','OT','30%충족','사유·메모','위반'];
   const lines = [head.join(',')];
   const q = v => {
     const s = String(v == null ? '' : v);
@@ -1545,6 +1818,7 @@ function exportCsv(){
       raw && raw.start || '', raw && raw.end || '',
       ev.block ? `${toStr(ev.block[0])}~${toStr(ev.block[1])}` : '',
       ev.work ? fmtH(ev.work) : '', ev.credit ? fmtH(ev.credit) : '',
+      raw.otStart || '', raw.otEnd || '',
       ev.ot ? fmtH(ev.ot) : '', d.workday ? (ev.counts8h ? 'O' : 'X') : '',
       ev.note, ev.viol.join(' / ')].map(q).join(','));
   }));
@@ -1633,6 +1907,13 @@ function init(){
   $('#cfgReset').onclick = () => {
     if (!confirm('기준값을 기본값으로 되돌립니다. 근태 입력은 유지됩니다.')) return;
     ST.cfg = {...DEFAULTS}; save(); renderCfg(); renderAll();
+  };
+  $('#genHoli').onclick = () => {
+    const y = prompt('추가할 연도', String(new Date().getFullYear() + 1));
+    if (!y || !/^\d{4}$/.test(y.trim())) return;
+    $('#holiText').value = ($('#holiText').value.trimEnd() + '\n\n'
+      + generateYearHolidays(+y.trim())).trim() + '\n';
+    ST.holidays = $('#holiText').value; save(); renderAll();
   };
   $('#addMember').onclick = () => {
     ST.roster.push({name:'신규', team:'정비기술팀', part:'기계',
