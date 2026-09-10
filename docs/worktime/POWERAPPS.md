@@ -246,7 +246,7 @@ Teams → `Power Apps` → `새 앱` → 두 팀이 함께 있는 팀 선택 →
 **한 번에 다 만들지 않는다.** 먼저 입력 화면 하나로 저장이 되는 것을 확인하고,
 그다음에 나머지 화면을 붙인다. 아래가 그 최소 화면이다.
 
-### 3-1. 컨트롤 8개
+### 3-1. 컨트롤 9개
 
 `삽입` 메뉴에서 넣고, 각 컨트롤을 선택한 뒤 왼쪽 위 속성 목록에서 해당 속성을 골라
 수식을 붙여넣는다. 이름은 왼쪽 「트리 뷰」에서 두 번 눌러 바꾼다.
@@ -261,6 +261,7 @@ Teams → `Power Apps` → `새 앱` → 두 팀이 함께 있는 팀 선택 →
 | 6 | 텍스트 레이블 | `lblPreview` | 판정 미리보기 |
 | 7 | 단추 | `btnSave` | 저장 |
 | 8 | 세로 갤러리 | `galSaved` | 저장 결과 확인 |
+| 9 | └ 아이콘 (휴지통) | `icoDel` | 잘못 넣은 기록 지우기 — 갤러리 **안** |
 
 **컨트롤을 그 역할로 만드는 것은 「이름」과 「수식」 두 가지뿐이다.** 오른쪽 「역할」 열은
 무엇에 쓰는지 적어둔 설명이고, Power Apps 어딘가에서 고르는 값이 아니다.
@@ -416,6 +417,57 @@ Sort(Filter(근태기록, 구성원 = ddMe.Selected.Value), 근무일, SortOrder
 ThisItem.Title & "   " & ThisItem.조합코드 & "   실근로 " & ThisItem.실근로 & "h"
 ```
 
+**`icoDel.OnSelect`** — 잘못 넣은 기록 지우기
+
+**삭제는 「기록을 없애는 것」이 아니라 「8시간 정상 근무로 되돌리는 것」이다.**
+기록 없음 = 8시간 근무가 이 설계의 전제이므로, 잘못 넣었으면 지우는 것이 정답이다.
+
+`galSaved` 를 **먼저 선택**한 뒤 `삽입 → 아이콘 → 휴지통` 을 넣고 이름을 `icoDel` 로
+바꾼다. 트리 뷰에서 `galSaved` 아래에 들여쓰여 들어갔는지 확인한다.
+
+```powerfx
+Set(gvDelKey, ThisItem.Title);
+Remove(근태기록, ThisItem);
+Refresh(근태기록);
+ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
+Notify("지웠습니다 — " & gvDelKey & " 는 8시간 근무로 계산됩니다",
+       NotificationType.Success)
+```
+
+> **`ThisItem.Title` 을 먼저 변수에 담는다.** `Remove` 뒤에는 `ThisItem` 이 사라져
+> 알림 문구에 쓸 수 없다.
+
+`icoDel.Color` 는 실수로 누르기 쉬우므로 빨강으로 구분한다 — `RGBA(179, 38, 30, 1)`.
+좌표는 행 오른쪽 끝(`X` = 행 너비 − 44 · `Y` 8 · 24 × 24)에 두고 `Title2.Width` 를
+그만큼 줄인다.
+
+**실수 방지 — 두 번 눌러야 지워지게 (권장).** `근태기록` 은 전원이 함께 쓰는 목록이라
+오클릭이 남의 기록을 지울 수 있다.
+
+```powerfx
+If(gvDelArm = ThisItem.Title,
+    Set(gvDelKey, ThisItem.Title);
+    Remove(근태기록, ThisItem);
+    Refresh(근태기록);
+    ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
+    Set(gvDelArm, Blank());
+    Notify("지웠습니다 — " & gvDelKey & " 는 8시간 근무로 계산됩니다",
+           NotificationType.Success),
+
+    Set(gvDelArm, ThisItem.Title);
+    Notify("한 번 더 누르면 지워집니다 — " & ThisItem.Title,
+           NotificationType.Warning))
+```
+
+무장 상태가 보이도록 **`icoDel.Icon`** 도 바꾼다.
+
+```powerfx
+If(gvDelArm = ThisItem.Title, Icon.Warning, Icon.Trash)
+```
+
+> **앱을 만드는 중이라면 SharePoint 목록에서 직접 지우는 편이 빠르다.** 채널 →
+> `파일` → `···` → `SharePoint에서 열기` → `근태기록` → 행 체크 → `삭제`.
+
 ### 3-2-0. 수식을 넣을 때 반드시 지킬 세 가지
 
 세 번 다 걸렸던 함정이다. 오류 20개가 한 번에 뜨는 것은 거의 이 중 하나다.
@@ -506,6 +558,7 @@ First(조합표).
 | 저장 → `galSaved` | 방금 저장한 행이 보인다 |
 | SharePoint `근태기록` 목록 | 같은 행이 들어가 있고 실근로 · 휴가 · 충족 · 구분이 채워져 있다 |
 | 같은 날짜로 다시 저장 | 행이 늘지 않고 **덮어써진다** (키가 같으므로) |
+| 휴지통을 두 번 누르면 | 행이 사라지고 그 날은 다시 8시간 근무로 계산된다 |
 
 **규칙에 없는 조합을 만들 수 없다는 것**이 핵심이다. `오전반` 을 골랐을 때 `08:30` 이
 목록에 아예 없으므로 고를 수가 없다. 엑셀에서 사후에 빨갛게 표시하던 것이
@@ -635,8 +688,9 @@ Set(gvNeed,   RoundUp(gvActive * 0.3, 0));
 Set(gvLeads,  CountRows(colLeads));
 ```
 
-> **테스트 기록은 지운다.** SharePoint `근태기록` 목록에서 9월 15일 4행과 3단계에서
-> 넣은 9월 10일 행을 지우면 깨끗한 상태로 운영을 시작할 수 있다.
+> **테스트 기록은 지운다.** `Screen1` 의 `galSaved` 에서 휴지통으로 지우거나,
+> SharePoint `근태기록` 목록에서 9월 15일 4행과 3단계에서 넣은 9월 10일 행을 지우면
+> 깨끗한 상태로 운영을 시작할 수 있다.
 
 
 ## 4. Power Fx 수식
