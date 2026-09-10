@@ -52,11 +52,11 @@ SharePoint 는 `Sum` · `CountRows` 같은 집계를 서버에 위임하지 못�
 // SharePoint 에서 3개월을 안전하게 읽는 법 — 한 번에 읽지 않고 월별로 이어 붙인다
 Clear(colFlex);
 ForAll(Sequence(3) As Mo,
-    With({ ms: DateAdd(gvFlexStart, Mo.Value - 1, Months) },
+    With({ ms: DateAdd(gvFlexStart, Mo.Value - 1, TimeUnit.Months) },
         Collect(colFlex,
             Filter(근태기록,
                 근무일 >= ms,
-                근무일 <= DateAdd(DateAdd(ms, 1, Months), -1, Days)))
+                근무일 <= DateAdd(DateAdd(ms, 1, TimeUnit.Months), -1, TimeUnit.Days)))
     )
 );
 ```
@@ -416,6 +416,40 @@ Sort(Filter(근태기록, 구성원 = ddMe.Selected.Value), 근무일, SortOrder
 ThisItem.Title & "   " & ThisItem.조합코드 & "   실근로 " & ThisItem.실근로 & "h"
 ```
 
+### 3-2-0. 수식을 넣을 때 반드시 지킬 세 가지
+
+세 번 다 걸렸던 함정이다. 오류 20개가 한 번에 뜨는 것은 거의 이 중 하나다.
+
+**1. 열거형은 정규화된 이름으로 쓴다.** `Months` · `Days` 는 인식되지 않는다.
+
+| 안 됨 | 됨 |
+|---|---|
+| `DateAdd(d, 1, Months)` | `DateAdd(d, 1, TimeUnit.Months)` |
+| `DateAdd(d, -1, Days)` | `DateAdd(d, -1, TimeUnit.Days)` |
+| `DateDiff(a, b, Days)` | `DateDiff(a, b, TimeUnit.Days)` |
+| `FontWeight = Bold` | `FontWeight.Bold` |
+
+`'Months'을(를) 인식할 수 없습니다` + `함수 'DateAdd'에 일부 잘못된 인수가 있습니다`
+가 **짝으로** 뜨면 이것이다.
+
+**2. 붙여넣기 전에 `Ctrl+A` 로 기존 값을 지운다.** 단추의 `OnSelect` 기본값은 `false`,
+레이블의 `Text` 기본값은 `"Text"` 다. 커서만 두고 붙여넣으면 앞에 그대로 남아
+`falseSet(gvMonthStart, …)` 같은 것이 된다. 증상은 이렇게 뜬다.
+
+```
+'falseSet'은(는) 알 수 없거나 지원되지 않는 함수입니다.
+```
+
+**3. 갤러리 안 레이블을 복사해 화면에 붙이지 않는다.** 갤러리 안 레이블의 `OnSelect`
+기본값은 `Select(Parent)` 인데, 화면으로 나오면 부모가 화면이 되어 오류가 된다.
+
+```
+OnSelect 속성이 없는 컨트롤의 Select
+```
+
+고치는 법은 그 컨트롤의 **`OnSelect` 를 전체 선택해 지우는 것**이다. 화면에 놓을
+레이블은 복사하지 말고 `삽입` 에서 새로 넣는 편이 낫다.
+
 ### 3-2-1. 제목(Title) 열은 Power Apps 에서 `Title` 이다 (확인됨)
 
 SharePoint 목록을 만들 때 제목(Title) 열의 **이름을 바꿔도 Power Apps 에는 원래 이름
@@ -561,7 +595,7 @@ First(조합표).
 ```powerfx
 // ── 이번 달 기준값
 Set(gvMonthStart, Date(Year(Today()), Month(Today()), 1));
-Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, Months), -1, Days));
+Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, TimeUnit.Months), -1, TimeUnit.Days));
 Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
 
 // ── 작은 목록은 전부 올려두고 로컬로 쓴다 — 위임 걱정이 사라진다
@@ -593,8 +627,8 @@ Set(gvRegEnd,   Value(Left(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)) * 60
 달을 옮기는 버튼 — **`btnPrev.OnSelect`**
 
 ```powerfx
-Set(gvMonthStart, DateAdd(gvMonthStart, -1, Months));
-Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, Months), -1, Days));
+Set(gvMonthStart, DateAdd(gvMonthStart, -1, TimeUnit.Months));
+Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, TimeUnit.Months), -1, TimeUnit.Days));
 Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
 Set(gvMonthCfg,   LookUp(월설정, Title = gvYM));
 Set(gvOtBase,     Coalesce(gvMonthCfg.OT기본, 0));
@@ -604,8 +638,8 @@ ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <
 **`btnNext.OnSelect`** — 위와 같고 첫 줄만 `-1` → `1`
 
 ```powerfx
-Set(gvMonthStart, DateAdd(gvMonthStart, 1, Months));
-Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, Months), -1, Days));
+Set(gvMonthStart, DateAdd(gvMonthStart, 1, TimeUnit.Months));
+Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, TimeUnit.Months), -1, TimeUnit.Days));
 Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
 Set(gvMonthCfg,   LookUp(월설정, Title = gvYM));
 Set(gvOtBase,     Coalesce(gvMonthCfg.OT기본, 0));
@@ -624,7 +658,7 @@ ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <
 
 ```powerfx
 ForAll(Sequence(Day(gvMonthEnd)) As S,
-    With({ d: DateAdd(gvMonthStart, S.Value - 1, Days) },
+    With({ d: DateAdd(gvMonthStart, S.Value - 1, TimeUnit.Days) },
         With({ hol: Weekday(d, StartOfWeek.Monday) > 5
                     || !IsBlank(LookUp(공휴일, 날짜 = d)) },
             {
@@ -890,27 +924,27 @@ SharePoint 는 집계를 위임하지 못하므로 **월별로 세 번 나눠 �
 ```powerfx
 // btnFlexLoad.OnSelect — 시작 월을 dpFlex 로 고른다
 Set(gvFlexStart, Date(Year(dpFlex.SelectedDate), Month(dpFlex.SelectedDate), 1));
-Set(gvFlexEnd,   DateAdd(DateAdd(gvFlexStart, 3, Months), -1, Days));
+Set(gvFlexEnd,   DateAdd(DateAdd(gvFlexStart, 3, TimeUnit.Months), -1, TimeUnit.Days));
 
 Clear(colFlex);
 ForAll(Sequence(3) As Mo,
-    With({ ms: DateAdd(gvFlexStart, Mo.Value - 1, Months) },
+    With({ ms: DateAdd(gvFlexStart, Mo.Value - 1, TimeUnit.Months) },
         Collect(colFlex,
             Filter(근태기록,
                 근무일 >= ms,
-                근무일 <= DateAdd(DateAdd(ms, 1, Months), -1, Days)))
+                근무일 <= DateAdd(DateAdd(ms, 1, TimeUnit.Months), -1, TimeUnit.Days)))
     )
 );
 
 // 단위기간 소정근로일 수
 Set(gvFlexDays,
     CountRows(Filter(
-        ForAll(Sequence(DateDiff(gvFlexStart, gvFlexEnd, Days) + 1) As S,
-            { d: DateAdd(gvFlexStart, S.Value - 1, Days) }),
+        ForAll(Sequence(DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1) As S,
+            { d: DateAdd(gvFlexStart, S.Value - 1, TimeUnit.Days) }),
         Weekday(d, StartOfWeek.Monday) <= 5 && IsBlank(LookUp(공휴일, 날짜 = d))
     ))
 );
-Set(gvFlexTotalDays, DateDiff(gvFlexStart, gvFlexEnd, Days) + 1);
+Set(gvFlexTotalDays, DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1);
 ```
 
 구성원별 판정 — `galFlex.Items`
