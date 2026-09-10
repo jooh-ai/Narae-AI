@@ -277,6 +277,11 @@ Teams → `Power Apps` → `새 앱` → 두 팀이 함께 있는 팀 선택 →
 > **비교식으로 읽어** `'Items'을(를) 인식할 수 없습니다` · `Error 및 Boolean 유형은
 > 비교할 수 없습니다` 같은 오류가 난다.
 
+> **모던 컨트롤은 기본 선택이 없다.** 클래식 드롭다운은 첫 항목이 자동 선택되지만
+> 모던은 비어 있다. 그래서 `ddType` 에서 유형을 고르기 전에는 `ddStart` 가 비어 있는
+> 것이 정상이다. 편하게 하려면 `ddType` 의 `DefaultSelectedItems` 에
+> `[{Value: "근무"}]` 를 넣는다.
+
 > **모던 드롭다운을 넣었다면 `ItemDisplayText` 도 확인한다.** 이 속성은 항목 하나의
 > 표시 텍스트를 정하는 곳이라 `Distinct` 나 데이터 원본을 쓸 수 없다.
 > `Distinct(...)` 는 `Value` 열 하나짜리 표를 돌려주므로 **`ThisItem.Value`** 로 둔다.
@@ -365,12 +370,13 @@ Set(gvCode,
          & Substitute(ddEnd.Selected.Value, ":", "")));
 Set(gvC,   LookUp(colCombo, 조합코드 = gvCode));
 Set(gvKey, Text(dpDate.SelectedDate, "yyyy-mm-dd") & "_" & ddMe.Selected.Value);
+Set(gvRec, LookUp(근태기록, 키 = gvKey));
 
 If(IsBlank(gvC),
     Notify("규칙에 없는 조합입니다 — " & gvCode, NotificationType.Error),
 
     Patch(근태기록,
-        Coalesce(LookUp(근태기록, 키 = gvKey), Defaults(근태기록)),
+        If(IsBlank(gvRec), Defaults(근태기록), gvRec),
         {
             키:       gvKey,
             근무일:   dpDate.SelectedDate,
@@ -384,6 +390,7 @@ If(IsBlank(gvC),
             충족:     gvC.충족,
             구분:     gvC.구분
         });
+    Refresh(근태기록);
     Notify("저장 완료 — " & gvKey & " · " & gvCode, NotificationType.Success)
 )
 ```
@@ -605,8 +612,9 @@ If(IsBlank(gvCombo),
            NotificationType.Error),
 
     Set(gvKey, Text(dpDate.SelectedDate, "yyyy-mm-dd") & "_" & gvMe);
+    Set(gvRec, LookUp(근태기록, 키 = gvKey));
     Patch(근태기록,
-        Coalesce(LookUp(근태기록, 키 = gvKey), Defaults(근태기록)),
+        If(IsBlank(gvRec), Defaults(근태기록), gvRec),
         {
             키:       gvKey,
             근무일:   dpDate.SelectedDate,
