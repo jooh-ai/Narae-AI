@@ -90,7 +90,7 @@ Dataverse 로는 얻을 수 없다. 처음 도입할 때 이 안전장치가 가
 
 | 열 이름 | 타입 | 비고 |
 |---|---|---|
-| 조합코드 | 텍스트 (제목 열 이름 변경) | `근무 0830-1730` |
+| 조합코드 | 텍스트 (제목 열 이름 변경) | `근무 0830-1730` — **앱 수식에서는 `Title`** (§3-2-1) |
 | 유형 | 텍스트 | 근무 · 오전반 · … |
 | 출근 | 텍스트 | `08:30` (시각 없는 유형은 빈칸) |
 | 퇴근 | 텍스트 | `17:30` |
@@ -107,7 +107,7 @@ Dataverse 로는 얻을 수 없다. 처음 도입할 때 이 안전장치가 가
 
 | 열 이름 | 타입 | 선택지 |
 |---|---|---|
-| 이름 | 텍스트 (제목 열) | |
+| 이름 | 텍스트 (제목 열) | **앱 수식에서는 `Title`** (§3-2-1) |
 | 팀 · 파트 · 직책 · 그룹 | 텍스트 | CSV 가져오기로 자동 생성된다 |
 | 휴직 | 텍스트 | 휴직자만 `Y`, 나머지는 빈칸 |
 | 사용자 | 사용자 또는 그룹 | 본인 근태만 보여주는 데 사용 — 가져오기 뒤 직접 추가 |
@@ -123,7 +123,7 @@ Dataverse 로는 얻을 수 없다. 처음 도입할 때 이 안전장치가 가
 
 | 열 이름 | 타입 | 비고 |
 |---|---|---|
-| 키 | 텍스트 (제목 열) | `2026-09-07_박상호` — 중복 방지 |
+| 키 | 텍스트 (제목 열) | `2026-09-07_박상호` — 중복 방지. **앱 수식에서는 `Title`** |
 | 근무일 | 날짜 (시간 없음) | |
 | 구성원 | 텍스트 | 명부의 이름 |
 | 유형 · 출근 · 퇴근 | 텍스트 | 앱의 연쇄 드롭다운이 값을 넣는다 |
@@ -144,7 +144,7 @@ Dataverse 로는 얻을 수 없다. 처음 도입할 때 이 안전장치가 가
 
 | 열 이름 | 타입 |
 |---|---|
-| 연월 | 텍스트 (제목 열) — `2026-09` |
+| 연월 | 텍스트 (제목 열) — `2026-09`. 앱 수식에서는 `Title` |
 | OT기본 | 숫자 |
 | 정규종료 | 텍스트 — `17:30` (탄력근무 달은 `17:00` 등). 석식 휴게 계산에 쓴다 |
 | 비고 | 텍스트 |
@@ -155,7 +155,7 @@ Dataverse 로는 얻을 수 없다. 처음 도입할 때 이 안전장치가 가
 
 | 열 이름 | 타입 |
 |---|---|
-| 명칭 | 텍스트 (제목 열) |
+| 명칭 | 텍스트 (제목 열) — 앱 수식에서는 `Title` |
 | 날짜 | 날짜 (시간 없음) |
 
 `sp_공휴일.csv` 를 가져온다. 설날·추석·부처님오신날은 음력이라 매년 확인해 추가한다.
@@ -304,7 +304,7 @@ ClearCollect(colCombo, 조합표)
 **`ddMe.Items`**
 
 ```powerfx
-Distinct(명부, 이름)
+Distinct(명부, Title)
 ```
 
 **`ddType.Items`** · **`ddType.OnChange`**
@@ -334,10 +334,10 @@ Distinct(
 )
 ```
 
-> **`'조합코드'을(를) 인식할 수 없습니다` · `'키'을(를) 인식할 수 없습니다`** — 아래
-> §3-2-1 을 먼저 읽는다. 제목(Title) 열의 이름이 SharePoint 에서 보이는 것과 Power Apps
-> 에 노출되는 것이 다를 수 있다. 나머지 열은 멀쩡한데 **제목 열 하나만** 인식이 안 되는
-> 것이 이 문제의 특징이다.
+> **제목 열은 Power Apps 에서 `Title` 이다 — 아래 수식이 이미 그렇게 되어 있다.**
+> SharePoint 목록 화면에는 `조합코드` · `키` 로 보이지만 Power Apps 에는 `Title` 로
+> 노출된다(확인됨, §3-2-1). 반대로 CSV 로 만든 사용자 지정 열(`유형`·`출근`·`퇴근`·
+> `근태기록` 의 `조합코드` 등)은 이름 그대로 쓴다.
 
 **`lblPreview.Text`** — 저장 전에 판정을 보여준다
 
@@ -349,7 +349,7 @@ With({ code:
          & Substitute(ddStart.Selected.Value, ":", "") & "-"
          & Substitute(ddEnd.Selected.Value, ":", ""))
 },
-    With({ c: LookUp(colCombo, 조합코드 = code) },
+    With({ c: LookUp(colCombo, Title = code) },
         If(IsBlank(c),
            "✗ 규칙에 없는 조합 — " & code,
            code & "   실근로 " & c.실근로 & "h · 휴가 " & c.휴가 & "h · "
@@ -361,7 +361,7 @@ With({ code:
 **`lblPreview.Color`** — 규칙에 없으면 빨강
 
 ```powerfx
-If(IsBlank(LookUp(colCombo, 조합코드 =
+If(IsBlank(LookUp(colCombo, Title =
     If(IsBlank(ddStart.Selected.Value), ddType.Selected.Value,
        ddType.Selected.Value & " " & Substitute(ddStart.Selected.Value, ":", "")
          & "-" & Substitute(ddEnd.Selected.Value, ":", "")))),
@@ -377,9 +377,9 @@ Set(gvCode,
        ddType.Selected.Value & " "
          & Substitute(ddStart.Selected.Value, ":", "") & "-"
          & Substitute(ddEnd.Selected.Value, ":", "")));
-Set(gvC,   LookUp(colCombo, 조합코드 = gvCode));
+Set(gvC,   LookUp(colCombo, Title = gvCode));
 Set(gvKey, Text(dpDate.SelectedDate, "yyyy-mm-dd") & "_" & ddMe.Selected.Value);
-Set(gvRec, LookUp(근태기록, 키 = gvKey));
+Set(gvRec, LookUp(근태기록, Title = gvKey));
 
 If(IsBlank(gvC),
     Notify("규칙에 없는 조합입니다 — " & gvCode, NotificationType.Error),
@@ -387,7 +387,7 @@ If(IsBlank(gvC),
     Patch(근태기록,
         If(IsBlank(gvRec), Defaults(근태기록), gvRec),
         {
-            키:       gvKey,
+            Title:    gvKey,
             근무일:   dpDate.SelectedDate,
             구성원:   ddMe.Selected.Value,
             유형:     ddType.Selected.Value,
@@ -413,50 +413,46 @@ Sort(Filter(근태기록, 구성원 = ddMe.Selected.Value), 근무일, SortOrder
 갤러리 안 레이블 하나의 `Text`
 
 ```powerfx
-ThisItem.키 & "   " & ThisItem.조합코드 & "   실근로 " & ThisItem.실근로 & "h"
+ThisItem.Title & "   " & ThisItem.조합코드 & "   실근로 " & ThisItem.실근로 & "h"
 ```
 
-### 3-2-1. 제목(Title) 열 이름이 인식되지 않을 때
+### 3-2-1. 제목(Title) 열은 Power Apps 에서 `Title` 이다 (확인됨)
 
-`유형` · `출근` · `퇴근` · `구성원` 같은 **보통 열은 다 되는데** `조합표` 의 `조합코드`
-와 `근태기록` 의 `키` 만 `인식할 수 없습니다` 로 뜨는 경우가 있다. 이 두 개는 SharePoint
-의 **제목(Title) 열을 이름만 바꾼 것**이라, 목록 화면에는 바꾼 이름이 보여도 Power Apps
-에는 다른 이름(`Title` · `제목`, 드물게 앞에 보이지 않는 문자가 붙은 이름)으로 노출될 수
-있다.
+SharePoint 목록을 만들 때 제목(Title) 열의 **이름을 바꿔도 Power Apps 에는 원래 이름
+`Title` 로 노출된다.** 목록 화면에서는 `조합코드` · `키` 로 보이므로 헷갈리기 쉽다.
+반대로 CSV 가져오기로 생긴 **사용자 지정 열은 이름이 그대로** 노출된다.
 
-**확인 — 30초면 된다.** 레이블 아무거나 하나 선택하고 `Text` 수식 바에 이렇게까지만 친다.
+| 목록 | SharePoint 화면 | Power Apps |
+|---|---|---|
+| `조합표` | 조합코드 | **`Title`** (`조합코드` 는 없다) |
+| `근태기록` | 키 | **`Title`** — 단, `조합코드` 는 사용자 지정 열이라 그대로 있다 |
+| `명부` | 이름 | **`Title`** |
+| `월설정` | 연월 | **`Title`** |
+| `공휴일` | 명칭 | **`Title`** |
+
+그래서 증상은 늘 같은 모양이다 — `유형` · `출근` · `퇴근` · `구성원` 같은 **보통 열은 다
+되는데 제목 열 하나만** `'조합코드'을(를) 인식할 수 없습니다` 로 뜬다.
+
+**어느 목록이든 30초에 확인하는 법.** 레이블 아무거나 골라 `Text` 수식 바에 이렇게까지만
+친다. 마지막 점을 찍는 순간 **그 목록의 열 이름 전체가 자동 완성 목록으로 뜬다.**
 
 ```powerfx
 First(조합표).
 ```
 
-마지막 점을 찍는 순간 **그 목록의 열 이름 전체가 자동 완성 목록으로 뜬다.** 여기 뜨는
-이름이 Power Apps 가 아는 진짜 이름이다. `근태기록` 도 같은 방법으로 확인한다.
+**목록에 뜬 이름은 손으로 타이핑하지 말고 자동 완성에서 골라 넣는다.** CSV 가져오기로
+만든 열은 이름 앞에 눈에 보이지 않는 문자(BOM)가 붙어 있을 수 있어, 똑같아 보이는
+글자를 쳐도 맞지 않는 경우가 있다. 골라 넣으면 이 문제까지 같이 해결된다.
 
-```powerfx
-First(근태기록).
-```
+> **`이름` 은 우리가 만든 열이 아니다.** 자동 완성에 `이름` · `만든 날짜` · `수정한 사람`
+> · `첨부 파일` · `ID` 같은 것이 섞여 보이는데, SharePoint 가 모든 목록에 자동으로 넣는
+> 내장 열이다. 특히 `명부` 에서 `Distinct(명부, 이름)` 이라고 쓰면 우리가 원하는 사람
+> 이름이 아니라 **이 내장 열을 읽게 되므로 `Distinct(명부, Title)` 로 써야 한다.**
 
-**고치는 법.** 목록에 뜬 이름을 **손으로 타이핑하지 말고 자동 완성에서 골라 넣는다.**
-CSV 가져오기로 만든 열은 이름 앞에 눈에 보이지 않는 문자(BOM)가 붙어 있을 수 있어,
-똑같아 보이는 글자를 쳐도 맞지 않는 경우가 있다. 골라 넣으면 이 문제까지 같이 해결된다.
-
-노출 이름이 `Title` 이었다면 다음 네 군데를 바꾸면 된다. **`근태기록` 의 `조합코드` 는
-진짜 사용자 지정 열이므로 그대로 둔다** — 바꾸는 것은 제목 열뿐이다.
-
-| 수식 | 원래 | 바꿀 것 |
-|---|---|---|
-| `lblPreview.Text` | `LookUp(colCombo, 조합코드 = code)` | `LookUp(colCombo, Title = code)` |
-| `lblPreview.Color` | `LookUp(colCombo, 조합코드 = …)` | `LookUp(colCombo, Title = …)` |
-| `btnSave.OnSelect` | `LookUp(colCombo, 조합코드 = gvCode)` | `LookUp(colCombo, Title = gvCode)` |
-| `btnSave.OnSelect` | `LookUp(근태기록, 키 = gvKey)` · `키: gvKey` | `LookUp(근태기록, Title = gvKey)` · `Title: gvKey` |
-| 갤러리 레이블 `Text` | `ThisItem.키` | `ThisItem.Title` |
-
-**그래도 계속 걸리면 제목 열을 아예 안 쓰는 방법이 있다.** SharePoint 에서 두 목록에
-`코드` · `기록키` 같은 **새 사용자 지정 열**(한 줄 텍스트)을 만들고, `조합표` 는
-`sp_조합표.csv` 를 다시 가져와 채운다. 사용자 지정 열은 이름이 그대로 노출되므로
-이런 혼선이 없다. `근태기록` 은 비어 있으므로 열만 추가하면 되고, 앱에서는
-`키` 대신 `기록키` 를 쓰면 된다.
+**제목 열을 아예 안 쓰는 대안.** 계속 헷갈리면 SharePoint 에서 `코드` · `기록키` 같은
+**새 사용자 지정 열**(한 줄 텍스트)을 만들어 쓰면 된다. 사용자 지정 열은 이름이 그대로
+노출되므로 혼선이 없다. `근태기록` 은 비어 있어 열만 추가하면 되고, `조합표` 는
+`sp_조합표.csv` 를 다시 가져와 채운다. 다만 `Title` 로 쓰면 되는 일이라 굳이 권하지 않는다.
 
 > **갤러리에 아무 글자도 안 보이는 것은 오류가 아니다.** `근태기록` 이 비어 있으면
 > `galSaved` 에 행이 0개라 레이블도 그려지지 않는다. 이 단계에서 봐야 할 것은 화면이
@@ -509,7 +505,7 @@ ClearCollect(colMembers, Filter(명부, IsBlank(휴직)));   // 휴직자는 Y, 
 Set(gvActive, CountRows(colMembers));
 Set(gvNeed,   RoundUp(gvActive * 0.3, 0));
 Set(gvLeads,  CountRows(Filter(colMembers, 직책 <> "구성원")));
-Set(gvMe,     LookUp(명부, 사용자.Email = User().Email, 이름));
+Set(gvMe,     LookUp(명부, 사용자.Email = User().Email, Title));
 
 // 이번 달 기록을 한 번만 읽어 온다 — 이후 계산은 전부 이 컬렉션에서
 ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
@@ -533,7 +529,7 @@ ClearCollect(colDays,
 Set(gvWorkdays, CountRows(Filter(colDays, !휴일)));
 
 // 이 달의 OT 기본 가능시간과 정규 근로 종료 (석식 휴게 창의 시작점)
-Set(gvMonthCfg, LookUp(월설정, 연월 = gvYM));
+Set(gvMonthCfg, LookUp(월설정, Title = gvYM));
 Set(gvOtBase,   Coalesce(gvMonthCfg.OT기본, 0));
 Set(gvRegEnd,   Value(Left(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)) * 60
                 + Value(Right(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)));
@@ -555,7 +551,7 @@ AddColumns(colDays,
     "필요인원", If(휴일, 0, gvNeed),
     "직책자",   If(휴일, 0,
                   gvLeads - CountRows(Filter(colRec, 근무일 = 날짜, 충족 = 0,
-                      구성원 in Filter(colMembers, 직책 <> "구성원").이름)))
+                      구성원 in Filter(colMembers, 직책 <> "구성원").Title)))
 )
 ```
 
@@ -660,18 +656,18 @@ Set(gvCode,
          & Substitute(ddStart.Selected.Value, ":", "") & "-"
          & Substitute(ddEnd.Selected.Value,   ":", "")));
 
-Set(gvCombo, LookUp(colCombo, 조합코드 = gvCode));
+Set(gvCombo, LookUp(colCombo, Title = gvCode));
 
 If(IsBlank(gvCombo),
     Notify("규칙에 없는 조합입니다. 유형·출근·퇴근을 다시 고르세요.",
            NotificationType.Error),
 
     Set(gvKey, Text(dpDate.SelectedDate, "yyyy-mm-dd") & "_" & gvMe);
-    Set(gvRec, LookUp(근태기록, 키 = gvKey));
+    Set(gvRec, LookUp(근태기록, Title = gvKey));
     Patch(근태기록,
         If(IsBlank(gvRec), Defaults(근태기록), gvRec),
         {
-            키:       gvKey,
+            Title:    gvKey,
             근무일:   dpDate.SelectedDate,
             구성원:   gvMe,
             유형:     ddType.Selected.Value,
@@ -698,7 +694,7 @@ If(IsBlank(gvCombo),
 기록 지우기(= 8시간 근무로 되돌리기) — `btnClear.OnSelect`
 
 ```powerfx
-Remove(근태기록, LookUp(근태기록, 키 = gvKey));
+Remove(근태기록, LookUp(근태기록, Title = gvKey));
 ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
 Notify("지웠습니다 — 이 날은 8시간 근무로 계산됩니다", NotificationType.Success)
 ```
@@ -789,13 +785,13 @@ Set(gvFlexTotalDays, DateDiff(gvFlexStart, gvFlexEnd, Days) + 1);
 
 ```powerfx
 ForAll(colMembers As M,
-    With({ recs: Filter(colFlex, 구성원 = M.이름) },
+    With({ recs: Filter(colFlex, 구성원 = M.Title) },
         With({
             총근로: (gvFlexDays - CountRows(recs)) * 8
                     + Sum(recs, 실근로) + Sum(recs, OT시간)
         },
             {
-                이름:   M.이름,
+                이름:   M.Title,
                 총근로: 총근로,
                 평균주: Round(총근로 / (gvFlexTotalDays / 7), 1),
                 적합:   총근로 / (gvFlexTotalDays / 7) <= 52
