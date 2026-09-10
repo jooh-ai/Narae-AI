@@ -481,81 +481,156 @@ First(조합표).
 
 1차 목표가 확인되면 아래 화면을 하나씩 붙인다. 수식은 §4 에 있다.
 
-### 화면 구성 (4개)
+| 화면 | 용도 | 주 사용자 | 단계 |
+|---|---|---|---|
+| `Screen1` | 내 근태 입력 — 연쇄 드롭다운 | 전원 (매일) | 3단계 ✔ |
+| `scrMonth` | 월 달력 — 날짜별 30% 판정 · 미달일 · 조율 후보 | 전원 (조율용) | 4단계 (§3-5) |
+| `scrSummary` | 개인 요약 — 총량 · OT 잔여 · 주별 64h | 본인 | 5단계 (§4-7) |
+| `scrFlex` | 탄력근무 3개월 평균 52h | 관리 | 5단계 (§4-8) |
 
-| 화면 | 용도 | 주 사용자 |
-|---|---|---|
-| `scrMonth` | 월 달력 — 날짜별 30% 판정 · 미달일 · 조율 후보 | 전원 (조율용) |
-| `scrMy` | 내 근태 입력 — 연쇄 드롭다운 | 전원 (매일) |
-| `scrSummary` | 개인 요약 — 총량 · OT 잔여 · 주별 64h | 본인 |
-| `scrFlex` | 탄력근무 3개월 평균 52h | 관리 |
+
+### 3-5. 4단계 — 월 달력 · 30% 판정 화면 만들기
+
+3단계와 같은 방식이다. **컨트롤을 넣고 이름을 바꾸고 §4 의 수식을 붙인다.**
+
+`새 화면` → 빈 화면 → 트리 뷰에서 이름을 **`scrMonth`** 로 바꾼다.
+
+| # | 넣을 컨트롤 | 이름 | 붙일 수식 |
+|---|---|---|---|
+| 1 | 텍스트 레이블 | `lblMonth` | §4-2 `lblMonth.Text` — 상단 요약 |
+| 2 | 단추 | `btnPrev` | §4-1 `btnPrev.OnSelect` · `Text` 는 `"◀ 이전 달"` |
+| 3 | 단추 | `btnNext` | §4-1 `btnNext.OnSelect` · `Text` 는 `"다음 달 ▶"` |
+| 4 | 세로 갤러리 | `galMonth` | §4-2 `Items` · `TemplateFill` |
+| 5 | └ 갤러리 안 레이블 | `lblDay` | §4-2 `lblDay.Text` |
+| 6 | └ 갤러리 안 레이블 | `lblCnt` | §4-2 `lblCnt.Text` |
+| 7 | 텍스트 레이블 | `lblCandHead` | §4-3 `lblCandHead.Text` |
+| 8 | 세로 갤러리 | `galCandidate` | §4-3 `Items` |
+| 9 | └ 갤러리 안 레이블 | `lblCand` | §4-3 `lblCand.Text` |
+| 10 | 단추 | `btnToMy` | `Navigate(Screen1)` · `Text` 는 `"근태 입력 ▶"` |
+
+입력 화면(`Screen1`)에도 단추 하나를 더해 오갈 수 있게 한다 — `Navigate(scrMonth)`.
+
+**순서가 중요한 것 세 가지.**
+
+1. **`App.OnStart` 를 §4-1 전체로 먼저 바꾸고 `OnStart 실행`** 을 누른다.
+   `galMonth` 가 `gvActive` · `gvNeed` · `colRec` 를 쓰므로 이게 먼저다
+2. **`설정 → 일반 → 데이터 행 제한` 을 2000** 으로. 기본 500 이면 기록이 늘었을 때
+   집계가 조용히 틀린다
+3. 갤러리 안 레이블은 **갤러리를 먼저 선택한 뒤 삽입**해야 갤러리 안으로 들어간다.
+   트리 뷰에서 `galMonth` 아래에 들여쓰여 보이는지 확인한다
+
+**확인표**
+
+| 확인할 것 | 기대 |
+|---|---|
+| `lblMonth` | `2026-09   모수 23명 · 필요 7명   |   미달일 0일   직책자 없는 날 0일` |
+| 갤러리 행 수 | 30개 (9월) |
+| 9월 5·6일 (토·일) | 회색 · `휴일` |
+| 3단계에서 저장한 9월 10일 | 초록 · `23 / 7명` (8시간 근무라 충족) |
+| 입력 화면에서 `연차` 로 저장하고 돌아오면 | 9월 10일이 `22 / 7명` 으로 줄어든다 |
+| 같은 날 17명이 연차·반차면 | 빨강 · `6 / 7명   ✗ 1명 부족` |
+| 빨간 날을 누르면 `galCandidate` | 바꿀 수 있는 사람만 (건강검진 · 연차 제외) |
+
+> **미달일 0일이 정상이다.** `근태기록` 이 비어 있으면 전원 8시간 근무로 보므로
+> 모든 날이 초록이다. 예외를 넣기 시작해야 판정이 움직인다.
 
 ## 4. Power Fx 수식
 
 ### 4-1. `App.OnStart` — 기준값과 이번 달 준비
 
 ```powerfx
+// ── 이번 달 기준값
 Set(gvMonthStart, Date(Year(Today()), Month(Today()), 1));
 Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, Months), -1, Days));
 Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
 
-// 조합표(106행)와 명부는 작아서 전부 올려두고 로컬로 쓴다 — 위임 걱정이 사라진다
-ClearCollect(colCombo,  조합표);
-ClearCollect(colMembers, Filter(명부, IsBlank(휴직)));   // 휴직자는 Y, 나머지는 빈칸
-Set(gvActive, CountRows(colMembers));
-Set(gvNeed,   RoundUp(gvActive * 0.3, 0));
-Set(gvLeads,  CountRows(Filter(colMembers, 직책 <> "구성원")));
-Set(gvMe,     LookUp(명부, 사용자.Email = User().Email, Title));
+// ── 작은 목록은 전부 올려두고 로컬로 쓴다 — 위임 걱정이 사라진다
+ClearCollect(colCombo,   조합표);                        // 106행
+ClearCollect(colMembers, Filter(명부, IsBlank(휴직)));   // 휴직자는 Y, 나머지 빈칸
+ClearCollect(colLeads,   Filter(colMembers, 직책 <> "구성원"));
+Set(gvActive, CountRows(colMembers));                    // 모수 23명
+Set(gvNeed,   RoundUp(gvActive * 0.3, 0));               // 필요 7명
+Set(gvLeads,  CountRows(colLeads));                      // 직책자 6명
 
-// 이번 달 기록을 한 번만 읽어 온다 — 이후 계산은 전부 이 컬렉션에서
+// ── 이번 달 기록을 한 번만 읽어 온다 — 이후 계산은 전부 이 컬렉션에서
 ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
 
-// 그 달의 날짜 · 요일 · 휴일 · 주 순번
-ClearCollect(colDays,
-    ForAll(Sequence(Day(gvMonthEnd)) As S,
-        With({ d: DateAdd(gvMonthStart, S.Value - 1, Days) },
-            {
-                날짜: d,
-                일:   S.Value,
-                요일: Text(d, "[$-ko]ddd"),
-                휴일: Weekday(d, StartOfWeek.Monday) > 5
-                      || !IsBlank(LookUp(공휴일, 날짜 = d)),
-                주:   RoundDown((S.Value - 1
-                        + Weekday(gvMonthStart, StartOfWeek.Monday) - 1) / 7, 0) + 1
-            }
-        )
-    )
-);
-Set(gvWorkdays, CountRows(Filter(colDays, !휴일)));
-
-// 이 달의 OT 기본 가능시간과 정규 근로 종료 (석식 휴게 창의 시작점)
+// ── 이 달의 OT 기본 가능시간과 정규 근로 종료 (석식 휴게 창의 시작점)
 Set(gvMonthCfg, LookUp(월설정, Title = gvYM));
 Set(gvOtBase,   Coalesce(gvMonthCfg.OT기본, 0));
 Set(gvRegEnd,   Value(Left(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)) * 60
-                + Value(Right(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)));
+                + Value(Right(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)))
 ```
 
-`colRec` 를 새로 읽어야 할 때(저장 직후 등)는 이 한 줄만 다시 실행한다.
+> **날짜 컬렉션(`colDays`)을 따로 만들지 않는다.** 달을 옮길 때마다 다시 만들어야 하므로,
+> 달력은 `galMonth.Items` 안에서 `gvMonthStart` 로부터 그때그때 계산한다. 그러면 달 이동
+> 버튼이 `gvMonthStart` 만 바꿔도 화면이 알아서 다시 그려진다.
+
+> **`명부` 의 `사용자` 열을 아직 안 만들었으면 `gvMe` 를 넣지 않는다.** 없는 열을
+> 참조하면 앱 전체가 오류가 된다. 열을 추가한 뒤 아래 한 줄을 더하면 본인 자동 선택이
+> 된다 — `Set(gvMe, LookUp(명부, 사용자.Email = User().Email, Title))`
+
+달을 옮기는 버튼 — **`btnPrev.OnSelect`**
 
 ```powerfx
-ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
+Set(gvMonthStart, DateAdd(gvMonthStart, -1, Months));
+Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, Months), -1, Days));
+Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
+Set(gvMonthCfg,   LookUp(월설정, Title = gvYM));
+Set(gvOtBase,     Coalesce(gvMonthCfg.OT기본, 0));
+ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd))
+```
+
+**`btnNext.OnSelect`** — 위와 같고 첫 줄만 `-1` → `1`
+
+```powerfx
+Set(gvMonthStart, DateAdd(gvMonthStart, 1, Months));
+Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, Months), -1, Days));
+Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
+Set(gvMonthCfg,   LookUp(월설정, Title = gvYM));
+Set(gvOtBase,     Coalesce(gvMonthCfg.OT기본, 0));
+ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd))
+```
+
+저장 직후에도 달력이 바로 반영되도록 **`btnSave.OnSelect` 맨 끝에 이 한 줄을 더한다.**
+
+```powerfx
+ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd))
 ```
 
 ### 4-2. 월 달력 — 날짜별 30% 판정
 
-`galMonth.Items`
+**`galMonth.Items`** — 이 하나가 30% 판정의 전부다
 
 ```powerfx
-AddColumns(colDays,
-    "충족인원", If(휴일, 0, gvActive - CountRows(Filter(colRec, 근무일 = 날짜, 충족 = 0))),
-    "필요인원", If(휴일, 0, gvNeed),
-    "직책자",   If(휴일, 0,
-                  gvLeads - CountRows(Filter(colRec, 근무일 = 날짜, 충족 = 0,
-                      구성원 in Filter(colMembers, 직책 <> "구성원").Title)))
+ForAll(Sequence(Day(gvMonthEnd)) As S,
+    With({ d: DateAdd(gvMonthStart, S.Value - 1, Days) },
+        With({ hol: Weekday(d, StartOfWeek.Monday) > 5
+                    || !IsBlank(LookUp(공휴일, 날짜 = d)) },
+            {
+                날짜: d,
+                일:   S.Value,
+                요일: Text(d, "[$-ko]ddd"),
+                휴일: hol,
+                필요인원: If(hol, 0, gvNeed),
+                충족인원: If(hol, 0,
+                    gvActive - CountRows(Filter(colRec As R,
+                        R.근무일 = d, R.충족 = 0))),
+                직책자: If(hol, 0,
+                    gvLeads - CountRows(Filter(colRec As R,
+                        R.근무일 = d, R.충족 = 0,
+                        !IsBlank(LookUp(colLeads, Title = R.구성원)))))
+            }
+        )
+    )
 )
 ```
 
-행 배경색 — 미달이면 빨강, 직책자 0명이면 노랑
+> **핵심은 `gvActive - (충족=0 인 기록 수)` 다.** 기록이 없는 날은 8시간 근무이므로
+> 전원이 충족으로 시작하고, 예외를 넣은 사람만 빠진다. `근태기록` 을 비워둔 채
+> 운영하는 이유가 이것이다 — 23명 × 22일을 미리 채울 필요가 없다.
+
+행 배경색 — **`galMonth.TemplateFill`**
 
 ```powerfx
 If(ThisItem.휴일,                        RGBA(240, 241, 243, 1),
@@ -564,31 +639,68 @@ If(ThisItem.휴일,                        RGBA(240, 241, 243, 1),
                                          RGBA(230, 244, 236, 1))
 ```
 
-미달일 개수 (화면 상단 요약)
+행 안의 레이블 두 개 — **`lblDay.Text`** · **`lblCnt.Text`**
 
 ```powerfx
-CountRows(Filter(galMonth.AllItems, !휴일, 충족인원 < 필요인원))
+ThisItem.일 & " (" & ThisItem.요일 & ")"
+```
+```powerfx
+If(ThisItem.휴일,
+   "휴일",
+   ThisItem.충족인원 & " / " & ThisItem.필요인원 & "명"
+     & If(ThisItem.충족인원 < ThisItem.필요인원,
+          "   ✗ " & (ThisItem.필요인원 - ThisItem.충족인원) & "명 부족", "")
+     & If(ThisItem.직책자 < 1, "   ⚠ 직책자 0명", ""))
+```
+
+화면 상단 요약 — **`lblMonth.Text`**
+
+```powerfx
+gvYM & "   모수 " & gvActive & "명 · 필요 " & gvNeed & "명"
+  & "   |   미달일 "
+  & CountRows(Filter(galMonth.AllItems, !휴일, 충족인원 < 필요인원)) & "일"
+  & "   직책자 없는 날 "
+  & CountRows(Filter(galMonth.AllItems, !휴일, 직책자 < 1)) & "일"
 ```
 
 ### 4-3. 조율 후보 — 미달일에 8시간으로 바꿔줄 수 있는 사람
 
-출장 · 교육 · 연차 · 건강검진은 바꿀 수 없으므로 제외한다.
+건강검진 · 연차 · 출장 · 교육은 본인이 바꿀 수 없으므로 후보에서 뺀다.
+바꿀 수 있는 것은 **근무 시각 조정 · 반차 · 반반차**뿐이다.
 
-`galCandidate.Items`
+**`galCandidate.Items`** — 달력에서 고른 날짜의 후보
 
 ```powerfx
-Filter(colRec,
-    근무일 = galMonth.Selected.날짜,
-    충족 = 0,
-    구분 in ["근무", "반차", "반반차"]
+Filter(colRec As R,
+    R.근무일 = galMonth.Selected.날짜,
+    R.충족 = 0,
+    R.구분 in ["근무", "반차", "반반차"]
 )
 ```
 
-표시 텍스트
+표시 텍스트 — **`lblCand.Text`**
 
 ```powerfx
-ThisItem.구성원 & " (" & ThisItem.조합코드 & " · " & ThisItem.실근로 & "h)"
+ThisItem.구성원 & "   " & ThisItem.조합코드
+  & "   (실근로 " & ThisItem.실근로 & "h · 휴가 " & ThisItem.휴가 & "h)"
 ```
+
+후보 목록 머리글 — **`lblCandHead.Text`**
+
+```powerfx
+If(IsBlank(galMonth.Selected),
+   "달력에서 날짜를 고르세요",
+   Text(galMonth.Selected.날짜, "m월 d일")
+     & If(galMonth.Selected.충족인원 < galMonth.Selected.필요인원,
+          "  ✗ " & (galMonth.Selected.필요인원 - galMonth.Selected.충족인원)
+            & "명 부족",
+          "  ✓ 충족")
+     & "   ·   조율 가능 " & CountRows(galCandidate.AllItems) & "명")
+```
+
+> **여기까지가 엑셀로 하던 작업의 대체다.** 미달일이 빨갛게 보이고, 그 날을 누르면
+> 「누구에게 부탁하면 되는지」가 바로 나온다. 엑셀에서는 사람 23명 × 날짜 22일을
+> 눈으로 세야 했던 일이다.
 
 ### 4-4. 내 근태 입력 — 연쇄 드롭다운 ★
 
