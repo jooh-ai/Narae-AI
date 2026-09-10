@@ -802,6 +802,282 @@ Set(gvLeads,  CountRows(colLeads));
 > 소정 합계 4+5+5+3+3 = 20 이 `gvWorkdays` 와 같아야 한다.
 > 김동환은 주 3 이 `32h` 로 줄어든다 (연차 1일).
 
+### 3-8. 6단계 — 매트릭스 화면 (23명 × 날짜)
+
+HTML 도구와 체감 차이가 나는 것은 사실상 이 화면 하나다. 조율은 「누구에게 부탁할지」를
+한 화면에서 보는 일이고, 그게 매트릭스다.
+
+#### 왜 2주 보기인가
+
+23행 × 30일 = **690개 컨트롤**이고, Power Apps 권장치는 화면당 500개다. 2주(14일)로
+줄이면 27행 × 14일 ≈ **480개**로 들어온다. 조율은 실제로 가까운 2주를 보는 일이고,
+한 달 전체 조망은 `scrMonth` 의 30% 리스트가 이미 하고 있다.
+
+#### 핵심 기법 — 중첩 갤러리
+
+세로 갤러리(사람) **안에** 가로 갤러리(날짜)를 넣는다. 안쪽 갤러리의 `Items` 는
+바깥 갤러리의 템플릿 안에 있으므로 **거기서 `ThisItem` 은 바깥 항목(사람)** 을 가리킨다.
+이 성질을 이용해 셀 데이터를 조립한다 — 안쪽 갤러리의 셀 컨트롤에서는 `ThisItem` 이
+셀 자신이 되므로, 사람 정보를 미리 셀 레코드에 담아 넣어야 한다.
+
+#### 컨트롤 15개
+
+| # | 컨트롤 | 이름 | X | Y | W | H | 그 외 |
+|---|---|---|---|---|---|---|---|
+| 1 | 텍스트 레이블 | `lblGridHead` | 40 | 24 | 700 | 32 | `Size` 15 · `Bold` |
+| 2 | 단추 | `btnGridPrev` | 760 | 24 | 110 | 32 | `"◀ 2주"` |
+| 3 | 단추 | `btnGridToday` | 880 | 24 | 110 | 32 | `"이번 주"` |
+| 4 | 단추 | `btnGridNext` | 1000 | 24 | 110 | 32 | `"2주 ▶"` |
+| 5 | 단추 | `btnGridToMonth` | 1206 | 24 | 120 | 32 | `"월 달력"` |
+| 6 | **가로** 갤러리 | `galDayHead` | 240 | 68 | 1126 | 40 | `TemplateSize` 80 |
+| 7 | └ 레이블 | `lblDayNum` | 0 | 2 | 78 | 18 | 가운데 정렬 |
+| 8 | └ 레이블 | `lblDow` | 0 | 20 | 78 | 18 | 가운데 정렬 |
+| 9 | **가로** 갤러리 | `galNeedHead` | 240 | 110 | 1126 | 26 | `TemplateSize` 80 |
+| 10 | └ 레이블 | `lblNeed` | 0 | 2 | 78 | 22 | 가운데 정렬 |
+| 11 | 세로 갤러리 | `galGrid` | 40 | 140 | 1326 | 588 | `TemplateSize` 26 |
+| 12 | └ 레이블 | `lblRowName` | 8 | 2 | 110 | 22 | |
+| 13 | └ 레이블 | `lblRowPart` | 122 | 2 | 76 | 22 | |
+| 14 | └ **가로** 갤러리 | `galCell` | 200 | 0 | 1126 | 26 | `TemplateSize` 80 |
+| 15 | └└ 레이블 | `lblCell` | 1 | 1 | 78 | 24 | `BorderThickness` 1 |
+
+> **셀은 단추가 아니라 레이블로 만든다.** 레이블도 `OnSelect` 를 가지고 있고 훨씬
+> 가볍다. 378개를 그려야 하므로 이 차이가 크다.
+
+> **`galCell` 은 `galGrid` 를 먼저 선택한 뒤 삽입**해야 안으로 들어간다. 트리 뷰에서
+> `galGrid` → `galCell` → `lblCell` 로 세 단계 들여쓰기가 보여야 한다.
+
+#### 행 소스 — 그룹 헤더를 섞어 넣는다
+
+`App.OnStart` 의 「한 번만」 블록 끝에 붙인다. 3개 그룹 + 24명 = 27행.
+
+```powerfx
+Clear(colGridRows);
+Collect(colGridRows, { 헤더: true,
+    이름: "A그룹 · 직책자 (팀장 · 파트장)", 파트: "", 휴직: "" });
+Collect(colGridRows, ForAll(Sort(Filter(colAll, 그룹 = "A"), 정렬) As M,
+    { 헤더: false, 이름: M.Title, 파트: M.파트, 휴직: Coalesce(M.휴직, "") }));
+Collect(colGridRows, { 헤더: true,
+    이름: "B그룹 · 기계 · 전기 · 제어 · 정비지원", 파트: "", 휴직: "" });
+Collect(colGridRows, ForAll(Sort(Filter(colAll, 그룹 = "B"), 정렬) As M,
+    { 헤더: false, 이름: M.Title, 파트: M.파트, 휴직: Coalesce(M.휴직, "") }));
+Collect(colGridRows, { 헤더: true,
+    이름: "C그룹 · 발전지원", 파트: "", 휴직: "" });
+Collect(colGridRows, ForAll(Sort(Filter(colAll, 그룹 = "C"), 정렬) As M,
+    { 헤더: false, 이름: M.Title, 파트: M.파트, 휴직: Coalesce(M.휴직, "") }))
+```
+
+> **휴직자도 행에 넣는다.** HTML 도구가 그렇게 하고 있고, 명부에서 빠진 게 아니라
+> 휴직 중이라는 것이 보여야 한다. 모수(`gvActive` 23명)에서는 이미 빠져 있다.
+
+#### 2주 창 — `gvGridStart` 와 두 컬렉션
+
+2주 창이 달을 걸칠 수 있으므로 `colRec`(월 단위)와 별도로 창 범위 기록을 읽는다.
+아래를 **「2주 갱신 블록」** 이라 부르고 `scrGrid.OnVisible` · `btnGridPrev` ·
+`btnGridNext` · `btnGridToday` 네 곳에 넣는다.
+
+```powerfx
+ClearCollect(colGridRec,
+    Filter(근태기록, 근무일 >= gvGridStart,
+                    근무일 <= DateAdd(gvGridStart, 13, TimeUnit.Days)));
+ClearCollect(colGridDays,
+    ForAll(Sequence(14) As S,
+        With({ d: DateAdd(gvGridStart, S.Value - 1, TimeUnit.Days) },
+            With({ hol: Weekday(d, StartOfWeek.Monday) > 5
+                        || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                {
+                    날짜: d,
+                    일:   Day(d),
+                    요일: Text(d, "[$-ko]ddd"),
+                    휴일: hol,
+                    필요인원: If(hol, 0, gvNeed),
+                    충족인원: If(hol, 0,
+                        gvActive - CountRows(Filter(colGridRec As R,
+                            R.근무일 = d, R.충족 = 0)))
+                }
+            )
+        )
+    ))
+```
+
+앞에 붙는 한 줄만 화면·단추마다 다르다.
+
+| 컨트롤 | 첫 줄 |
+|---|---|
+| `scrGrid.OnVisible` | `If(IsBlank(gvGridStart), Set(gvGridStart, DateAdd(Today(), -(Weekday(Today(), StartOfWeek.Monday) - 1), TimeUnit.Days)));` |
+| `btnGridPrev.OnSelect` | `Set(gvGridStart, DateAdd(gvGridStart, -14, TimeUnit.Days));` |
+| `btnGridNext.OnSelect` | `Set(gvGridStart, DateAdd(gvGridStart, 14, TimeUnit.Days));` |
+| `btnGridToday.OnSelect` | `Set(gvGridStart, DateAdd(Today(), -(Weekday(Today(), StartOfWeek.Monday) - 1), TimeUnit.Days));` |
+
+#### 수식
+
+**`lblGridHead.Text`**
+
+```powerfx
+Text(gvGridStart, "yyyy-mm-dd") & " ~ "
+  & Text(DateAdd(gvGridStart, 13, TimeUnit.Days), "yyyy-mm-dd")
+  & "     모수 " & gvActive & "명 · 8시간 필수 " & gvNeed & "명"
+  & "     미달일 "
+  & CountRows(Filter(colGridDays, !휴일, 충족인원 < 필요인원)) & "일"
+```
+
+**`galDayHead.Items`** · **`galNeedHead.Items`** — 둘 다 같다
+
+```powerfx
+colGridDays
+```
+
+**`lblDayNum.Text`** · **`lblDow.Text`**
+
+```powerfx
+ThisItem.일
+```
+```powerfx
+ThisItem.요일
+```
+
+**`lblDow.Color`** — 토·일·공휴일은 흐리게
+
+```powerfx
+If(ThisItem.휴일, RGBA(107, 114, 128, 1), RGBA(22, 24, 29, 1))
+```
+
+**`lblNeed.Text`** · **`lblNeed.Fill`** — HTML 의 「8h 인원 / 필요 인원」 행
+
+```powerfx
+If(ThisItem.휴일, "—", ThisItem.충족인원 & "/" & ThisItem.필요인원)
+```
+```powerfx
+If(ThisItem.휴일,                        RGBA(240, 241, 243, 1),
+   ThisItem.충족인원 < ThisItem.필요인원, RGBA(251, 234, 233, 1),
+                                          RGBA(230, 244, 236, 1))
+```
+
+**`galGrid.Items`**
+
+```powerfx
+colGridRows
+```
+
+**`lblRowName.Text`** · **`lblRowName.FontWeight`** — 헤더 행은 굵게
+
+```powerfx
+ThisItem.이름 & If(ThisItem.휴직 = "Y", "  (휴직)", "")
+```
+```powerfx
+If(ThisItem.헤더, FontWeight.Bold, FontWeight.Normal)
+```
+
+**`lblRowPart.Text`** · **`galGrid.TemplateFill`**
+
+```powerfx
+ThisItem.파트
+```
+```powerfx
+If(ThisItem.헤더, RGBA(232, 238, 246, 1), RGBA(255, 255, 255, 1))
+```
+
+**`galCell.Items`** ★ — 이 화면의 핵심. 여기서 `ThisItem` 은 **사람**이다
+
+```powerfx
+ForAll(colGridDays As D,
+    With({ r: LookUp(colGridRec,
+                     근무일 = D.날짜 && 구성원 = ThisItem.이름) },
+        {
+            날짜:   D.날짜,
+            휴일:   D.휴일,
+            헤더:   ThisItem.헤더,
+            이름:   ThisItem.이름,
+            휴직:   ThisItem.휴직,
+            유형:   Coalesce(r.유형, ""),
+            구분:   Coalesce(r.구분, ""),
+            실근로: If(IsBlank(r), 8, r.실근로),
+            충족:   If(IsBlank(r), 1, r.충족),
+            OT:     Coalesce(r.OT시간, 0)
+        }
+    )
+)
+```
+
+**`lblCell.Text`** — 8시간 근무(기록 없음)는 빈칸으로 둔다
+
+```powerfx
+If(ThisItem.헤더 || ThisItem.휴일 || ThisItem.휴직 = "Y" || ThisItem.유형 = "", "",
+   ThisItem.유형 & Char(10) & ThisItem.실근로 & "h"
+     & If(ThisItem.OT > 0, " +" & ThisItem.OT, ""))
+```
+
+**`lblCell.Fill`** — 색이 판정이다
+
+```powerfx
+If(ThisItem.헤더,             RGBA(232, 238, 246, 1),
+   ThisItem.휴일,             RGBA(240, 241, 243, 1),
+   ThisItem.휴직 = "Y",       RGBA(240, 241, 243, 1),
+   ThisItem.충족 = 1,         RGBA(230, 244, 236, 1),   // 8시간 인정
+   ThisItem.구분 = "휴가·사외", RGBA(232, 238, 246, 1),   // 연차 · 출장 · 교육
+                              RGBA(253, 243, 221, 1))   // 반차 · 반반차 · 검진 · 단축
+```
+
+**`lblCell.OnSelect`** — 셀을 누르면 그 사람 · 그 날짜로 입력 화면이 열린다
+
+```powerfx
+If(!ThisItem.헤더 && !ThisItem.휴일 && ThisItem.휴직 <> "Y",
+   Set(gvPickWho,  ThisItem.이름);
+   Set(gvPickDate, ThisItem.날짜);
+   Navigate(Screen1))
+```
+
+`Screen1` 에서 받는다 — **`dpDate.DefaultDate`**
+
+```powerfx
+Coalesce(gvPickDate, Today())
+```
+
+구성원 기본 선택은 컨트롤 종류에 따라 다르다 (§3-7 의 `ddDinner` 와 같은 문제).
+
+| `ddMe` 가 | 속성 | 값 |
+|---|---|---|
+| 모던 드롭다운 · 콤보 상자 | `DefaultSelectedItems` | `[{Value: gvPickWho}]` |
+| 클래식 드롭다운 | `Default` | `Coalesce(gvPickWho, "")` |
+
+**`btnGridToMonth.OnSelect`**
+
+```powerfx
+Navigate(scrMonth)
+```
+
+`scrMonth` 에도 단추를 더해 `Navigate(scrGrid)` 로 오게 한다.
+
+#### 6-1 확인표 — §3-6 테스트 4건 기준
+
+`btnGridToday` 를 누르고 9월 15일이 들어간 2주 창(9/14 ~ 9/27)에서 본다.
+
+| 확인할 것 | 기대 |
+|---|---|
+| 행 수 | 27 (그룹 헤더 3 + 명부 24) |
+| 그룹 헤더 3줄 | 남색 배경 · 굵게 |
+| 윤승현 행 | `윤승현 (휴직)` · 셀 전체 회색 |
+| 9/20 · 9/26 · 9/27 열 | 회색 (일 · 토 · 일) |
+| **9/24 · 9/25 열** | **회색** (추석) |
+| `lblNeed` 행 | 9/15 는 `19/7` · 나머지 평일은 `23/7` · 초록 |
+| 김동환 × 9/15 | `연차 0h` · 남색 |
+| 정병철 × 9/15 | `오전반 4.5h` · 주황 |
+| 박상호 × 9/15 | `근무 7h` · 주황 |
+| 최규석 × 9/15 | `검진 4h` · 주황 |
+| 그 외 모든 평일 칸 | **빈칸 · 초록** (기록 없음 = 8시간 근무) |
+| 아무 초록 칸을 누르면 | `Screen1` 이 그 사람 · 그 날짜로 열린다 |
+
+> **빈칸이 초록인 것이 이 설계의 핵심**이다. 23명 × 22일을 미리 채우지 않고도
+> 전원 8시간 근무로 보고, 예외를 넣은 칸만 색이 바뀐다.
+
+#### 성능이 느리면
+
+`galCell` 이 378개를 그리므로 첫 렌더가 1~2초 걸릴 수 있다. 견디기 힘들면 순서대로
+줄인다.
+
+1. `Sequence(14)` → `Sequence(7)` (1주 보기, 189칸) — 가장 확실하다
+2. `lblCell.BorderThickness` 를 0 으로 (테두리 렌더 비용 제거)
+3. `lblRowPart` 를 지우고 `lblRowName` 에 합치기
+
 ## 4. Power Fx 수식
 
 ### 4-1. `App.OnStart` 와 월 갱신 블록
