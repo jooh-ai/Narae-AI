@@ -573,6 +573,13 @@ First(조합표).
 > 갤러리는 `삽입 → 갤러리 → 빈 세로` 를 쓴다. `제목 및 부제목` 을 고르면 쓰지 않는
 > 레이블이 딸려 들어온다.
 
+> **갤러리 안 레이블의 `X`·`Y` 는 「행 기준」이다.** 갤러리 위치와 무관한 작은 숫자다.
+> 이걸 안 넣으면 `lblDay` 와 `lblCnt` 가 둘 다 (0, 0) 에 놓여 **글자가 두 겹으로
+> 겹쳐 보인다** — 날짜 숫자가 이상하게 뭉개져 보이면 이것이다.
+
+> **단추의 `Text` 도 넣는다.** 안 넣으면 트리 뷰와 화면에 `버튼` 으로 남는다.
+> `btnToMy` 는 `"근태 입력 ▶"`, `btnPrev` 는 `"◀ 이전 달"`, `btnNext` 는 `"다음 달 ▶"`.
+
 **확인표**
 
 | 확인할 것 | 기대 |
@@ -599,8 +606,10 @@ Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, TimeUnit.Months), -1, TimeUni
 Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
 
 // ── 작은 목록은 전부 올려두고 로컬로 쓴다 — 위임 걱정이 사라진다
-ClearCollect(colCombo,   조합표);                        // 106행
-ClearCollect(colMembers, Filter(명부, IsBlank(휴직)));   // 휴직자는 Y, 나머지 빈칸
+ClearCollect(colCombo,   조합표);      // 106행
+ClearCollect(colHoliday, 공휴일);      // 21행 — 달력이 날마다 조회하지 않도록
+ClearCollect(colAll,     명부);        // 24행
+ClearCollect(colMembers, Filter(colAll, IsBlank(휴직)));   // 휴직자는 Y, 나머지 빈칸
 ClearCollect(colLeads,   Filter(colMembers, 직책 <> "구성원"));
 Set(gvActive, CountRows(colMembers));                    // 모수 23명
 Set(gvNeed,   RoundUp(gvActive * 0.3, 0));               // 필요 7명
@@ -660,7 +669,7 @@ ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <
 ForAll(Sequence(Day(gvMonthEnd)) As S,
     With({ d: DateAdd(gvMonthStart, S.Value - 1, TimeUnit.Days) },
         With({ hol: Weekday(d, StartOfWeek.Monday) > 5
-                    || !IsBlank(LookUp(공휴일, 날짜 = d)) },
+                    || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
             {
                 날짜: d,
                 일:   S.Value,
@@ -941,7 +950,7 @@ Set(gvFlexDays,
     CountRows(Filter(
         ForAll(Sequence(DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1) As S,
             { d: DateAdd(gvFlexStart, S.Value - 1, TimeUnit.Days) }),
-        Weekday(d, StartOfWeek.Monday) <= 5 && IsBlank(LookUp(공휴일, 날짜 = d))
+        Weekday(d, StartOfWeek.Monday) <= 5 && IsBlank(LookUp(colHoliday, 날짜 = d))
     ))
 );
 Set(gvFlexTotalDays, DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1);
@@ -970,6 +979,27 @@ ForAll(colMembers As M,
 > `(gvFlexDays - CountRows(recs))` 는 기록이 소정근로일에만 있다고 가정한 근사다.
 > 휴일 근무 기록이 있으면 `Filter(recs, !휴일)` 로 걸러야 정확하다 — HTML 도구의
 > 계산과 대조해 검증하는 것을 권한다.
+
+## 4-8-1. 위임 경고 — 무해하지만 없애는 편이 낫다
+
+`대규모 데이터 세트에서는 이 수식의 "휴직" 부분이 제대로 작동하지 않을 수 있습니다`
+같은 노란 경고가 뜬다. 데이터가 500행을 넘으면 부정확해질 수 있다는 뜻이고,
+`명부` 24행 · `공휴일` 21행이라 실제로는 문제가 없다.
+
+그래도 **`공휴일` 조회는 성능 때문에 반드시 컬렉션으로 바꾼다.**
+`galMonth.Items` 안의 `LookUp(공휴일, 날짜 = d)` 는 `ForAll` 안에 있어
+**한 달 그릴 때마다 SharePoint 를 30번 왕복**한다. `App.OnStart` 에서
+`ClearCollect(colHoliday, 공휴일)` 로 한 번만 읽고 `colHoliday` 를 쓰면
+왕복이 1번으로 줄고 경고도 함께 사라진다.
+
+| 원래 | 바꿀 것 | 이유 |
+|---|---|---|
+| `LookUp(공휴일, 날짜 = d)` | `LookUp(colHoliday, 날짜 = d)` | 30번 왕복 → 1번 |
+| `Filter(명부, IsBlank(휴직))` | `Filter(colAll, IsBlank(휴직))` | `IsBlank` 는 위임되지 않는다 |
+
+**`근태기록` 조회는 그대로 둔다.** `Filter(근태기록, 근무일 >= …, 근무일 <= …)` 는
+날짜 비교라 SharePoint 로 위임되고, 여기만은 컬렉션으로 올릴 수 없다 — 다른 사람이
+방금 저장한 것을 읽어야 하므로 매번 새로 읽는 것이 맞다.
 
 ## 4-9. 배치와 디자인은 마지막에 한 번에
 
