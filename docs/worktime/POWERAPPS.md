@@ -231,13 +231,175 @@ Dataverse 로는 얻을 수 없다. 처음 도입할 때 이 안전장치가 가
 이후 이 목록은 **비어 있는 채로 운영한다**. 기록이 없는 날 = 8시간 근무이므로
 미리 채워 넣을 것이 없다.
 
-## 3. 앱 만들기
+## 3. 앱 만들기 — 1차 목표
 
 Teams → `Power Apps` → `새 앱` → 두 팀이 함께 있는 팀 선택 → 캔버스 앱.
-`데이터 추가` 에서 **SharePoint** 커넥터로 위 5개 목록을 연결한다.
+`데이터 추가` 에서 **SharePoint** 커넥터로 목록 5개를 연결한다.
 
 > **앱 설정에서 반드시 바꿀 것**: `설정 → 일반 → 데이터 행 제한` 을 **2000** 으로.
 > 기본 500 이면 월 기록이 500행을 넘는 순간 집계가 조용히 틀린다.
+
+**한 번에 다 만들지 않는다.** 먼저 입력 화면 하나로 저장이 되는 것을 확인하고,
+그다음에 나머지 화면을 붙인다. 아래가 그 최소 화면이다.
+
+### 3-1. 컨트롤 8개
+
+`삽입` 메뉴에서 넣고, 각 컨트롤을 선택한 뒤 왼쪽 위 속성 목록에서 해당 속성을 골라
+수식을 붙여넣는다. 이름은 왼쪽 「트리 뷰」에서 두 번 눌러 바꾼다.
+
+| # | 컨트롤 | 이름 | 넣을 것 |
+|---|---|---|---|
+| 1 | 드롭다운 | `ddMe` | 구성원 |
+| 2 | 날짜 선택 | `dpDate` | 근무일 |
+| 3 | 드롭다운 | `ddType` | 유형 |
+| 4 | 드롭다운 | `ddStart` | 출근 |
+| 5 | 드롭다운 | `ddEnd` | 퇴근 |
+| 6 | 텍스트 레이블 | `lblPreview` | 판정 미리보기 |
+| 7 | 단추 | `btnSave` | 저장 |
+| 8 | 세로 갤러리 | `galSaved` | 저장 결과 확인 |
+
+### 3-2. 수식
+
+**`App.OnStart`** — 트리 뷰 맨 위 `App` 을 선택하고 `OnStart` 속성에
+
+```powerfx
+ClearCollect(colCombo, 조합표)
+```
+
+> **`OnStart` 는 편집 중에 저절로 실행되지 않는다.** 트리 뷰의 `App` 을 마우스 오른쪽 →
+> **`OnStart 실행`** 을 눌러야 `colCombo` 가 채워진다. 이걸 안 하면 드롭다운이 전부
+> 비어 보여서 뭔가 잘못된 줄 알게 된다 — 첫 시도에서 가장 많이 걸리는 함정이다.
+
+**`ddMe.Items`**
+
+```powerfx
+Distinct(명부, 이름)
+```
+
+**`ddType.Items`** · **`ddType.OnChange`**
+
+```powerfx
+Distinct(colCombo, 유형)
+```
+```powerfx
+Reset(ddStart); Reset(ddEnd)
+```
+
+**`ddStart.Items`** · **`ddStart.OnChange`** — 고른 유형에서 가능한 출근만 남는다
+
+```powerfx
+Distinct(Filter(colCombo, 유형 = ddType.Selected.Value, !IsBlank(출근)), 출근)
+```
+```powerfx
+Reset(ddEnd)
+```
+
+**`ddEnd.Items`** — 유형 + 출근에서 가능한 퇴근만 남는다
+
+```powerfx
+Distinct(
+    Filter(colCombo, 유형 = ddType.Selected.Value, 출근 = ddStart.Selected.Value),
+    퇴근
+)
+```
+
+**`lblPreview.Text`** — 저장 전에 판정을 보여준다
+
+```powerfx
+With({ code:
+    If(IsBlank(ddStart.Selected.Value),
+       ddType.Selected.Value,
+       ddType.Selected.Value & " "
+         & Substitute(ddStart.Selected.Value, ":", "") & "-"
+         & Substitute(ddEnd.Selected.Value, ":", ""))
+},
+    With({ c: LookUp(colCombo, 조합코드 = code) },
+        If(IsBlank(c),
+           "✗ 규칙에 없는 조합 — " & code,
+           code & "   실근로 " & c.실근로 & "h · 휴가 " & c.휴가 & "h · "
+             & If(c.충족 = 1, "30% 충족", "30% 미충족"))
+    )
+)
+```
+
+**`lblPreview.Color`** — 규칙에 없으면 빨강
+
+```powerfx
+If(IsBlank(LookUp(colCombo, 조합코드 =
+    If(IsBlank(ddStart.Selected.Value), ddType.Selected.Value,
+       ddType.Selected.Value & " " & Substitute(ddStart.Selected.Value, ":", "")
+         & "-" & Substitute(ddEnd.Selected.Value, ":", "")))),
+   RGBA(179, 38, 30, 1), RGBA(15, 123, 79, 1))
+```
+
+**`btnSave.OnSelect`** — 조합표에서 값을 읽어 함께 저장한다
+
+```powerfx
+Set(gvCode,
+    If(IsBlank(ddStart.Selected.Value),
+       ddType.Selected.Value,
+       ddType.Selected.Value & " "
+         & Substitute(ddStart.Selected.Value, ":", "") & "-"
+         & Substitute(ddEnd.Selected.Value, ":", "")));
+Set(gvC,   LookUp(colCombo, 조합코드 = gvCode));
+Set(gvKey, Text(dpDate.SelectedDate, "yyyy-mm-dd") & "_" & ddMe.Selected.Value);
+
+If(IsBlank(gvC),
+    Notify("규칙에 없는 조합입니다 — " & gvCode, NotificationType.Error),
+
+    Patch(근태기록,
+        Coalesce(LookUp(근태기록, 키 = gvKey), Defaults(근태기록)),
+        {
+            키:       gvKey,
+            근무일:   dpDate.SelectedDate,
+            구성원:   ddMe.Selected.Value,
+            유형:     ddType.Selected.Value,
+            출근:     ddStart.Selected.Value,
+            퇴근:     ddEnd.Selected.Value,
+            조합코드: gvCode,
+            실근로:   gvC.실근로,
+            휴가:     gvC.휴가,
+            충족:     gvC.충족,
+            구분:     gvC.구분
+        });
+    Notify("저장 완료 — " & gvKey & " · " & gvCode, NotificationType.Success)
+)
+```
+
+**`galSaved.Items`** — 저장된 것이 바로 보인다
+
+```powerfx
+Sort(Filter(근태기록, 구성원 = ddMe.Selected.Value), 근무일, SortOrder.Descending)
+```
+
+갤러리 안 레이블 하나의 `Text`
+
+```powerfx
+ThisItem.키 & "   " & ThisItem.조합코드 & "   실근로 " & ThisItem.실근로 & "h"
+```
+
+### 3-3. 확인 — 여기까지 되면 나머지는 반복 작업이다
+
+| 확인할 것 | 기대 |
+|---|---|
+| `ddType` 을 열면 | 11개 (근무 · 오전반 · … · 휴직) |
+| 유형 `오전반` 을 고르면 `ddStart` | **2개** (13:00 · 13:30) |
+| `오전반` + `13:00` 에서 `ddEnd` | **4개** (16:00 · 16:30 · 17:00 · 17:30) |
+| 유형 `오후반반` 을 고르면 `ddEnd` | **1개** (15:30) |
+| 유형 `연차` 를 고르면 `ddStart` | 비어 있음 (시각이 필요 없다) |
+| `오전반` + `13:00` + `17:00` 미리보기 | `오전반 1300-1700 실근로 4h · 휴가 4h · 30% 미충족` |
+| `근무` + `08:30` + `17:30` 미리보기 | `근무 0830-1730 실근로 8h · 휴가 0h · 30% 충족` |
+| 저장 → `galSaved` | 방금 저장한 행이 보인다 |
+| SharePoint `근태기록` 목록 | 같은 행이 들어가 있고 실근로 · 휴가 · 충족 · 구분이 채워져 있다 |
+| 같은 날짜로 다시 저장 | 행이 늘지 않고 **덮어써진다** (키가 같으므로) |
+
+**규칙에 없는 조합을 만들 수 없다는 것**이 핵심이다. `오전반` 을 골랐을 때 `08:30` 이
+목록에 아예 없으므로 고를 수가 없다. 엑셀에서 사후에 빨갛게 표시하던 것이
+입력 단계에서 차단된다.
+
+### 3-4. 다음에 붙일 화면들
+
+1차 목표가 확인되면 아래 화면을 하나씩 붙인다. 수식은 §4 에 있다.
 
 ### 화면 구성 (4개)
 
