@@ -359,14 +359,17 @@ With({ code:
 )
 ```
 
-**`lblPreview.Color`** — 규칙에 없으면 빨강
+**`lblPreview.Color`** — 빨강: 규칙에 없음 · 주황: 30% 미충족 · 초록: 충족
 
 ```powerfx
-If(IsBlank(LookUp(colCombo, Title =
+With({ c: LookUp(colCombo, Title =
     If(IsBlank(ddStart.Selected.Value), ddType.Selected.Value,
        ddType.Selected.Value & " " & Substitute(ddStart.Selected.Value, ":", "")
-         & "-" & Substitute(ddEnd.Selected.Value, ":", "")))),
-   RGBA(179, 38, 30, 1), RGBA(15, 123, 79, 1))
+         & "-" & Substitute(ddEnd.Selected.Value, ":", ""))) },
+    If(IsBlank(c), RGBA(179, 38, 30, 1),   // 규칙에 없는 조합 — 저장 안 됨
+       c.충족 = 1, RGBA(15, 123, 79, 1),   // 8시간 인정 — 30% 인원에 포함
+                   RGBA(138, 90, 0, 1))    // 규칙에는 맞지만 30% 인원에 안 들어감
+)
 ```
 
 **`btnSave.OnSelect`** — 조합표에서 값을 읽어 함께 저장한다
@@ -693,71 +696,120 @@ Set(gvLeads,  CountRows(colLeads));
 > 깨끗한 상태로 운영을 시작할 수 있다.
 
 
+### 3-7. 5단계 — OT 입력과 개인 요약
+
+세 조각으로 나눠 순서대로 한다. 뒤 조각이 앞 조각의 값을 쓴다.
+
+| 조각 | 무엇을 | 왜 먼저인가 |
+|---|---|---|
+| 5-1 | `App.OnStart` · `btnPrev` · `btnNext` 를 월 갱신 블록으로 통합 (§4-1) | `colDays` · `gvWorkdays` 가 없으면 총량과 주별 집계를 못 한다 |
+| 5-2 | `Screen1` 에 OT 입력 4개 추가 · `btnSave` 확장 | OT 시간이 저장되지 않으면 요약에 쓸 값이 없다 |
+| 5-3 | `scrSummary` — 개인 요약 (§4-7) | |
+
+#### 5-2. `Screen1` 에 추가할 컨트롤 5개
+
+| # | 컨트롤 | 이름 | 넣을 값 |
+|---|---|---|---|
+| 10 | 텍스트 입력 | `txtOtS` | `HintText` `"OT 시작 20:30"` · `Default` 는 `""` |
+| 11 | 텍스트 입력 | `txtOtE` | `HintText` `"OT 종료 23:15"` · `Default` 는 `""` |
+| 12 | 드롭다운 | `ddDinner` | `Items` `["자동", "실시", "미실시"]` · `DefaultSelectedItems` `[{Value: "자동"}]` |
+| 13 | 텍스트 레이블 | `lblOt` | §4-5 `lblOt.Text` |
+| 14 | 텍스트 입력 | `txtNote` | `HintText` `"메모"` · `Default` 는 `""` |
+
+> **OT 는 「안 넣어도 되는」 칸이다.** 비워두면 `lblOt` 이 `0` 을 돌려주고 OT 0시간으로
+> 저장된다. 평일 대부분은 비워둔 채 저장한다.
+
+> **석식 `자동` 의 뜻**: OT 종료가 석식 창(그 달 정규 종료 ~ +30분)을 넘으면 30분을
+> 공제한다. `20:30~23:15` 처럼 석식 창을 지나서 시작한 OT 는 겹치는 구간이 없으므로
+> 공제되지 않고 `2.75h` 가 된다 — 이 값이 `sp_근태기록_시작.csv` 샘플과 일치한다.
+
+#### 5-2 확인표
+
+| 확인할 것 | 기대 |
+|---|---|
+| OT 칸을 비우고 저장 | `lblOt` 이 `0` · `근태기록.OT시간` 이 0 |
+| `20:30` ~ `23:15` · 석식 `자동` | `lblOt` = **`2.75`** (석식 창과 겹치지 않아 공제 없음) |
+| `17:30` ~ `20:00` · 석식 `자동` | `lblOt` = **`2`** (석식 30분 공제) |
+| `17:30` ~ `20:00` · 석식 `미실시` | `lblOt` = **`2.5`** (공제 없음) |
+| `22:00` ~ `00:30` · 석식 `자동` | `lblOt` = **`2.5`** (자정 넘김) |
+| SharePoint `근태기록` | `OT시작` · `OT종료` · `OT시간` · `석식` · `주` 가 채워져 있다 |
+
 ## 4. Power Fx 수식
 
-### 4-1. `App.OnStart` — 기준값과 이번 달 준비
+### 4-1. `App.OnStart` 와 월 갱신 블록
+
+**한 번만 하는 것**과 **달이 바뀔 때마다 하는 것**을 나눈다. 뒤쪽을 「월 갱신 블록」이라
+부르고, `App.OnStart` · `btnPrev.OnSelect` · `btnNext.OnSelect` 세 곳에 같은 내용을 넣는다.
+
+**한 번만 — 작은 목록을 전부 올려둔다**
 
 ```powerfx
-// ── 이번 달 기준값
-Set(gvMonthStart, Date(Year(Today()), Month(Today()), 1));
-Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, TimeUnit.Months), -1, TimeUnit.Days));
-Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
-
-// ── 작은 목록은 전부 올려두고 로컬로 쓴다 — 위임 걱정이 사라진다
 ClearCollect(colCombo,   조합표);      // 106행
 ClearCollect(colHoliday, 공휴일);      // 21행 — 달력이 날마다 조회하지 않도록
 ClearCollect(colAll,     명부);        // 24행
-ClearCollect(colMembers, Filter(colAll, IsBlank(휴직)));   // 휴직자는 Y, 나머지 빈칸
+ClearCollect(colMembers, Filter(colAll, IsBlank(휴직)));
 ClearCollect(colLeads,   Filter(colMembers, 직책 <> "구성원"));
 Set(gvActive, CountRows(colMembers));                    // 모수 23명
 Set(gvNeed,   RoundUp(gvActive * 0.3, 0));               // 필요 7명
 Set(gvLeads,  CountRows(colLeads));                      // 직책자 6명
+```
 
-// ── 이번 달 기록을 한 번만 읽어 온다 — 이후 계산은 전부 이 컬렉션에서
-ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
+**월 갱신 블록** — `gvMonthStart` 가 정해진 뒤에 실행되는 부분
 
-// ── 이 달의 OT 기본 가능시간과 정규 근로 종료 (석식 휴게 창의 시작점)
+```powerfx
+Set(gvMonthEnd, DateAdd(DateAdd(gvMonthStart, 1, TimeUnit.Months), -1, TimeUnit.Days));
+Set(gvYM,       Text(gvMonthStart, "yyyy-mm"));
 Set(gvMonthCfg, LookUp(월설정, Title = gvYM));
 Set(gvOtBase,   Coalesce(gvMonthCfg.OT기본, 0));
 Set(gvRegEnd,   Value(Left(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)) * 60
-                + Value(Right(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)))
+                + Value(Right(Coalesce(gvMonthCfg.정규종료, "17:30"), 2)));
+
+// 그 달의 날짜 · 요일 · 휴일 · 주 순번 — 개인 요약과 주별 64h 가 이걸 쓴다
+ClearCollect(colDays,
+    ForAll(Sequence(Day(gvMonthEnd)) As S,
+        With({ d: DateAdd(gvMonthStart, S.Value - 1, TimeUnit.Days) },
+            {
+                날짜: d,
+                일:   S.Value,
+                요일: Text(d, "[$-ko]ddd"),
+                휴일: Weekday(d, StartOfWeek.Monday) > 5
+                      || !IsBlank(LookUp(colHoliday, 날짜 = d)),
+                주:   RoundDown((S.Value - 1
+                        + Weekday(gvMonthStart, StartOfWeek.Monday) - 1) / 7, 0) + 1
+            }
+        )
+    )
+);
+Set(gvWorkdays, CountRows(Filter(colDays, !휴일)));
+
+ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd))
 ```
 
-> **날짜 컬렉션(`colDays`)을 따로 만들지 않는다.** 달을 옮길 때마다 다시 만들어야 하므로,
-> 달력은 `galMonth.Items` 안에서 `gvMonthStart` 로부터 그때그때 계산한다. 그러면 달 이동
-> 버튼이 `gvMonthStart` 만 바꿔도 화면이 알아서 다시 그려진다.
+**`App.OnStart`** = 이번 달 시작 + 한 번만 블록 + 월 갱신 블록
 
-> **`명부` 의 `사용자` 열을 아직 안 만들었으면 `gvMe` 를 넣지 않는다.** 없는 열을
-> 참조하면 앱 전체가 오류가 된다. 열을 추가한 뒤 아래 한 줄을 더하면 본인 자동 선택이
-> 된다 — `Set(gvMe, LookUp(명부, 사용자.Email = User().Email, Title))`
+```powerfx
+Set(gvMonthStart, Date(Year(Today()), Month(Today()), 1));
+```
 
-달을 옮기는 버튼 — **`btnPrev.OnSelect`**
+**`btnPrev.OnSelect`** = 달 이동 + 월 갱신 블록
 
 ```powerfx
 Set(gvMonthStart, DateAdd(gvMonthStart, -1, TimeUnit.Months));
-Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, TimeUnit.Months), -1, TimeUnit.Days));
-Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
-Set(gvMonthCfg,   LookUp(월설정, Title = gvYM));
-Set(gvOtBase,     Coalesce(gvMonthCfg.OT기본, 0));
-ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd))
 ```
 
-**`btnNext.OnSelect`** — 위와 같고 첫 줄만 `-1` → `1`
+**`btnNext.OnSelect`** = 달 이동 + 월 갱신 블록
 
 ```powerfx
 Set(gvMonthStart, DateAdd(gvMonthStart, 1, TimeUnit.Months));
-Set(gvMonthEnd,   DateAdd(DateAdd(gvMonthStart, 1, TimeUnit.Months), -1, TimeUnit.Days));
-Set(gvYM,         Text(gvMonthStart, "yyyy-mm"));
-Set(gvMonthCfg,   LookUp(월설정, Title = gvYM));
-Set(gvOtBase,     Coalesce(gvMonthCfg.OT기본, 0));
-ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd))
 ```
 
-저장 직후에도 달력이 바로 반영되도록 **`btnSave.OnSelect` 맨 끝에 이 한 줄을 더한다.**
+> **`galMonth.Items` 는 손대지 않는다.** `colHoliday` 가 로컬 컬렉션이라 날마다 조회해도
+> 비용이 없고, 이미 검증된 수식이다. `colDays` 는 개인 요약 · 주별 64h 를 위해 추가하는
+> 것이고 달력과는 별개다.
 
-```powerfx
-ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd))
-```
+> **`명부` 의 `사용자` 열을 아직 안 만들었으면 `gvMe` 를 넣지 않는다.** 없는 열을
+> 참조하면 앱 전체가 오류가 된다. 열을 추가한 뒤 아래 한 줄을 「한 번만」 블록에 더하면
+> 본인 자동 선택이 된다 — `Set(gvMe, LookUp(명부, 사용자.Email = User().Email, Title))`
 
 ### 4-2. 월 달력 — 날짜별 30% 판정
 
@@ -893,84 +945,94 @@ Reset(ddStart); Reset(ddEnd)
 
 ### 4-5. OT 시간 — 분 단위 · 자정 넘김 · 석식 공제
 
-`lblOt.Text` 또는 저장 직전 `Set()`
+**`lblOt.Text`**
 
 ```powerfx
-With({
-    a: Value(Left(txtOtS.Text, 2)) * 60 + Value(Right(txtOtS.Text, 2)),
-    b: Value(Left(txtOtE.Text, 2)) * 60 + Value(Right(txtOtE.Text, 2)),
-    ds: gvRegEnd,       // 석식 창 시작 = 그 달의 정규 근로 종료 (월설정에서 읽는다)
-    de: gvRegEnd + 30   // 석식 창 종료 = +30분
-},
-    With({ e: If(b <= a, b + 1440, b) },   // 자정을 넘긴 OT
-        RoundDown(
-            ( (e - a)
-              - If(ddDinner.Selected.Value = "실시"
-                   || (ddDinner.Selected.Value = "자동" && e > de),
-                   Max(0, Min(e, de) - Max(a, ds)),
-                   0)
-            ) / 60 * 100, 0) / 100
-    )
+If(Len(txtOtS.Text) < 5 || Len(txtOtE.Text) < 5,
+   "0",
+   With({
+       a:  Value(Left(txtOtS.Text, 2)) * 60 + Value(Right(txtOtS.Text, 2)),
+       b:  Value(Left(txtOtE.Text, 2)) * 60 + Value(Right(txtOtE.Text, 2)),
+       ds: gvRegEnd,       // 석식 창 시작 = 그 달의 정규 근로 종료 (월설정에서 읽는다)
+       de: gvRegEnd + 30   // 석식 창 종료 = +30분
+   },
+       With({ e: If(b <= a, b + 1440, b) },   // 자정을 넘긴 OT
+           Text(RoundDown(
+               ( (e - a)
+                 - If(ddDinner.Selected.Value = "실시"
+                      || (ddDinner.Selected.Value = "자동" && e > de),
+                      Max(0, Min(e, de) - Max(a, ds)),
+                      0)
+               ) / 60 * 100, 0) / 100)
+       )
+   )
 )
 ```
+
+> **OT 칸이 비면 `"0"` 을 돌려준다.** `Len(...) < 5` 로 `20:30` 형식이 갖춰졌는지만
+> 본다. 평일 대부분은 비워둔 채 저장하므로 이 분기가 기본 경로다.
 
 > `gvRegEnd` 는 `월설정` 의 `정규종료` 에서 읽으므로, 탄력근무 달에 `17:00` 로만
 > 바꿔 넣으면 석식 창이 `17:00~17:30` 으로 자동 이동한다.
 
+**석식 공제가 걸리는 조건.** 석식 창(`정규종료` ~ `+30분`)과 OT 구간이 **겹칠 때만**
+공제한다. `20:30~23:15` 는 석식 창 `17:30~18:00` 을 이미 지나서 시작하므로 겹치는
+구간이 0분 → 공제 없이 `2.75h`. `17:30~20:00` 은 30분이 겹치므로 `2h`.
+
 ### 4-6. 저장 — 조합표에서 값을 읽어 함께 저장
 
-`btnSave.OnSelect`
+**`btnSave.OnSelect`** (5단계 확장판 — OT · 주 · 메모까지 저장)
 
 ```powerfx
 Set(gvCode,
-    If(IsBlank(ddStart.Selected.Value) || ddStart.Selected.Value = "",
+    If(IsBlank(ddStart.Selected.Value),
        ddType.Selected.Value,
        ddType.Selected.Value & " "
          & Substitute(ddStart.Selected.Value, ":", "") & "-"
          & Substitute(ddEnd.Selected.Value,   ":", "")));
+Set(gvC,   LookUp(colCombo, Title = gvCode));
+Set(gvKey, Text(dpDate.SelectedDate, "yyyy-mm-dd") & "_" & ddMe.Selected.Value);
+Set(gvRec, LookUp(근태기록, Title = gvKey));
 
-Set(gvCombo, LookUp(colCombo, Title = gvCode));
+If(IsBlank(gvC),
+    Notify("규칙에 없는 조합입니다 — " & gvCode, NotificationType.Error),
 
-If(IsBlank(gvCombo),
-    Notify("규칙에 없는 조합입니다. 유형·출근·퇴근을 다시 고르세요.",
-           NotificationType.Error),
-
-    Set(gvKey, Text(dpDate.SelectedDate, "yyyy-mm-dd") & "_" & gvMe);
-    Set(gvRec, LookUp(근태기록, Title = gvKey));
     Patch(근태기록,
         If(IsBlank(gvRec), Defaults(근태기록), gvRec),
         {
             Title:    gvKey,
             근무일:   dpDate.SelectedDate,
-            구성원:   gvMe,
+            구성원:   ddMe.Selected.Value,
             유형:     ddType.Selected.Value,
             출근:     ddStart.Selected.Value,
             퇴근:     ddEnd.Selected.Value,
             조합코드: gvCode,
-            실근로:   gvCombo.실근로,
-            휴가:     gvCombo.휴가,
-            충족:     gvCombo.충족,
-            구분:     gvCombo.구분,
+            실근로:   gvC.실근로,
+            휴가:     gvC.휴가,
+            충족:     gvC.충족,
+            구분:     gvC.구분,
             OT시작:   txtOtS.Text,
             OT종료:   txtOtE.Text,
             OT시간:   Value(lblOt.Text),
             석식:     ddDinner.Selected.Value,
             주:       LookUp(colDays, 날짜 = dpDate.SelectedDate, 주),
             메모:     txtNote.Text
-        }
-    );
+        });
+    Refresh(근태기록);
     ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
-    Notify("저장했습니다", NotificationType.Success)
-)
+    Notify("저장 완료 — " & gvKey & " · " & gvCode
+             & If(Value(lblOt.Text) > 0, " · OT " & lblOt.Text & "h", ""),
+           NotificationType.Success))
 ```
 
-기록 지우기(= 8시간 근무로 되돌리기) — `btnClear.OnSelect`
+> **`주` 는 `colDays` 에서 읽는다.** 그래서 5-1(월 갱신 블록)을 먼저 해야 한다.
+> 주별 64시간 판정이 이 값을 쓴다.
 
-```powerfx
-Remove(근태기록, LookUp(근태기록, Title = gvKey));
-ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd));
-Notify("지웠습니다 — 이 날은 8시간 근무로 계산됩니다", NotificationType.Success)
-```
+> **`ddMe` 로 저장한다.** `명부` 에 `사용자` 열을 만들어 `gvMe` 를 쓰게 되면
+> `ddMe.Selected.Value` 를 `gvMe` 로 바꾸면 된다.
+
+기록 지우기는 §3-2 의 `icoDel.OnSelect` 를 쓴다 — 저장 목록에서 행마다 지우는 편이
+날짜를 다시 맞춰 지우는 것보다 안전하다.
 
 ### 4-7. 개인 요약
 
