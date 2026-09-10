@@ -843,6 +843,23 @@ HTML 도구와 체감 차이가 나는 것은 사실상 이 화면 하나다. �
 > **셀은 단추가 아니라 레이블로 만든다.** 레이블도 `OnSelect` 를 가지고 있고 훨씬
 > 가볍다. 378개를 그려야 하므로 이 차이가 크다.
 
+> **레이블은 반드시 「클래식」으로 넣는다.** 모던 「텍스트 레이블」에는 **`Fill` 과
+> `BorderThickness` 속성이 아예 없다** — 배경색을 칠할 수 없는 컨트롤이다. 이 화면은
+> 색이 곧 판정이므로 클래식이어야 한다.
+>
+> `삽입` → 검색창에 `레이블` → 결과 두 개 중 **`레이블`**(클래식)을 고른다.
+> `텍스트 레이블` 은 모던이다. `삽입` 메뉴 맨 아래 `클래식` 섹션에서도 찾을 수 있다.
+>
+> | 속성 | 클래식 `레이블` | 모던 `텍스트 레이블` |
+> |---|---|---|
+> | `Fill` (배경색) | ✅ | ❌ |
+> | `BorderThickness` | ✅ | ❌ |
+> | `Color` · `Align` · `OnSelect` | ✅ | ✅ |
+>
+> **모던을 클래식으로 바꾸는 기능은 없다.** 이미 넣었다면 지우고 다시 넣어야 한다.
+> 색을 쓰는 `lblNeed` · `lblCell` · `lblDow` · `lblRowName` 넷은 반드시 클래식이다.
+> `galGrid.TemplateFill` 은 갤러리 속성이라 영향이 없다.
+
 > **`galCell` 은 `galGrid` 를 먼저 선택한 뒤 삽입**해야 안으로 들어간다. 트리 뷰에서
 > `galGrid` → `galCell` → `lblCell` 로 세 단계 들여쓰기가 보여야 한다.
 
@@ -871,11 +888,36 @@ Collect(colGridRows, ForAll(Sort(Filter(colAll, 그룹 = "C"), 정렬) As M,
 
 #### 2주 창 — `gvGridStart` 와 두 컬렉션
 
-2주 창이 달을 걸칠 수 있으므로 `colRec`(월 단위)와 별도로 창 범위 기록을 읽는다.
-아래를 **「2주 갱신 블록」** 이라 부르고 `scrGrid.OnVisible` · `btnGridPrev` ·
-`btnGridNext` · `btnGridToday` 네 곳에 넣는다.
+**왜 네 곳에 같은 코드를 넣나.** Power Apps 에는 「함수를 만들어 여러 곳에서 부르는」
+기능이 없다. 그래서 `gvGridStart`(2주 창의 시작일)가 바뀌는 자리마다 같은 갱신 코드를
+복사해 넣어야 한다. 그 자리가 넷이다.
+
+| 자리 | 언제 실행되나 | 하는 일 |
+|---|---|---|
+| `scrGrid.OnVisible` | 이 화면이 보일 때마다 | 처음이면 이번 주 월요일로 맞춘다 |
+| `btnGridPrev.OnSelect` | ◀ 2주 | 14일 뒤로 |
+| `btnGridNext.OnSelect` | 2주 ▶ | 14일 앞으로 |
+| `btnGridToday.OnSelect` | 이번 주 | 오늘이 든 주로 |
+
+**무엇을 갱신하나.** 컬렉션 두 개다. 월 단위인 `colRec` · `colDays` 를 그대로 쓸 수 없다.
+
+| 컬렉션 | 내용 | 월 단위 컬렉션을 못 쓰는 이유 |
+|---|---|---|
+| `colGridRec` | 2주 창의 근태 기록 | `colRec` 는 한 달 범위다. 2주 창이 `9/28 ~ 10/11` 처럼 **달을 걸치면** 뒷부분이 비어버린다 |
+| `colGridDays` | 2주 창의 날짜 14개 (요일 · 휴일 · 30% 판정) | `colDays` 도 같은 문제 |
+
+> **`scrGrid.OnVisible` 에 넣는 것이 특히 중요하다.** 셀을 눌러 `Screen1` 에서 저장하고
+> 돌아오면 `OnVisible` 이 다시 실행되어 **매트릭스가 자동으로 갱신된다.** 따로
+> 새로고침 단추가 필요 없다.
+
+네 수식의 **차이는 첫 줄뿐**이고 나머지는 아래 공통 블록이 그대로 붙는다.
+
+**`scrGrid.OnVisible`**
 
 ```powerfx
+If(IsBlank(gvGridStart),
+   Set(gvGridStart, DateAdd(Today(),
+       -(Weekday(Today(), StartOfWeek.Monday) - 1), TimeUnit.Days)));
 ClearCollect(colGridRec,
     Filter(근태기록, 근무일 >= gvGridStart,
                     근무일 <= DateAdd(gvGridStart, 13, TimeUnit.Days)));
@@ -899,14 +941,90 @@ ClearCollect(colGridDays,
     ))
 ```
 
-앞에 붙는 한 줄만 화면·단추마다 다르다.
+**`btnGridPrev.OnSelect`**
 
-| 컨트롤 | 첫 줄 |
-|---|---|
-| `scrGrid.OnVisible` | `If(IsBlank(gvGridStart), Set(gvGridStart, DateAdd(Today(), -(Weekday(Today(), StartOfWeek.Monday) - 1), TimeUnit.Days)));` |
-| `btnGridPrev.OnSelect` | `Set(gvGridStart, DateAdd(gvGridStart, -14, TimeUnit.Days));` |
-| `btnGridNext.OnSelect` | `Set(gvGridStart, DateAdd(gvGridStart, 14, TimeUnit.Days));` |
-| `btnGridToday.OnSelect` | `Set(gvGridStart, DateAdd(Today(), -(Weekday(Today(), StartOfWeek.Monday) - 1), TimeUnit.Days));` |
+```powerfx
+Set(gvGridStart, DateAdd(gvGridStart, -14, TimeUnit.Days));
+ClearCollect(colGridRec,
+    Filter(근태기록, 근무일 >= gvGridStart,
+                    근무일 <= DateAdd(gvGridStart, 13, TimeUnit.Days)));
+ClearCollect(colGridDays,
+    ForAll(Sequence(14) As S,
+        With({ d: DateAdd(gvGridStart, S.Value - 1, TimeUnit.Days) },
+            With({ hol: Weekday(d, StartOfWeek.Monday) > 5
+                        || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                {
+                    날짜: d,
+                    일:   Day(d),
+                    요일: Text(d, "[$-ko]ddd"),
+                    휴일: hol,
+                    필요인원: If(hol, 0, gvNeed),
+                    충족인원: If(hol, 0,
+                        gvActive - CountRows(Filter(colGridRec As R,
+                            R.근무일 = d, R.충족 = 0)))
+                }
+            )
+        )
+    ))
+```
+
+**`btnGridNext.OnSelect`**
+
+```powerfx
+Set(gvGridStart, DateAdd(gvGridStart, 14, TimeUnit.Days));
+ClearCollect(colGridRec,
+    Filter(근태기록, 근무일 >= gvGridStart,
+                    근무일 <= DateAdd(gvGridStart, 13, TimeUnit.Days)));
+ClearCollect(colGridDays,
+    ForAll(Sequence(14) As S,
+        With({ d: DateAdd(gvGridStart, S.Value - 1, TimeUnit.Days) },
+            With({ hol: Weekday(d, StartOfWeek.Monday) > 5
+                        || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                {
+                    날짜: d,
+                    일:   Day(d),
+                    요일: Text(d, "[$-ko]ddd"),
+                    휴일: hol,
+                    필요인원: If(hol, 0, gvNeed),
+                    충족인원: If(hol, 0,
+                        gvActive - CountRows(Filter(colGridRec As R,
+                            R.근무일 = d, R.충족 = 0)))
+                }
+            )
+        )
+    ))
+```
+
+**`btnGridToday.OnSelect`**
+
+```powerfx
+Set(gvGridStart, DateAdd(Today(),
+    -(Weekday(Today(), StartOfWeek.Monday) - 1), TimeUnit.Days));
+ClearCollect(colGridRec,
+    Filter(근태기록, 근무일 >= gvGridStart,
+                    근무일 <= DateAdd(gvGridStart, 13, TimeUnit.Days)));
+ClearCollect(colGridDays,
+    ForAll(Sequence(14) As S,
+        With({ d: DateAdd(gvGridStart, S.Value - 1, TimeUnit.Days) },
+            With({ hol: Weekday(d, StartOfWeek.Monday) > 5
+                        || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                {
+                    날짜: d,
+                    일:   Day(d),
+                    요일: Text(d, "[$-ko]ddd"),
+                    휴일: hol,
+                    필요인원: If(hol, 0, gvNeed),
+                    충족인원: If(hol, 0,
+                        gvActive - CountRows(Filter(colGridRec As R,
+                            R.근무일 = d, R.충족 = 0)))
+                }
+            )
+        )
+    ))
+```
+
+> `scrGrid.OnVisible` 만 `If(IsBlank(...))` 로 감싼다. 처음 열 때만 오늘 기준으로
+> 맞추고, 그 뒤로는 사용자가 이동해 둔 위치를 유지하기 위해서다.
 
 #### 수식
 
