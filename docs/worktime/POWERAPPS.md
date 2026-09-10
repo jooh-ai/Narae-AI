@@ -748,6 +748,60 @@ Set(gvLeads,  CountRows(colLeads));
 | `22:00` ~ `00:30` · 석식 `자동` | `lblOt` = **`2.5`** (자정 넘김) |
 | SharePoint `근태기록` | `OT시작` · `OT종료` · `OT시간` · `석식` · `주` 가 채워져 있다 |
 
+#### 5-3. `scrSummary` — 개인 요약 화면
+
+`새 화면` → 이름을 **`scrSummary`** 로. 수식은 §4-7 에 있다.
+
+| # | 컨트롤 | 이름 | X | Y | W | H |
+|---|---|---|---|---|---|---|
+| 1 | 드롭다운 | `ddWho` | 40 | 24 | 240 | 40 |
+| 2 | 텍스트 레이블 | `lblSumHead` | 300 | 24 | 700 | 40 |
+| 3 | 단추 | `btnToMonth2` | 1166 | 24 | 160 | 40 |
+| 4 | 세로 갤러리 | `galKpi` | 40 | 84 | 430 | 400 |
+| 5 | └ 레이블 | `lblKpiName` | 12 | 8 | 130 | 24 |
+| 6 | └ 레이블 | `lblKpiVal` | 150 | 8 | 90 | 24 |
+| 7 | └ 레이블 | `lblKpiNote` | 250 | 8 | 170 | 24 |
+| 8 | 텍스트 레이블 | `lblWeekHead` | 500 | 84 | 826 | 32 |
+| 9 | 세로 갤러리 | `galWeek` | 500 | 120 | 826 | 240 |
+| 10 | └ 레이블 | `lblWeek` | 12 | 8 | 800 | 28 |
+| 11 | 텍스트 레이블 | `lblMyHead` | 500 | 380 | 826 | 32 |
+| 12 | 세로 갤러리 | `galMy` | 500 | 416 | 826 | 312 |
+| 13 | └ 레이블 | `lblMy` | 12 | 6 | 800 | 28 |
+
+`galKpi` · `galWeek` · `galMy` 의 `TemplateSize` 는 각각 40 · 44 · 40.
+`lblWeekHead.Text` 는 `"주별 근로 (한도 64h)"`, `lblMyHead.Text` 는 `"이번 달 기록"`,
+`btnToMonth2` 는 `Text` `"◀ 월 달력"` · `OnSelect` `Navigate(scrMonth)`.
+`scrMonth` 에도 단추 하나를 더해 `Navigate(scrSummary)` 로 오게 한다.
+
+#### 5-3 확인표 — 2026-09 · §3-6 테스트 4건 기준
+
+**소정근로일 20일 / 기본 총량 160h** (추석 9/24 목 · 9/25 금 제외)
+
+| `ddWho` | 조정 총량 | 실근로 누적 | 차이 |
+|---|---|---|---|
+| 김동환 (연차 1일) | **152h** | **152h** | **0h** |
+| 정병철 (오전반 4.5h) | 156h | 156.5h | **+0.5h** 초과 |
+| 박상호 (근무 7h) | 160h | 159h | **−1h** 부족 (빨강) |
+| 최규석 (검진 4h) | 156h | 156h | 0h |
+| 그 외 (기록 없음) | 160h | 160h | 0h |
+
+> **김동환 152h 는 확정 사항 9번과 정확히 일치한다** — 「하루 연차(8시간)를 쓰면 월
+> 총량이 152h로 줄어든다」. 이 한 줄이 총량 계산 전체의 검증 기준이다.
+
+`galWeek` 는 기록이 없는 사람 기준으로 이렇게 나와야 한다.
+
+| 주 | 기간 | 소정 | 근로 |
+|---|---|---|---|
+| 1 | 9/1 ~ 9/6 | 4일 | 32h |
+| 2 | 9/7 ~ 9/13 | 5일 | 40h |
+| 3 | 9/14 ~ 9/20 | 5일 | 40h |
+| 4 | 9/21 ~ 9/27 | **3일** | 24h |
+| 5 | 9/28 ~ 9/30 | 3일 | 24h |
+
+> **주 4 가 3일인 것이 추석 확인**이다 (24 · 25 공휴일 · 26 · 27 주말).
+> 소정 합계 4+5+5+3+3 = 20 이 `gvWorkdays` 와 같아야 한다.
+> 김동환은 주 3 이 `32h` 로 줄어든다 (연차 1일).
+
 ## 4. Power Fx 수식
 
 ### 4-1. `App.OnStart` 와 월 갱신 블록
@@ -1050,53 +1104,142 @@ If(IsBlank(gvC),
 
 ### 4-7. 개인 요약
 
+**대상자는 변수 하나로 다룬다.** `Screen1` 에서 고른 사람이 기본이 되게 한다.
+
+**`scrSummary.OnVisible`**
+
 ```powerfx
-// 내 이번 달 기록
-With({ mine: Filter(colRec, 구성원 = gvMe) },
+Set(gvWho, Coalesce(ddWho.Selected.Value, ddMe.Selected.Value))
+```
+
+**`ddWho.Items`** · **`ddWho.OnChange`**
+
+```powerfx
+Distinct(명부, Title)
+```
+```powerfx
+Set(gvWho, ddWho.Selected.Value)
+```
+
+**`lblSumHead.Text`**
+
+```powerfx
+Coalesce(gvWho, "구성원을 고르세요") & "   ·   " & gvYM
+```
+
+**`galKpi.Items`** — 총량 · 휴가 · 실근로 · OT 를 한 표로
+
+```powerfx
+With({ mine: Filter(colRec As R, R.구성원 = gvWho) },
+  With({
+      휴가:       Coalesce(Sum(mine, 휴가), 0),
+      기록실근로: Coalesce(Sum(mine, 실근로), 0),
+      기록소정:   CountRows(Filter(mine As M,
+                     !LookUp(colDays, 날짜 = M.근무일, 휴일))),
+      OT누적:     Coalesce(Sum(mine, OT시간), 0)
+  },
     With({
-        휴가:   Sum(mine, 휴가),
-        기록실근로: Sum(mine, 실근로),
-        // 기록이 있는 소정근로일 수 (나머지 소정근로일은 8시간으로 계산)
-        기록소정: CountRows(Filter(mine,
-                    !LookUp(colDays, 날짜 = 근무일, 휴일)))
+        조정총량: gvWorkdays * 8 - 휴가,
+        실근로:   (gvWorkdays - 기록소정) * 8 + 기록실근로
     },
-        {
-            기본총량: gvWorkdays * 8,
-            휴가:     휴가,
-            조정총량: gvWorkdays * 8 - 휴가,
-            실근로:   (gvWorkdays - 기록소정) * 8 + 기록실근로,
-            차이:     ((gvWorkdays - 기록소정) * 8 + 기록실근로)
-                      - (gvWorkdays * 8 - 휴가),
-            OT누적:   Sum(mine, OT시간),
-            OT한도:   gvOtBase + 휴가,
-            OT잔여:   gvOtBase + 휴가 - Sum(mine, OT시간),
-            "8시간일수": (gvWorkdays - 기록소정) + CountRows(Filter(mine, 충족 = 1))
-        }
+      Table(
+        { 항목: "소정근로일",   값: gvWorkdays & "일",
+          비고: "기본 총량 " & gvWorkdays * 8 & "h" },
+        { 항목: "휴가 사용",     값: 휴가 & "h",           비고: "" },
+        { 항목: "조정 총량",     값: 조정총량 & "h",       비고: "기본 총량 − 휴가" },
+        { 항목: "실근로 누적",   값: 실근로 & "h",         비고: "기록 없는 날은 8h" },
+        { 항목: "차이",         값: If(실근로 - 조정총량 >= 0, "+", "")
+                                    & (실근로 - 조정총량) & "h",
+          비고: If(실근로 < 조정총량, "부족",
+                   If(실근로 > 조정총량, "초과", "정확")) },
+        { 항목: "OT 기본",      값: gvOtBase & "h",       비고: gvYM & " 월설정" },
+        { 항목: "OT 한도",      값: (gvOtBase + 휴가) & "h",
+          비고: "휴가 " & 휴가 & "h 가산" },
+        { 항목: "OT 누적",      값: OT누적 & "h",         비고: "" },
+        { 항목: "OT 잔여",      값: (gvOtBase + 휴가 - OT누적) & "h", 비고: "" }
+      )
     )
+  )
 )
 ```
 
-주별 근로시간 (정규 + OT) — `galWeek.Items`
+> **`기록 없는 날은 8h`** 가 이 계산의 전부다. 소정근로일 20일 중 기록이 1건이면
+> 나머지 19일은 8시간씩 근무한 것으로 보고, 기록이 있는 1일만 실제 값을 쓴다.
+
+> **`OT 한도 = OT기본 + 휴가` 는 아직 확인이 필요하다.** 휴가를 쓴 만큼 총량이
+> 줄어드니 OT 여유가 그만큼 생긴다는 해석인데, 규정상 그렇게 되는지, 반차 · 반반차에도
+> 비례 적용되는지 담당자 확인이 필요하다 (§6).
+
+행 안의 레이블 셋 — **`lblKpiName.Text`** · **`lblKpiVal.Text`** · **`lblKpiNote.Text`**
 
 ```powerfx
-ForAll(Sequence(6) As W,
+ThisItem.항목
+```
+```powerfx
+ThisItem.값
+```
+```powerfx
+ThisItem.비고
+```
+
+**`lblKpiVal.Color`** — 부족은 빨강, 초과는 주황
+
+```powerfx
+If(ThisItem.비고 = "부족", RGBA(179, 38, 30, 1),
+   ThisItem.비고 = "초과", RGBA(138, 90, 0, 1),
+                           RGBA(22, 24, 29, 1))
+```
+
+**`galWeek.Items`** — 주별 64시간 한도
+
+```powerfx
+ForAll(Sequence(Max(colDays, 주)) As W,
     With({
-        days: Filter(colDays, 주 = W.Value, !휴일),
-        recs: Filter(colRec, 구성원 = gvMe, 주 = W.Value)
+        소정: CountRows(Filter(colDays, 주 = W.Value, !휴일)),
+        recs: Filter(colRec As R, R.구성원 = gvWho, R.주 = W.Value)
     },
         {
             주:   W.Value,
-            시간: (CountRows(days) - CountRows(Filter(recs, !LookUp(colDays, 날짜 = 근무일, 휴일))))
-                  * 8 + Sum(recs, 실근로) + Sum(recs, OT시간)
+            기간: Text(LookUp(colDays, 주 = W.Value, 날짜), "m/d") & " ~ "
+                  & Text(Last(Filter(colDays, 주 = W.Value)).날짜, "m/d"),
+            소정: 소정,
+            근로: (소정 - CountRows(recs)) * 8
+                  + Coalesce(Sum(recs, 실근로), 0)
+                  + Coalesce(Sum(recs, OT시간), 0)
         }
     )
 )
 ```
 
-64시간 초과 표시
+> **`주` 는 저장할 때 `colDays` 에서 읽어 넣은 값이다.** 그래서 5-1 을 먼저 해야 한다.
+> `(소정 - CountRows(recs))` 는 기록이 소정근로일에만 있다고 가정한 근사다 — 휴일
+> 근무를 기록하기 시작하면 `Filter(recs As M, !LookUp(colDays, 날짜 = M.근무일, 휴일))`
+> 로 걸러야 정확하다.
+
+**`lblWeek.Text`** · **`galWeek.TemplateFill`**
 
 ```powerfx
-If(ThisItem.시간 > 64, RGBA(179, 38, 30, 1), RGBA(22, 24, 29, 1))
+"주 " & ThisItem.주 & "   " & ThisItem.기간
+  & "   소정 " & ThisItem.소정 & "일   근로 " & ThisItem.근로 & "h"
+  & If(ThisItem.근로 > 64, "   ✗ 64h 초과", "")
+```
+```powerfx
+If(ThisItem.근로 > 64, RGBA(251, 234, 233, 1), RGBA(246, 247, 249, 1))
+```
+
+**`galMy.Items`** — 이 사람의 이번 달 기록
+
+```powerfx
+Sort(Filter(colRec As R, R.구성원 = gvWho), 근무일, SortOrder.Ascending)
+```
+
+**`lblMy.Text`**
+
+```powerfx
+Text(ThisItem.근무일, "[$-ko]m/d (ddd)") & "   " & ThisItem.조합코드
+  & "   실근로 " & ThisItem.실근로 & "h"
+  & If(ThisItem.휴가 > 0, " · 휴가 " & ThisItem.휴가 & "h", "")
+  & If(Coalesce(ThisItem.OT시간, 0) > 0, " · OT " & ThisItem.OT시간 & "h", "")
 ```
 
 ### 4-8. 탄력근무 3개월 평균 52시간
