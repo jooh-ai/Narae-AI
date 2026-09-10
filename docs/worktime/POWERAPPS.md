@@ -712,9 +712,23 @@ Set(gvLeads,  CountRows(colLeads));
 |---|---|---|---|
 | 10 | 텍스트 입력 | `txtOtS` | `HintText` `"OT 시작 20:30"` · `Default` 는 `""` |
 | 11 | 텍스트 입력 | `txtOtE` | `HintText` `"OT 종료 23:15"` · `Default` 는 `""` |
-| 12 | 드롭다운 | `ddDinner` | `Items` `["자동", "실시", "미실시"]` · `DefaultSelectedItems` `[{Value: "자동"}]` |
+| 12 | 드롭다운 | `ddDinner` | `Items` `["자동", "실시", "미실시"]` — 기본 선택은 넣지 않아도 된다 |
 | 13 | 텍스트 레이블 | `lblOt` | §4-5 `lblOt.Text` |
 | 14 | 텍스트 입력 | `txtNote` | `HintText` `"메모"` · `Default` 는 `""` |
+
+> **`ddDinner` 의 기본 선택은 수식 안에서 처리한다.** `DefaultSelectedItems` 는 모던
+> 드롭다운·콤보 상자에만 있고 **클래식 드롭다운에는 `Default`(문자열)** 다. 컨트롤
+> 종류에 따라 이름이 달라 헷갈리므로, `lblOt.Text` 와 저장 수식에서
+> `Coalesce(ddDinner.Selected.Value, "자동")` 로 감싸 **비어 있으면 `자동`** 이 되게
+> 한다. 그러면 기본 선택 속성을 아예 넣지 않아도 된다.
+>
+> | 컨트롤 | 속성 | 값 |
+> |---|---|---|
+> | 모던 드롭다운 · 콤보 상자 | `DefaultSelectedItems` | `[{Value: "자동"}]` |
+> | 클래식 드롭다운 | `Default` | `"자동"` |
+>
+> 왼쪽 위 속성 목록은 자주 쓰는 것만 보여준다. 전체는 **오른쪽 「속성」 창 → 「고급」
+> 탭**에 있다.
 
 > **OT 는 「안 넣어도 되는」 칸이다.** 비워두면 `lblOt` 이 `0` 을 돌려주고 OT 0시간으로
 > 저장된다. 평일 대부분은 비워둔 채 저장한다.
@@ -954,13 +968,13 @@ If(Len(txtOtS.Text) < 5 || Len(txtOtE.Text) < 5,
        a:  Value(Left(txtOtS.Text, 2)) * 60 + Value(Right(txtOtS.Text, 2)),
        b:  Value(Left(txtOtE.Text, 2)) * 60 + Value(Right(txtOtE.Text, 2)),
        ds: gvRegEnd,       // 석식 창 시작 = 그 달의 정규 근로 종료 (월설정에서 읽는다)
-       de: gvRegEnd + 30   // 석식 창 종료 = +30분
+       de: gvRegEnd + 30,  // 석식 창 종료 = +30분
+       dn: Coalesce(ddDinner.Selected.Value, "자동")
    },
        With({ e: If(b <= a, b + 1440, b) },   // 자정을 넘긴 OT
            Text(RoundDown(
                ( (e - a)
-                 - If(ddDinner.Selected.Value = "실시"
-                      || (ddDinner.Selected.Value = "자동" && e > de),
+                 - If(dn = "실시" || (dn = "자동" && e > de),
                       Max(0, Min(e, de) - Max(a, ds)),
                       0)
                ) / 60 * 100, 0) / 100)
@@ -1014,7 +1028,7 @@ If(IsBlank(gvC),
             OT시작:   txtOtS.Text,
             OT종료:   txtOtE.Text,
             OT시간:   Value(lblOt.Text),
-            석식:     ddDinner.Selected.Value,
+            석식:     Coalesce(ddDinner.Selected.Value, "자동"),
             주:       LookUp(colDays, 날짜 = dpDate.SelectedDate, 주),
             메모:     txtNote.Text
         });
