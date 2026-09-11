@@ -495,6 +495,19 @@ If(gvDelArm = ThisItem.Title, Icon.Warning, Icon.Trash)
 'falseSet'은(는) 알 수 없거나 지원되지 않는 함수입니다.
 ```
 
+**4. 레이블을 좁게 쓸 때는 `PaddingTop` · `PaddingBottom` 을 0 으로 한다.** 기본값이
+5 + 5 = 10px 이고 글자 높이(기본 `Size` 13 ≈ 17px)와 합치면 **27px** 가 필요하다.
+`Height` 가 그보다 작으면 내용이 넘쳐 **오른쪽 끝에 세로 스크롤바(회색 막대)** 가 생긴다.
+칸마다 회색 막대가 보이면 이것이다 — 컨트롤 종류 문제가 아니다.
+
+| `Height` | 기본 여백으로 | 여백 0 으로 |
+|---|---|---|
+| 28 이상 | 괜찮다 | 괜찮다 |
+| 16 · 22 · 24 | ✗ 스크롤바 | 괜찮다 |
+
+두 줄짜리 레이블(`lblCell` 처럼 `Char(10)` 을 쓰는 것)은 글자 높이가 두 배이므로
+`Size` 를 9 로 줄이고 `Height` 를 템플릿 전체(26)로 준다.
+
 **3. 갤러리 안 레이블을 복사해 화면에 붙이지 않는다.** 갤러리 안 레이블의 `OnSelect`
 기본값은 `Select(Parent)` 인데, 화면으로 나오면 부모가 화면이 되어 오류가 된다.
 
@@ -1227,6 +1240,156 @@ Navigate(scrMonth)
 1. `Sequence(14)` → `Sequence(7)` (1주 보기, 189칸) — 가장 확실하다
 2. `galCell.TemplatePadding` 을 0 으로 (격자선 렌더 비용 제거)
 3. `lblRowPart` 를 지우고 `lblRowName` 에 합치기
+
+### 3-9. 6-2단계 — 탭 바와 KPI 카드
+
+둘 다 **`Table()` + 가로 갤러리**다. HTML 도구의 탭 5개와 요약 카드 7개를 컨트롤
+7개로 재현한다. 카드 하나에 레이블 3개를 손으로 놓으면 21개가 필요한데, 갤러리로 하면
+3개면 된다.
+
+#### 탭 바 — 화면 이동 단추들을 대체한다
+
+지금 화면마다 흩어져 있는 `btnToMy` · `btnGridToMonth` · `btnToMonth2` · `Button2`
+같은 이동 단추를 **전부 지우고** 탭 바 하나로 통일한다.
+
+`scrGrid` 에 만들고 나머지 세 화면에 **복사(`Ctrl+C` → 화면 이동 → `Ctrl+V`)** 한다.
+복사하면 수식이 그대로 따라온다.
+
+| 컨트롤 | 이름 | X | Y | W | H | 그 외 |
+|---|---|---|---|---|---|---|
+| **가로** 갤러리 | `galTabs` | 0 | 0 | 1366 | 40 | `TemplateSize` 170 |
+| └ 레이블 | `lblTab` | 0 | 0 | 170 | 40 | `Size` 11 · `Align.Center` · `Padding` 0 |
+
+**`galTabs.Items`**
+
+```powerfx
+Table(
+    { 키: "grid",    이름: "매트릭스" },
+    { 키: "month",   이름: "월 달력 · 30%" },
+    { 키: "input",   이름: "근태 입력" },
+    { 키: "summary", 이름: "개인 요약 · OT" }
+)
+```
+
+**`galTabs.OnSelect`**
+
+```powerfx
+Set(gvTab, ThisItem.키);
+Switch(ThisItem.키,
+    "grid",    Navigate(scrGrid),
+    "month",   Navigate(scrMonth),
+    "input",   Navigate(Screen1),
+    "summary", Navigate(scrSummary))
+```
+
+> `Navigate` 는 문자열이 아니라 화면 자체를 받으므로 `Switch` 로 갈라준다.
+
+**`galTabs.TemplateFill`** · **`lblTab.Text`** · **`lblTab.Color`**
+
+```powerfx
+If(ThisItem.키 = gvTab, RGBA(232, 238, 246, 1), RGBA(255, 255, 255, 1))
+```
+```powerfx
+ThisItem.이름
+```
+```powerfx
+If(ThisItem.키 = gvTab, RGBA(28, 78, 128, 1), RGBA(107, 114, 128, 1))
+```
+
+`App.OnStart` 의 첫 줄 앞에 한 줄 더한다 — 시작 화면 표시용이다.
+
+```powerfx
+Set(gvTab, "input");
+```
+
+#### KPI 카드 7개 — `scrMonth` 상단
+
+HTML 도구의 「당월 요약」 카드 줄이다.
+
+| 컨트롤 | 이름 | X | Y | W | H | 그 외 |
+|---|---|---|---|---|---|---|
+| **가로** 갤러리 | `galKpiTop` | 20 | 96 | 1326 | 86 | `TemplateSize` 188 |
+| └ 레이블 | `lblKpiTitle` | 10 | 8 | 168 | 16 | `Size` 9 · `Padding` 0 |
+| └ 레이블 | `lblKpiVal` | 10 | 26 | 168 | 30 | `Size` 20 · `Bold` · `Padding` 0 |
+| └ 레이블 | `lblKpiNote` | 10 | 58 | 168 | 22 | `Size` 8 · `Padding` 0 |
+
+**`galKpiTop.Items`**
+
+```powerfx
+With({
+    미달:     CountRows(Filter(galMonth.AllItems, !휴일, 충족인원 < 필요인원)),
+    직책미달: CountRows(Filter(galMonth.AllItems, !휴일, 직책자 < 1)),
+    공휴:     CountRows(Filter(colDays, 휴일,
+                  Weekday(날짜, StartOfWeek.Monday) <= 5))
+},
+  Table(
+    { 제목: "선택근로 모수", 값: gvActive & "명",
+      비고: "명부 " & CountRows(colAll) & "명 − 휴직 "
+            & (CountRows(colAll) - gvActive) & "명", 경고: false },
+    { 제목: "8시간 필수 (30%)", 값: gvNeed & "명",
+      비고: gvActive & " × 0.3 올림", 경고: false },
+    { 제목: "소정근로일", 값: gvWorkdays & "일",
+      비고: "공휴일 " & 공휴 & "일 제외", 경고: false },
+    { 제목: "월 소정근로시간", 값: gvWorkdays * 8 & "h",
+      비고: gvWorkdays & "일 × 8h", 경고: false },
+    { 제목: "30% 미달일", 값: 미달 & "일",
+      비고: If(미달 = 0, "전일 충족", "조율 필요"), 경고: 미달 > 0 },
+    { 제목: "직책자 미달일", 값: 직책미달 & "일",
+      비고: "직책자 1명 이상 필요", 경고: 직책미달 > 0 },
+    { 제목: "OT 기본", 값: gvOtBase & "h",
+      비고: gvYM & " 월설정", 경고: false }
+  )
+)
+```
+
+**`galKpiTop.TemplateFill`** · 레이블 셋의 `Text` · `lblKpiTitle.Color` · `lblKpiNote.Color`
+
+```powerfx
+If(ThisItem.경고, RGBA(251, 234, 233, 1), RGBA(246, 247, 249, 1))
+```
+```powerfx
+ThisItem.제목
+```
+```powerfx
+ThisItem.값
+```
+```powerfx
+ThisItem.비고
+```
+```powerfx
+RGBA(107, 114, 128, 1)
+```
+
+#### 좌표 조정 — 탭 바 자리를 만든다
+
+탭 바가 `Y` 0~40 을 차지하므로 네 화면의 기존 컨트롤을 내린다.
+
+| 화면 | 컨트롤 | 새 `Y` | 새 `Height` |
+|---|---|---|---|
+| `scrGrid` | `lblGridHead` · `btnGridPrev` · `btnGridNext` · `btnGridToday` | 64 | 그대로 |
+| | `galDayHead` | 108 | 그대로 |
+| | `galNeedHead` | 150 | 그대로 |
+| | `galGrid` | 180 | **548** |
+| `scrMonth` | `lblMonth` · `btnPrev` · `btnNext` | 52 | 그대로 |
+| | `galKpiTop` | 96 | 86 |
+| | `galMonth` · `lblCandHead` | 196 | `galMonth` **532** |
+| | `galCandidate` | 240 | **488** |
+| `Screen1` | 전부 | +40 씩 | 그대로 |
+| `scrSummary` | 전부 | +40 씩 | `galKpi` · `galWeek` · `galMy` 는 −40 |
+
+이동 단추(`btnToMy` · `btnGridToMonth` · `btnToMonth2` · `Button2` · `btnTomy`)는
+지운다 — 탭 바가 대신한다.
+
+#### 6-2 확인표
+
+| 확인할 것 | 기대 |
+|---|---|
+| 탭 4개 | 네 화면 어디서나 같은 자리에 보인다 |
+| 현재 탭 | 남색 글자 + 연한 남색 배경 |
+| 탭을 누르면 | 그 화면으로 이동하고 강조가 따라온다 |
+| `scrMonth` KPI 카드 | `23명` · `7명` · `20일` · `160h` · `0일` · `0일` · `40h` |
+| 「소정근로일」 비고 | `공휴일 2일 제외` (추석 9/24 · 9/25) |
+| 미달일이 생기면 | 그 카드만 연한 빨강 |
 
 ## 4. Power Fx 수식
 
