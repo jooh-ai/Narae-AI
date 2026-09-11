@@ -838,30 +838,38 @@ HTML 도구와 체감 차이가 나는 것은 사실상 이 화면 하나다. �
 | 12 | └ 레이블 | `lblRowName` | 8 | 2 | 110 | 22 | |
 | 13 | └ 레이블 | `lblRowPart` | 122 | 2 | 76 | 22 | |
 | 14 | └ **가로** 갤러리 | `galCell` | 200 | 0 | 1126 | 26 | `TemplateSize` 80 |
-| 15 | └└ 레이블 | `lblCell` | 1 | 1 | 78 | 24 | `BorderThickness` 1 |
+| 15 | └└ 레이블 | `lblCell` | 0 | 1 | 78 | 24 | `Text` 만 넣는다 |
 
 > **셀은 단추가 아니라 레이블로 만든다.** 레이블도 `OnSelect` 를 가지고 있고 훨씬
 > 가볍다. 378개를 그려야 하므로 이 차이가 크다.
 
-> **레이블은 반드시 「클래식」으로 넣는다.** 모던 「텍스트 레이블」에는 **`Fill` 과
-> `BorderThickness` 속성이 아예 없다** — 배경색을 칠할 수 없는 컨트롤이다. 이 화면은
-> 색이 곧 판정이므로 클래식이어야 한다.
+> **색은 레이블이 아니라 갤러리의 `TemplateFill` 로 칠한다.** `galCell` 은 가로
+> 갤러리이고 **셀 하나가 곧 갤러리 항목**이므로, `TemplateFill` 이 셀 배경색이 된다.
+> `galMonth.TemplateFill` 로 달력 행을 칠한 것과 같은 방식이다.
 >
-> `삽입` → 검색창에 `레이블` → 결과 두 개 중 **`레이블`**(클래식)을 고른다.
-> `텍스트 레이블` 은 모던이다. `삽입` 메뉴 맨 아래 `클래식` 섹션에서도 찾을 수 있다.
+> 이렇게 하면 레이블에 `Fill` · `BorderThickness` 가 필요 없어져 **모던이든 클래식이든
+> 상관이 없어진다.** 레이블 속성 이름으로 씨름할 일이 사라진다.
 >
-> | 속성 | 클래식 `레이블` | 모던 `텍스트 레이블` |
-> |---|---|---|
-> | `Fill` (배경색) | ✅ | ❌ |
-> | `BorderThickness` | ✅ | ❌ |
-> | `Color` · `Align` · `OnSelect` | ✅ | ✅ |
+> | 색을 넣을 곳 | 속성 |
+> |---|---|
+> | 셀 배경 | `galCell.TemplateFill` |
+> | 인원 행 배경 | `galNeedHead.TemplateFill` |
+> | 사람 행 배경 (그룹 헤더) | `galGrid.TemplateFill` |
 >
-> **모던을 클래식으로 바꾸는 기능은 없다.** 이미 넣었다면 지우고 다시 넣어야 한다.
-> 색을 쓰는 `lblNeed` · `lblCell` · `lblDow` · `lblRowName` 넷은 반드시 클래식이다.
-> `galGrid.TemplateFill` 은 갤러리 속성이라 영향이 없다.
+> 클릭도 `lblCell.OnSelect` 가 아니라 **`galCell.OnSelect`** 에 넣는다. 갤러리는
+> 항목 아무 데나 누르면 `OnSelect` 가 실행되므로 동작이 같다.
 
-> **`galCell` 은 `galGrid` 를 먼저 선택한 뒤 삽입**해야 안으로 들어간다. 트리 뷰에서
-> `galGrid` → `galCell` → `lblCell` 로 세 단계 들여쓰기가 보여야 한다.
+> **격자선도 갤러리로 만든다.** `TemplatePadding` 을 `1` 로 주면 항목 사이에 1px 틈이
+> 생기고, 그 틈으로 갤러리의 `Fill` 이 비쳐 격자선처럼 보인다.
+>
+> | 속성 | 값 |
+> |---|---|
+> | `galCell.TemplatePadding` · `galGrid.TemplatePadding` | `1` |
+> | `galCell.Fill` · `galGrid.Fill` | `RGBA(227, 230, 234, 1)` |
+
+> **왼쪽 위 속성 목록에는 자주 쓰는 것만 나온다.** 전체 속성은 **오른쪽 「속성」 창 →
+> 「고급」 탭**에 있고, 거기 검색창에서 이름으로 찾을 수 있다. 이 화면에서는 위 방식
+> 덕분에 고급 탭을 열 일이 없다.
 
 #### 행 소스 — 그룹 헤더를 섞어 넣는다
 
@@ -1059,7 +1067,7 @@ ThisItem.요일
 If(ThisItem.휴일, RGBA(107, 114, 128, 1), RGBA(22, 24, 29, 1))
 ```
 
-**`lblNeed.Text`** · **`lblNeed.Fill`** — HTML 의 「8h 인원 / 필요 인원」 행
+**`lblNeed.Text`** · **`galNeedHead.TemplateFill`** — HTML 의 「8h 인원 / 필요 인원」 행
 
 ```powerfx
 If(ThisItem.휴일, "—", ThisItem.충족인원 & "/" & ThisItem.필요인원)
@@ -1124,7 +1132,7 @@ If(ThisItem.헤더 || ThisItem.휴일 || ThisItem.휴직 = "Y" || ThisItem.유�
      & If(ThisItem.OT > 0, " +" & ThisItem.OT, ""))
 ```
 
-**`lblCell.Fill`** — 색이 판정이다
+**`galCell.TemplateFill`** — 색이 판정이다 (레이블이 아니라 **갤러리** 속성)
 
 ```powerfx
 If(ThisItem.헤더,             RGBA(232, 238, 246, 1),
@@ -1135,7 +1143,7 @@ If(ThisItem.헤더,             RGBA(232, 238, 246, 1),
                               RGBA(253, 243, 221, 1))   // 반차 · 반반차 · 검진 · 단축
 ```
 
-**`lblCell.OnSelect`** — 셀을 누르면 그 사람 · 그 날짜로 입력 화면이 열린다
+**`galCell.OnSelect`** — 셀을 누르면 그 사람 · 그 날짜로 입력 화면이 열린다
 
 ```powerfx
 If(!ThisItem.헤더 && !ThisItem.휴일 && ThisItem.휴직 <> "Y",
@@ -1193,7 +1201,7 @@ Navigate(scrMonth)
 줄인다.
 
 1. `Sequence(14)` → `Sequence(7)` (1주 보기, 189칸) — 가장 확실하다
-2. `lblCell.BorderThickness` 를 0 으로 (테두리 렌더 비용 제거)
+2. `galCell.TemplatePadding` 을 0 으로 (격자선 렌더 비용 제거)
 3. `lblRowPart` 를 지우고 `lblRowName` 에 합치기
 
 ## 4. Power Fx 수식
