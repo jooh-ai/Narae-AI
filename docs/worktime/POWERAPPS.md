@@ -873,7 +873,8 @@ HTML 도구와 체감 차이가 나는 것은 사실상 이 화면 하나다. �
 
 #### 행 소스 — 그룹 헤더를 섞어 넣는다
 
-`App.OnStart` 의 「한 번만」 블록 끝에 붙인다. 3개 그룹 + 24명 = 27행.
+`App.OnStart` 의 「한 번만」 블록 **뒤, 월 갱신 블록 앞**에 넣는다.
+3개 그룹 + 24명 = 27행. **앞 문장이 `;` 로 끝나는지 반드시 확인한다.**
 
 ```powerfx
 Clear(colGridRows);
@@ -1160,10 +1161,16 @@ Coalesce(gvPickDate, Today())
 
 구성원 기본 선택은 컨트롤 종류에 따라 다르다 (§3-7 의 `ddDinner` 와 같은 문제).
 
+`ddMe.Items` 가 `Distinct(명부, Title)` 이고 이것은 **`Value` 열 하나짜리 표**다.
+그래서 `Default` 는 문자열이 아니라 **그 표의 레코드**를 받는다. 문자열을 넣으면
+`잘못된 수식입니다. 'Items'과(와) 호환되는 값이 필요합니다` 가 뜬다.
+
 | `ddMe` 가 | 속성 | 값 |
 |---|---|---|
-| 모던 드롭다운 · 콤보 상자 | `DefaultSelectedItems` | `[{Value: gvPickWho}]` |
-| 클래식 드롭다운 | `Default` | `Coalesce(gvPickWho, "")` |
+| `Default` 를 가진 경우 | `Default` | `LookUp(Distinct(명부, Title), Value = gvPickWho)` |
+| `DefaultSelectedItems` 를 가진 경우 | `DefaultSelectedItems` | `Filter(Distinct(명부, Title), Value = gvPickWho)` |
+
+`gvPickWho` 가 비어 있으면 아무것도 선택되지 않는다 — 오류가 아니다.
 
 **`btnGridToMonth.OnSelect`**
 
@@ -1254,6 +1261,11 @@ Set(gvWorkdays, CountRows(Filter(colDays, !휴일)));
 
 ClearCollect(colRec, Filter(근태기록, 근무일 >= gvMonthStart, 근무일 <= gvMonthEnd))
 ```
+
+> **문장 사이의 `;` 를 빠뜨리면 `연산자가 필요합니다` 가 뜬다.** 블록을 이어 붙일 때
+> 앞 블록의 마지막 문장에 `;` 가 없으면 두 문장이 한 식으로 읽힌다. 규칙은 하나다 —
+> **마지막 문장 빼고 전부 `;` 로 끝난다.** `App.OnStart` 는 맨 끝
+> `ClearCollect(colRec, ...)` 뒤에만 `;` 가 없다.
 
 **`App.OnStart`** = 이번 달 시작 + 한 번만 블록 + 월 갱신 블록
 
