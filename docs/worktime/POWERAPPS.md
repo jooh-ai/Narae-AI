@@ -205,7 +205,8 @@ Dataverse 로는 얻을 수 없다. 처음 도입할 때 이 안전장치가 가
 > 그 열의 `열 설정 → 편집` 을 열어 이름을 **지우고 다시 타이핑**해두면 뒤탈이 없다.
 
 > **시각처럼 생긴 값은 텍스트로.** `07:30` · `17:30` 이 「시간」 타입으로 잡히면 안 된다.
-> 진짜 날짜여야 하는 것은 **`공휴일` 의 `날짜` 하나뿐**이다 — 앱이
+> 진짜 날짜여야 하는 것은 **`공휴일` 의 `날짜` 하나뿐**이다 — 다만 앱에서는
+> 글자(`yyyy-mm-dd`)로 비교해야 한다(§3-2-0 의 5번). 앱이
 > `LookUp(공휴일, 날짜 = d)` 로 비교하므로 텍스트로 들어가면 소정근로일 계산이 어긋난다.
 > 놓쳤으면 그 목록만 지우고 다시 가져오는 편이 빠르다(21행).
 
@@ -494,6 +495,32 @@ If(gvDelArm = ThisItem.Title, Icon.Warning, Icon.Trash)
 ```
 'falseSet'은(는) 알 수 없거나 지원되지 않는 함수입니다.
 ```
+
+**5. SharePoint 날짜를 `=` 로 비교하지 않는다.** SharePoint 는 날짜를 UTC 로 저장하고
+Power Apps 가 현지 시간으로 바꿔 읽는다. 「날짜 및 시간」 열의 `2026-09-24` 는
+**`2026-09-24 09:00`** 으로 들어오므로, 자정인 날짜와 `=` 로 비교하면 **영원히 일치하지
+않는다.** 증상은 조용하다 — 오류 없이 공휴일이 전부 무시되어 소정근로일이 22일로 나온다.
+
+```powerfx
+// 안 됨
+LookUp(colHoliday, 날짜 = d)
+// 됨 — 글자로 비교하면 시각도 시간대도 영향이 없다
+LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd"))
+```
+
+컬렉션을 올릴 때 아예 글자 키로 바꿔 둔다.
+
+```powerfx
+ClearCollect(colHoliday, ForAll(공휴일 As H, { 키: Text(H.날짜, "yyyy-mm-dd") }));
+```
+
+> `Text(H.날짜, "yyyy-mm-dd")` 에서 「잘못된 인수 형식」이 나면 그 열이 텍스트로
+> 들어간 것이다. 그때는 `{ 키: H.날짜 }` 로 두면 된다 — CSV 값이 이미
+> `2026-09-24` 형식이라 그대로 키가 된다.
+
+**같은 이유로 `근태기록.근무일` 비교도 조심한다.** 이쪽은 `Patch` 로 앱이 직접 넣은
+값이라 자정으로 저장되어 지금은 맞지만, SharePoint 목록에서 손으로 고친 행이 섞이면
+어긋날 수 있다. 증상이 보이면 같은 방식(글자 키)으로 바꾼다.
 
 **4. 레이블을 좁게 쓸 때는 `PaddingTop` · `PaddingBottom` 을 0 으로 한다.** 기본값이
 5 + 5 = 10px 이고 글자 높이(기본 `Size` 13 ≈ 17px)와 합치면 **27px** 가 필요하다.
@@ -955,7 +982,7 @@ ClearCollect(colGridDays,
     ForAll(Sequence(14) As S,
         With({ d: DateAdd(gvGridStart, S.Value - 1, TimeUnit.Days) },
             With({ hol: Weekday(d, StartOfWeek.Monday) > 5
-                        || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                        || !IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd"))) },
                 {
                     날짜: d,
                     일:   Day(d),
@@ -983,7 +1010,7 @@ ClearCollect(colGridDays,
     ForAll(Sequence(14) As S,
         With({ d: DateAdd(gvGridStart, S.Value - 1, TimeUnit.Days) },
             With({ hol: Weekday(d, StartOfWeek.Monday) > 5
-                        || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                        || !IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd"))) },
                 {
                     날짜: d,
                     일:   Day(d),
@@ -1011,7 +1038,7 @@ ClearCollect(colGridDays,
     ForAll(Sequence(14) As S,
         With({ d: DateAdd(gvGridStart, S.Value - 1, TimeUnit.Days) },
             With({ hol: Weekday(d, StartOfWeek.Monday) > 5
-                        || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                        || !IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd"))) },
                 {
                     날짜: d,
                     일:   Day(d),
@@ -1040,7 +1067,7 @@ ClearCollect(colGridDays,
     ForAll(Sequence(14) As S,
         With({ d: DateAdd(gvGridStart, S.Value - 1, TimeUnit.Days) },
             With({ hol: Weekday(d, StartOfWeek.Monday) > 5
-                        || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                        || !IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd"))) },
                 {
                     날짜: d,
                     일:   Day(d),
@@ -1446,7 +1473,8 @@ RGBA(107, 114, 128, 1)
 
 ```powerfx
 ClearCollect(colCombo,   조합표);      // 106행
-ClearCollect(colHoliday, 공휴일);      // 21행 — 달력이 날마다 조회하지 않도록
+ClearCollect(colHoliday,
+    ForAll(공휴일 As H, { 키: Text(H.날짜, "yyyy-mm-dd") }));   // 21행
 ClearCollect(colAll,     명부);        // 24행
 ClearCollect(colMembers, Filter(colAll, IsBlank(휴직)));
 ClearCollect(colLeads,   Filter(colMembers, 직책 <> "구성원"));
@@ -1475,7 +1503,7 @@ ClearCollect(colDays,
                 요일: Switch(Weekday(d, StartOfWeek.Monday),
                              1, "월", 2, "화", 3, "수", 4, "목", 5, "금", 6, "토", 7, "일"),
                 휴일: Weekday(d, StartOfWeek.Monday) > 5
-                      || !IsBlank(LookUp(colHoliday, 날짜 = d)),
+                      || !IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd"))),
                 주:   RoundDown((S.Value - 1
                         + Weekday(gvMonthStart, StartOfWeek.Monday) - 1) / 7, 0) + 1
             }
@@ -1526,7 +1554,7 @@ Set(gvMonthStart, DateAdd(gvMonthStart, 1, TimeUnit.Months));
 ForAll(Sequence(Day(gvMonthEnd)) As S,
     With({ d: DateAdd(gvMonthStart, S.Value - 1, TimeUnit.Days) },
         With({ hol: Weekday(d, StartOfWeek.Monday) > 5
-                    || !IsBlank(LookUp(colHoliday, 날짜 = d)) },
+                    || !IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd"))) },
             {
                 날짜: d,
                 일:   S.Value,
@@ -1907,7 +1935,7 @@ Set(gvFlexDays,
     CountRows(Filter(
         ForAll(Sequence(DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1) As S,
             { d: DateAdd(gvFlexStart, S.Value - 1, TimeUnit.Days) }),
-        Weekday(d, StartOfWeek.Monday) <= 5 && IsBlank(LookUp(colHoliday, 날짜 = d))
+        Weekday(d, StartOfWeek.Monday) <= 5 && IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd")))
     ))
 );
 Set(gvFlexTotalDays, DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1);
@@ -1951,7 +1979,7 @@ ForAll(colMembers As M,
 
 | 원래 | 바꿀 것 | 이유 |
 |---|---|---|
-| `LookUp(공휴일, 날짜 = d)` | `LookUp(colHoliday, 날짜 = d)` | 30번 왕복 → 1번 |
+| `LookUp(공휴일, 날짜 = d)` | `LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd"))` | 30번 왕복 → 1번 |
 | `Filter(명부, IsBlank(휴직))` | `Filter(colAll, IsBlank(휴직))` | `IsBlank` 는 위임되지 않는다 |
 
 **`근태기록` 조회는 그대로 둔다.** `Filter(근태기록, 근무일 >= …, 근무일 <= …)` 는
