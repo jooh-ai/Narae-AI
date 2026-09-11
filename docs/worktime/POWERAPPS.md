@@ -587,9 +587,10 @@ First(조합표).
 | 화면 | 용도 | 주 사용자 | 단계 |
 |---|---|---|---|
 | `Screen1` | 내 근태 입력 — 연쇄 드롭다운 | 전원 (매일) | 3단계 ✔ |
-| `scrMonth` | 월 달력 — 날짜별 30% 판정 · 미달일 · 조율 후보 | 전원 (조율용) | 4단계 (§3-5) |
-| `scrSummary` | 개인 요약 — 총량 · OT 잔여 · 주별 64h | 본인 | 5단계 (§4-7) |
-| `scrFlex` | 탄력근무 3개월 평균 52h | 관리 | 5단계 (§4-8) |
+| `scrMonth` | 월 달력 — 날짜별 30% 판정 · 미달일 · 조율 후보 | 전원 (조율용) | 4단계 ✔ |
+| `scrSummary` | 개인 요약 — 총량 · OT 잔여 · 주별 64h | 본인 | 6-3 (§3-7 5-3 · §4-7) |
+| `scrGrid` | 매트릭스 — 23명 × 2주 | 전원 (조율용) | 6단계 ✔ (§3-8) |
+| `scrFlex` | 탄력근무 3개월 평균 52h | 관리 | 7단계 (§4-8) |
 
 
 ### 3-5. 4단계 — 월 달력 · 30% 판정 화면 만들기
@@ -1264,22 +1265,24 @@ Navigate(scrMonth)
 
 ```powerfx
 Table(
-    { 키: "grid",    이름: "매트릭스" },
-    { 키: "month",   이름: "월 달력 · 30%" },
-    { 키: "input",   이름: "근태 입력" },
-    { 키: "summary", 이름: "개인 요약 · OT" }
+    { 키: "grid",  이름: "매트릭스" },
+    { 키: "month", 이름: "월 달력 · 30%" },
+    { 키: "input", 이름: "근태 입력" }
 )
 ```
+
+> **`scrSummary` 를 만든 뒤에 네 번째 탭을 더한다** — `Items` 에
+> `{ 키: "summary", 이름: "개인 요약 · OT" }` 한 줄, `OnSelect` 의 `Switch` 에
+> `"summary", Navigate(scrSummary)` 한 줄이면 된다.
 
 **`galTabs.OnSelect`**
 
 ```powerfx
 Set(gvTab, ThisItem.키);
 Switch(ThisItem.키,
-    "grid",    Navigate(scrGrid),
-    "month",   Navigate(scrMonth),
-    "input",   Navigate(Screen1),
-    "summary", Navigate(scrSummary))
+    "grid",  Navigate(scrGrid),
+    "month", Navigate(scrMonth),
+    "input", Navigate(Screen1))
 ```
 
 > `Navigate` 는 문자열이 아니라 화면 자체를 받으므로 `Switch` 로 갈라준다.
@@ -1374,11 +1377,52 @@ RGBA(107, 114, 128, 1)
 | | `galKpiTop` | 96 | 86 |
 | | `galMonth` · `lblCandHead` | 196 | `galMonth` **532** |
 | | `galCandidate` | 240 | **488** |
-| `Screen1` | 전부 | +40 씩 | 그대로 |
-| `scrSummary` | 전부 | +40 씩 | `galKpi` · `galWeek` · `galMy` 는 −40 |
+| `Screen1` | 아래 전용 표 참조 | | |
 
 이동 단추(`btnToMy` · `btnGridToMonth` · `btnToMonth2` · `Button2` · `btnTomy`)는
 지운다 — 탭 바가 대신한다.
+
+#### `Screen1` 좌표 — 왼쪽 입력 · 오른쪽 저장 목록
+
+3단계·5단계에서 컨트롤만 늘리고 배치는 잡지 않았다. 화면 크기는 다른 화면과 같은
+**1366 × 768** 이다. 레이블은 전부 `Padding` 0.
+
+| 컨트롤 | X | Y | W | H | 그 외 |
+|---|---|---|---|---|---|
+| `galTabs` | 0 | 0 | 1366 | 40 | 다른 화면에서 복사 |
+| `lblL1` | 40 | 52 | 220 | 16 | `"구성원"` · Size 9 |
+| `lblL2` | 280 | 52 | 220 | 16 | `"근무일"` · Size 9 |
+| `ddMe` | 40 | 72 | 220 | 40 | |
+| `dpDate` | 280 | 72 | 220 | 40 | |
+| `lblL3` | 40 | 124 | 220 | 16 | `"유형"` · Size 9 |
+| `lblL4` | 280 | 124 | 160 | 16 | `"출근"` · Size 9 |
+| `lblL5` | 460 | 124 | 160 | 16 | `"퇴근"` · Size 9 |
+| `ddType` | 40 | 144 | 220 | 40 | |
+| `ddStart` | 280 | 144 | 160 | 40 | |
+| `ddEnd` | 460 | 144 | 160 | 40 | |
+| `lblPreview` | 40 | 196 | 580 | 32 | Size 12 |
+| `lblL6` | 40 | 240 | 580 | 16 | Size 9 |
+| `txtOtS` | 40 | 260 | 160 | 40 | |
+| `txtOtE` | 220 | 260 | 160 | 40 | |
+| `ddDinner` | 400 | 260 | 140 | 40 | |
+| `lblOt` | 560 | 260 | 60 | 40 | Size 14 · `Align.Center` |
+| `txtNote` | 40 | 312 | 580 | 40 | |
+| `btnSave` | 40 | 368 | 180 | 44 | |
+| `galSaved` | 660 | 52 | 666 | 676 | `TemplateSize` 40 |
+| └ `Title2` | 12 | 8 | 560 | 24 | Size 11 |
+| └ `icoDel` | 600 | 8 | 24 | 24 | |
+
+**`lblL6.Text`**
+
+```powerfx
+"초과근로 (선택 — 비워두면 0) · 오른쪽 숫자가 계산된 OT 시간(h)"
+```
+
+> **`lblL1` ~ `lblL6` 은 안내 레이블이다.** 없어도 동작하지만 드롭다운 세 개가 나란히
+> 있으면 어느 것이 출근이고 퇴근인지 알 수 없다. `Color` 는 `RGBA(107, 114, 128, 1)`.
+
+> **`lblOt` 은 숫자만 표시해야 한다.** `btnSave` 가 `Value(lblOt.Text)` 로 읽으므로
+> `"h"` 를 붙이면 저장이 깨진다.
 
 #### 6-2 확인표
 
