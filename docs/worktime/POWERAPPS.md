@@ -830,15 +830,15 @@ HTML 도구와 체감 차이가 나는 것은 사실상 이 화면 하나다. �
 | 4 | 단추 | `btnGridNext` | 1000 | 24 | 110 | 32 | `"2주 ▶"` |
 | 5 | 단추 | `btnGridToMonth` | 1206 | 24 | 120 | 32 | `"월 달력"` |
 | 6 | **가로** 갤러리 | `galDayHead` | 240 | 68 | 1126 | 40 | `TemplateSize` 80 |
-| 7 | └ 레이블 | `lblDayNum` | 0 | 2 | 78 | 18 | 가운데 정렬 |
-| 8 | └ 레이블 | `lblDow` | 0 | 20 | 78 | 18 | 가운데 정렬 |
+| 7 | └ 레이블 | `lblDayNum` | 0 | 2 | 78 | 16 | `Size` 11 · `Align.Center` |
+| 8 | └ 레이블 | `lblDow` | 0 | 20 | 78 | 16 | `Size` 9 · `Align.Center` |
 | 9 | **가로** 갤러리 | `galNeedHead` | 240 | 110 | 1126 | 26 | `TemplateSize` 80 |
-| 10 | └ 레이블 | `lblNeed` | 0 | 2 | 78 | 22 | 가운데 정렬 |
+| 10 | └ 레이블 | `lblNeed` | 0 | 2 | 78 | 22 | `Size` 9 · `Align.Center` |
 | 11 | 세로 갤러리 | `galGrid` | 40 | 140 | 1326 | 588 | `TemplateSize` 26 |
 | 12 | └ 레이블 | `lblRowName` | 8 | 2 | 110 | 22 | |
 | 13 | └ 레이블 | `lblRowPart` | 122 | 2 | 76 | 22 | |
 | 14 | └ **가로** 갤러리 | `galCell` | 200 | 0 | 1126 | 26 | `TemplateSize` 80 |
-| 15 | └└ 레이블 | `lblCell` | 0 | 1 | 78 | 24 | `Text` 만 넣는다 |
+| 15 | └└ 레이블 | `lblCell` | 0 | 1 | 78 | 24 | `Size` **9** · `Align.Center` · `Padding` 0 |
 
 > **셀은 단추가 아니라 레이블로 만든다.** 레이블도 `OnSelect` 를 가지고 있고 훨씬
 > 가볍다. 378개를 그려야 하므로 이 차이가 크다.
@@ -870,6 +870,13 @@ HTML 도구와 체감 차이가 나는 것은 사실상 이 화면 하나다. �
 > **왼쪽 위 속성 목록에는 자주 쓰는 것만 나온다.** 전체 속성은 **오른쪽 「속성」 창 →
 > 「고급」 탭**에 있고, 거기 검색창에서 이름으로 찾을 수 있다. 이 화면에서는 위 방식
 > 덕분에 고급 탭을 열 일이 없다.
+
+> **요일은 `Text(d, "[$-ko]ddd")` 를 쓰지 않는다.** 한국어 로캘에서 `ddd` 가 `월` 이
+> 아니라 **`월요일`** 을 돌려주어 칸을 넘치고 날짜와 겹쳐 보인다. `Switch(Weekday(...))`
+> 로 직접 매핑한다 — `colGridDays` 와 `colDays` 양쪽 모두다.
+
+> **`lblCell` 은 두 줄(`유형` + `실근로h`)이라 `Size` 를 9로 줄인다.** 24px 높이에
+> 기본 글자 크기(13)로 두 줄은 들어가지 않는다. `PaddingTop` · `PaddingBottom` 도 0 으로.
 
 #### 행 소스 — 그룹 헤더를 섞어 넣는다
 
@@ -938,7 +945,8 @@ ClearCollect(colGridDays,
                 {
                     날짜: d,
                     일:   Day(d),
-                    요일: Text(d, "[$-ko]ddd"),
+                    요일: Switch(Weekday(d, StartOfWeek.Monday),
+                             1, "월", 2, "화", 3, "수", 4, "목", 5, "금", 6, "토", 7, "일"),
                     휴일: hol,
                     필요인원: If(hol, 0, gvNeed),
                     충족인원: If(hol, 0,
@@ -965,7 +973,8 @@ ClearCollect(colGridDays,
                 {
                     날짜: d,
                     일:   Day(d),
-                    요일: Text(d, "[$-ko]ddd"),
+                    요일: Switch(Weekday(d, StartOfWeek.Monday),
+                             1, "월", 2, "화", 3, "수", 4, "목", 5, "금", 6, "토", 7, "일"),
                     휴일: hol,
                     필요인원: If(hol, 0, gvNeed),
                     충족인원: If(hol, 0,
@@ -992,7 +1001,8 @@ ClearCollect(colGridDays,
                 {
                     날짜: d,
                     일:   Day(d),
-                    요일: Text(d, "[$-ko]ddd"),
+                    요일: Switch(Weekday(d, StartOfWeek.Monday),
+                             1, "월", 2, "화", 3, "수", 4, "목", 5, "금", 6, "토", 7, "일"),
                     휴일: hol,
                     필요인원: If(hol, 0, gvNeed),
                     충족인원: If(hol, 0,
@@ -1020,7 +1030,8 @@ ClearCollect(colGridDays,
                 {
                     날짜: d,
                     일:   Day(d),
-                    요일: Text(d, "[$-ko]ddd"),
+                    요일: Switch(Weekday(d, StartOfWeek.Monday),
+                             1, "월", 2, "화", 3, "수", 4, "목", 5, "금", 6, "토", 7, "일"),
                     휴일: hol,
                     필요인원: If(hol, 0, gvNeed),
                     충족인원: If(hol, 0,
@@ -1092,6 +1103,12 @@ ThisItem.이름 & If(ThisItem.휴직 = "Y", "  (휴직)", "")
 ```
 ```powerfx
 If(ThisItem.헤더, FontWeight.Bold, FontWeight.Normal)
+```
+
+**`lblRowName.Width`** — 그룹 헤더는 이름 칸을 넘어가므로 헤더 행에서만 넓힌다
+
+```powerfx
+If(ThisItem.헤더, 1300, 110)
 ```
 
 **`lblRowPart.Text`** · **`galGrid.TemplateFill`**
@@ -1248,7 +1265,8 @@ ClearCollect(colDays,
             {
                 날짜: d,
                 일:   S.Value,
-                요일: Text(d, "[$-ko]ddd"),
+                요일: Switch(Weekday(d, StartOfWeek.Monday),
+                             1, "월", 2, "화", 3, "수", 4, "목", 5, "금", 6, "토", 7, "일"),
                 휴일: Weekday(d, StartOfWeek.Monday) > 5
                       || !IsBlank(LookUp(colHoliday, 날짜 = d)),
                 주:   RoundDown((S.Value - 1
@@ -1305,7 +1323,8 @@ ForAll(Sequence(Day(gvMonthEnd)) As S,
             {
                 날짜: d,
                 일:   S.Value,
-                요일: Text(d, "[$-ko]ddd"),
+                요일: Switch(Weekday(d, StartOfWeek.Monday),
+                             1, "월", 2, "화", 3, "수", 4, "목", 5, "금", 6, "토", 7, "일"),
                 휴일: hol,
                 필요인원: If(hol, 0, gvNeed),
                 충족인원: If(hol, 0,
