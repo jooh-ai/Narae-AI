@@ -1105,10 +1105,10 @@ Text(gvGridStart, "yyyy-mm-dd") & " ~ "
 colGridDays
 ```
 
-**`lblDayNum.Text`** · **`lblDow.Text`**
+**`lblDayNum.Text`** · **`lblDow.Text`** — 2주 창이 달을 넘기므로 월을 함께 보여준다
 
 ```powerfx
-ThisItem.일
+Month(ThisItem.날짜) & "/" & ThisItem.일
 ```
 ```powerfx
 ThisItem.요일
@@ -1245,6 +1245,7 @@ Navigate(scrMonth)
 | 확인할 것 | 기대 |
 |---|---|
 | 행 수 | 27 (그룹 헤더 3 + 명부 24) |
+| 날짜 열 머리글 | `9/14` · `9/15` … `9/27` 처럼 **월/일** 로 나온다 |
 | 그룹 헤더 3줄 | 남색 배경 · 굵게 |
 | 윤승현 행 | `윤승현 (휴직)` · 셀 전체 회색 |
 | 9/20 · 9/26 · 9/27 열 | 회색 (일 · 토 · 일) |
@@ -1669,7 +1670,7 @@ If(ThisItem.휴일,                        RGBA(240, 241, 243, 1),
 행 안의 레이블 두 개 — **`lblDay.Text`** · **`lblCnt.Text`**
 
 ```powerfx
-ThisItem.일 & " (" & ThisItem.요일 & ")"
+Month(ThisItem.날짜) & "/" & ThisItem.일 & " (" & ThisItem.요일 & ")"
 ```
 ```powerfx
 If(ThisItem.휴일,
