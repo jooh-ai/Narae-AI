@@ -1462,6 +1462,84 @@ RGBA(107, 114, 128, 1)
 | 「소정근로일」 비고 | `공휴일 2일 제외` (추석 9/24 · 9/25) |
 | 미달일이 생기면 | 그 카드만 연한 빨강 |
 
+### 3-10. 7단계 — 탄력근무 52/64 화면
+
+`새 화면` → 이름을 **`scrFlex`** 로. 수식은 §4-8 에 있다.
+
+| 컨트롤 | 이름 | X | Y | W | H | 그 외 |
+|---|---|---|---|---|---|---|
+| 가로 갤러리 | `galTabs_4` | 0 | 0 | 1366 | 40 | 복사해 붙여넣기 |
+| 레이블 | `lblFlexHead` | 40 | 64 | 700 | 48 | Size 12 |
+| 날짜 선택 | `dpFlex` | 760 | 64 | 200 | 40 | `DefaultDate` = `Today()` |
+| 단추 | `btnFlexLoad` | 980 | 64 | 140 | 40 | `"불러오기"` |
+| 세로 갤러리 | `galFlex` | 40 | 124 | 1326 | 604 | `TemplateSize` 34 |
+| └ 레이블 | `lblFlexName` | 12 | 6 | 120 | 22 | Size 11 |
+| └ 레이블 | `lblFlexInfo` | 140 | 6 | 1100 | 22 | Size 11 |
+
+레이블은 전부 `Padding` 0.
+
+**`lblFlexHead.Text`**
+
+```powerfx
+If(IsBlank(gvFlexStart),
+   "시작 월을 고르고 「불러오기」를 누르세요",
+   "단위기간 3개월   " & Text(gvFlexStart, "yyyy-mm-dd") & " ~ "
+     & Text(gvFlexEnd, "yyyy-mm-dd") & Char(10)
+     & "소정근로일 " & gvFlexDays & "일 · " & Round(gvFlexTotalDays / 7, 1)
+     & "주 · 주 52h 한도 " & Round(52 * gvFlexTotalDays / 7, 1) & "h")
+```
+
+**`lblFlexName.Text`** · **`lblFlexInfo.Text`** · **`galFlex.TemplateFill`**
+
+```powerfx
+ThisItem.이름
+```
+```powerfx
+"총근로 " & ThisItem.총근로 & "h   ·   주 평균 " & ThisItem.평균주 & "h   ·   한도 "
+  & ThisItem.한도 & "h   "
+  & If(ThisItem.적합, "✓ 적합",
+       "✗ 초과 " & Round(ThisItem.총근로 - ThisItem.한도, 1) & "h")
+```
+```powerfx
+If(ThisItem.적합, RGBA(246, 247, 249, 1), RGBA(251, 234, 233, 1))
+```
+
+탭을 5개로 늘린다 — `galTabs` 한 곳만 고치고 나머지는 지우고 복사한다.
+
+```powerfx
+Table({ 키: "grid", 이름: "매트릭스" }, { 키: "month", 이름: "월 달력 · 30%" },
+      { 키: "input", 이름: "근태 입력" }, { 키: "summary", 이름: "개인 요약 · OT" },
+      { 키: "flex", 이름: "탄력근무 52/64" })
+```
+```powerfx
+Set(gvTab, ThisItem.키);
+Switch(ThisItem.키,
+    "grid", Navigate(scrGrid), "month", Navigate(scrMonth),
+    "input", Navigate(Screen1), "summary", Navigate(scrSummary),
+    "flex", Navigate(scrFlex))
+```
+
+#### 7단계 확인표 — 2026-09 ~ 2026-11
+
+`dpFlex` 를 **2026-09-01** 로 두고 `불러오기`.
+
+| 확인할 것 | 기대 |
+|---|---|
+| 머리글 기간 | `2026-09-01 ~ 2026-11-30` |
+| 총 일수 | 91일 = **정확히 13주** |
+| 소정근로일 | **60일** (9월 20 + 10월 20 + 11월 20) |
+| 주 52h 한도 | **676h** |
+| 기록 없는 사람 | 총근로 **480h** · 주 평균 **36.9h** · ✓ 적합 |
+| 김동환 (연차 1일) | 총근로 **472h** · 주 평균 **36.3h** |
+| 정병철 | 476.5h · 36.7h |
+| 박상호 | 479h · 36.8h |
+| 최규석 | 476h · 36.6h |
+| 행 색 | 전원 회색 (적합) |
+
+> **전원 적합이 정상이다.** 선택적 근로시간제에서는 주 평균이 40h 를 넘기 어렵다.
+> 이 화면은 **탄력적 근로시간제로 전환했을 때** 의미가 생긴다 — OT 가 쌓이면
+> 주 평균이 올라가고, 52h 를 넘는 사람이 빨갛게 뜬다.
+
 ## 4. Power Fx 수식
 
 ### 4-1. `App.OnStart` 와 월 갱신 블록
@@ -1912,13 +1990,15 @@ Text(ThisItem.근무일, "[$-ko]m/d (ddd)") & "   " & ThisItem.조합코드
 
 ### 4-8. 탄력근무 3개월 평균 52시간
 
-단위기간이 달을 넘기므로 `colRec` 대신 기간 전체를 따로 읽는다.
-SharePoint 는 집계를 위임하지 못하므로 **월별로 세 번 나눠 읽어** 행 제한을 피한다(§0-1).
+단위기간이 달을 넘기므로 `colRec` 대신 기간 전체를 따로 읽는다. SharePoint 는 집계를
+위임하지 못하므로 **월별로 세 번 나눠 읽어** 행 제한을 피한다(§0-1).
+
+**`btnFlexLoad.OnSelect`** — `dpFlex` 로 시작 월을 고르고 누른다
 
 ```powerfx
-// btnFlexLoad.OnSelect — 시작 월을 dpFlex 로 고른다
 Set(gvFlexStart, Date(Year(dpFlex.SelectedDate), Month(dpFlex.SelectedDate), 1));
 Set(gvFlexEnd,   DateAdd(DateAdd(gvFlexStart, 3, TimeUnit.Months), -1, TimeUnit.Days));
+Set(gvFlexTotalDays, DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1);
 
 Clear(colFlex);
 ForAll(Sequence(3) As Mo,
@@ -1926,44 +2006,46 @@ ForAll(Sequence(3) As Mo,
         Collect(colFlex,
             Filter(근태기록,
                 근무일 >= ms,
-                근무일 <= DateAdd(DateAdd(ms, 1, TimeUnit.Months), -1, TimeUnit.Days)))
-    )
-);
+                근무일 <= DateAdd(DateAdd(ms, 1, TimeUnit.Months), -1, TimeUnit.Days)))));
 
-// 단위기간 소정근로일 수
-Set(gvFlexDays,
-    CountRows(Filter(
-        ForAll(Sequence(DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1) As S,
-            { d: DateAdd(gvFlexStart, S.Value - 1, TimeUnit.Days) }),
-        Weekday(d, StartOfWeek.Monday) <= 5 && IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd")))
-    ))
-);
-Set(gvFlexTotalDays, DateDiff(gvFlexStart, gvFlexEnd, TimeUnit.Days) + 1);
+ClearCollect(colFlexDays,
+    ForAll(Sequence(gvFlexTotalDays) As S,
+        With({ d: DateAdd(gvFlexStart, S.Value - 1, TimeUnit.Days) },
+            {
+                날짜: d,
+                휴일: Weekday(d, StartOfWeek.Monday) > 5
+                      || !IsBlank(LookUp(colHoliday, 키 = Text(d, "yyyy-mm-dd")))
+            })));
+Set(gvFlexDays, CountRows(Filter(colFlexDays, !휴일)))
 ```
 
-구성원별 판정 — `galFlex.Items`
+**`galFlex.Items`** — 구성원별 판정
 
 ```powerfx
 ForAll(colMembers As M,
-    With({ recs: Filter(colFlex, 구성원 = M.Title) },
+    With({ recs: Filter(colFlex As R, R.구성원 = M.Title) },
         With({
             총근로: (gvFlexDays - CountRows(recs)) * 8
-                    + Sum(recs, 실근로) + Sum(recs, OT시간)
+                    + Coalesce(Sum(recs, 실근로), 0)
+                    + Coalesce(Sum(recs, OT시간), 0),
+            주수:   gvFlexTotalDays / 7
         },
             {
                 이름:   M.Title,
-                총근로: 총근로,
-                평균주: Round(총근로 / (gvFlexTotalDays / 7), 1),
-                적합:   총근로 / (gvFlexTotalDays / 7) <= 52
-            }
-        )
-    )
-)
+                총근로: Round(총근로, 1),
+                평균주: Round(총근로 / 주수, 1),
+                한도:   Round(52 * 주수, 1),
+                적합:   총근로 / 주수 <= 52
+            })))
 ```
 
 > `(gvFlexDays - CountRows(recs))` 는 기록이 소정근로일에만 있다고 가정한 근사다.
-> 휴일 근무 기록이 있으면 `Filter(recs, !휴일)` 로 걸러야 정확하다 — HTML 도구의
-> 계산과 대조해 검증하는 것을 권한다.
+> 휴일 근무 기록이 섞이면 `Filter(recs As M2, !LookUp(colFlexDays, 날짜 = M2.근무일, 휴일))`
+> 로 걸러야 정확하다.
+
+> **주 64시간 한도는 이 화면에서 보지 않는다.** `scrSummary` 의 `galWeek` 가 이번 달
+> 기준으로 이미 판정한다. 단위기간 전체의 주별 판정이 필요해지면 `colFlexDays` 에
+> 주 순번을 더해 같은 방식으로 묶으면 된다.
 
 ## 4-8-1. 위임 경고 — 무해하지만 없애는 편이 낫다
 
