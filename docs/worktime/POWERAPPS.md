@@ -2379,6 +2379,24 @@ LookUp(Distinct(명부, Title), Value = Coalesce(gvWho, gvMe))
 
 > 열을 만들기 전에 `gvMe` 를 참조하면 **앱 전체가 오류**가 된다. 열을 먼저 만든다.
 
+> **열을 추가한 뒤에는 데이터 원본을 「제거 → 추가」 해야 한다.** `데이터` 패널의
+> `새로 고침` 만으로는 새 열이 잡히지 않는 경우가 많다. 제거하면 앱 전체가 오류가 되지만
+> 같은 이름으로 다시 추가하면 수식이 그대로 살아난다.
+>
+> 증상은 조용하다 — `gvMe` 가 빈 채로 남고 오류도 뜨지 않는다. 확인용 레이블로
+> `CountRows(Filter(colAll, !IsBlank(사용자.DisplayName)))` 이 0 이면 열을 못 읽는 것이다.
+
+> **`User().Email` 과 SharePoint 의 계정 주소가 다를 수 있다.** 회사 계정(UPN)과
+> 기본 메일 주소가 다른 조직이 있다. 세 가지를 모두 받아주면 안전하다.
+>
+> ```powerfx
+> Set(gvMe, LookUp(colAll,
+>     Lower(사용자.Email) = Lower(User().Email)
+>     || 사용자.DisplayName = User().FullName
+>     || Lower(사용자.Claims) = Lower("i:0#.f|membership|" & User().Email),
+>     Title));
+> ```
+
 ### 6. 휴대폰
 
 지금 좌표는 PC 1366px 고정이라 폰에서는 축소되어 글자가 작다. 두 가지 길이 있다.
