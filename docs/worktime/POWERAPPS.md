@@ -2258,6 +2258,139 @@ CountRows(galSaved.AllItems) = 0
 | `galMy` | `"이번 달 기록이 없습니다 — 매일 8시간 근무로 계산됩니다"` |
 | `galFlex` | `"시작 월을 고르고 「불러오기」를 누르세요"` |
 
+## 4-11. 기능 보강 여섯 가지
+
+화면 다섯 개와 디자인이 끝난 뒤 붙인다. 위에서부터 효과가 크다.
+
+### 1. 조율 후보를 누르면 그 사람 · 그 날짜로 입력 화면이 열린다
+
+이 도구의 목적은 「누구에게 부탁할지 찾아서 **바꾸는** 것」인데, 지금은 찾는 데서
+끝나고 바꾸려면 이름 · 날짜를 손으로 다시 골라야 한다.
+
+**`galCandidate.OnSelect`**
+
+```powerfx
+Set(gvPickWho, ThisItem.구성원); Set(gvPickDate, ThisItem.근무일); Navigate(Screen1)
+```
+
+**`Screen1.OnVisible`** — 넘어온 값이 실제로 반영되게 한다
+
+```powerfx
+Reset(ddMe); Reset(dpDate)
+```
+
+> `Default` 는 컨트롤이 초기화될 때만 다시 읽힌다. `Reset` 이 없으면 화면만 바뀌고
+> 이전에 고른 값이 그대로 남는다.
+
+### 2. 오늘 강조
+
+**`scrMonth`** — `lblDay` 두 속성
+
+```powerfx
+If(ThisItem.날짜 = Today(), FontWeight.Bold, FontWeight.Normal)
+```
+```powerfx
+If(ThisItem.날짜 = Today(), RGBA(28, 78, 128, 1), RGBA(22, 24, 29, 1))
+```
+
+**`scrGrid`** — `galDayHead.TemplateFill` 에 오늘 분기를 앞에 넣는다
+
+```powerfx
+If(ThisItem.날짜 = Today(), RGBA(232, 238, 246, 1),
+   ThisItem.휴일,            RGBA(240, 241, 243, 1),
+                             RGBA(0, 0, 0, 0))
+```
+
+`lblDayNum.FontWeight` 도 `If(ThisItem.날짜 = Today(), FontWeight.Bold, FontWeight.Normal)`.
+
+### 3. 미달일 목록 — `scrMonth` 오른쪽
+
+날짜를 고르기 전에는 오른쪽이 비어 있다. 미달일만 모아 보여주면 「어느 날을 조율해야
+하나」가 바로 보인다.
+
+오른쪽 카드를 위아래로 나눈다.
+
+| 컨트롤 | X | Y | W | H |
+|---|---|---|---|---|
+| `lblShortHead` | 500 | 196 | 826 | 32 |
+| `galShort` | 500 | 232 | 826 | 160 |
+| └ `lblShort` | 12 | 6 | 800 | 22 |
+| `lblShortEmpty` | 500 | 270 | 826 | 32 |
+| `lblCandHead` | 500 | 408 | 826 | 32 |
+| `galCandidate` | 500 | 444 | 826 | 284 |
+
+`galShort.TemplateSize` 는 34.
+
+**`galShort.Items`**
+
+```powerfx
+Filter(galMonth.AllItems, !휴일, 충족인원 < 필요인원)
+```
+
+**`lblShort.Text`**
+
+```powerfx
+Month(ThisItem.날짜) & "/" & ThisItem.일 & " (" & ThisItem.요일 & ")   "
+  & ThisItem.충족인원 & " / " & ThisItem.필요인원 & "명   ✗ "
+  & (ThisItem.필요인원 - ThisItem.충족인원) & "명 부족"
+```
+
+**`galShort.OnSelect`** — 그 날이 든 2주를 매트릭스로 연다
+
+```powerfx
+Set(gvGridStart, DateAdd(ThisItem.날짜,
+    -(Weekday(ThisItem.날짜, StartOfWeek.Monday) - 1), TimeUnit.Days));
+Navigate(scrGrid)
+```
+
+> `scrGrid.OnVisible` 이 `If(IsBlank(gvGridStart), …)` 로 시작하므로 **이미 값이 있으면
+> 그대로 쓰고** 아래 갱신 블록만 다시 돈다. 그래서 그 주로 바로 열린다.
+
+`lblShortHead.Text` 는 `"30% 미달일"`, `lblShortEmpty` 는 `"미달일이 없습니다 — 전일 충족"`
+에 `Visible` = `IsEmpty(galShort.AllItems)`.
+
+### 4. 탄력근무 정렬 — 위험한 사람이 위로
+
+23명이 모두 같아 보인다. 주 평균이 높은 순으로 세운다.
+
+**`galFlex.Items`** — 기존 `ForAll(...)` 을 `Sort(...)` 로 감싼다
+
+```powerfx
+Sort(ForAll(colMembers As M, …기존 그대로…), 평균주, SortOrder.Descending)
+```
+
+### 5. 본인 자동 선택
+
+`명부` 에 `사용자`(사용자 또는 그룹) 열을 만들어 각자 계정을 채운 뒤,
+**`App.OnStart`** 의 「한 번만」 블록에 한 줄을 더한다.
+
+```powerfx
+Set(gvMe, LookUp(명부, 사용자.Email = User().Email, Title));
+```
+
+**`ddMe.Default`** · **`ddWho.Default`**
+
+```powerfx
+LookUp(Distinct(명부, Title), Value = Coalesce(gvPickWho, gvMe))
+```
+```powerfx
+LookUp(Distinct(명부, Title), Value = Coalesce(gvWho, gvMe))
+```
+
+> 열을 만들기 전에 `gvMe` 를 참조하면 **앱 전체가 오류**가 된다. 열을 먼저 만든다.
+
+### 6. 휴대폰
+
+지금 좌표는 PC 1366px 고정이라 폰에서는 축소되어 글자가 작다. 두 가지 길이 있다.
+
+| 방법 | 내용 | 비용 |
+|---|---|---|
+| **설정만** | `설정 → 표시 → 화면에 맞게 크기 조정` 을 켠다. 전체가 보이되 글자가 작다 | 0 |
+| 조회 전용 화면 추가 | 세로 폰용 화면 하나(내 이번 달 요약 + 오늘 30% 현황)를 따로 만든다 | 화면 1개 |
+
+**테스트 운영에서 실제로 폰을 쓰는지 보고 정하는 것을 권한다.** 조율은 PC 앞에서
+하는 일이라 폰은 조회만 필요할 수 있다.
+
 ## 5. Teams 탭으로 게시
 
 1. Power Apps 편집기 → `게시`(Publish)
