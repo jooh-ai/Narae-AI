@@ -2409,6 +2409,71 @@ LookUp(Distinct(명부, Title), Value = Coalesce(gvWho, gvMe))
 **테스트 운영에서 실제로 폰을 쓰는지 보고 정하는 것을 권한다.** 조율은 PC 앞에서
 하는 일이라 폰은 조회만 필요할 수 있다.
 
+## 4-12. 석식 · OT 안내 레이블
+
+`계산된 OT(h)` 옆의 숫자와 `석식 휴게` 드롭다운은 무엇을 고르는 칸인지 화면에
+나와 있지 않아, 레이블 넷과 안내문 하나를 Screen1 에 추가했다.
+
+| 컨트롤 | X · Y · W · H | Text |
+|---|---|---|
+| `lblL7` | 20 · 268 · 120 · 18 | `OT 시작` |
+| `lblL8` | 218 · 268 · 120 · 18 | `OT 종료` |
+| `lblL9` | 418 · 268 · 140 · 18 | `석식 휴게` |
+| `lblL10` | 548 · 268 · 120 · 18 | `계산된 OT(h)` |
+| `lblOtHelp` | 20 · 336 · 640 · 34 | 아래 수식 |
+
+`lblOt` 는 `X 548 · W 84` 로 넓히고, 안내문이 들어갈 자리만큼 `txtNote` 를 `Y 344`,
+`btnSave` 를 `Y 396`, `rectFormCard` 의 `Height` 를 `400` 으로 내린다.
+
+```powerfx
+// lblOtHelp.Text — 정규 종료 시각이 월설정에서 오므로 달이 바뀌면 문구도 따라 바뀐다
+"석식 휴게 —  자동: 정규 종료(" & Coalesce(gvMonthCfg.정규종료, "17:30") &
+") 직후 30분이 OT와 겹칠 때만 공제  ·  실시: 항상 30분 공제  ·  미실시: 공제 없음" &
+Char(10) &
+"예) 20:30~23:15 는 겹치지 않아 2.75h,  17:30~20:00 은 30분 공제되어 2h"
+```
+
+`lblOtHelp` 는 `Size 9 · Color RGBA(107,114,128,1)` 로 두어 입력값과 구분한다.
+
+## 4-13. 인원 변동 — SharePoint 에서 고치고 앱은 새로고침만
+
+**인원 변동을 앱에 넣지 않는다.** 명부 편집 화면을 만들면 권한 분리·검증·중복 방지를
+전부 앱에서 다시 구현해야 하는데, SharePoint 목록은 그것을 이미 갖고 있다. 앱에는
+`App.OnStart` 의 명부 블록만 다시 도는 버튼 하나를 둔다.
+
+```powerfx
+// btnReload.OnSelect — 「명부 새로고침」 (매트릭스 화면 오른쪽 위)
+ClearCollect(colAll, 명부);
+ClearCollect(colMembers, Filter(colAll, IsBlank(휴직)));
+ClearCollect(colLeads, Filter(colMembers, 직책 <> "구성원"));
+Set(gvActive, CountRows(colMembers));
+Set(gvNeed, RoundUp(gvActive * 0.3, 0));
+Set(gvLeads, CountRows(colLeads));
+Clear(colGridRows);
+Collect(colGridRows, { 헤더: true, 이름: "A그룹 · 직책자 (팀장 · 파트장)", 파트: "", 휴직: "" });
+Collect(colGridRows, ForAll(Sort(Filter(colAll, 그룹 = "A"), 정렬) As M,
+    { 헤더: false, 이름: M.Title, 파트: M.파트, 휴직: Coalesce(M.휴직, "") }));
+Collect(colGridRows, { 헤더: true, 이름: "B그룹 · 기계 · 전기 · 제어 · 정비지원", 파트: "", 휴직: "" });
+Collect(colGridRows, ForAll(Sort(Filter(colAll, 그룹 = "B"), 정렬) As M,
+    { 헤더: false, 이름: M.Title, 파트: M.파트, 휴직: Coalesce(M.휴직, "") }));
+Collect(colGridRows, { 헤더: true, 이름: "C그룹 · 발전지원", 파트: "", 휴직: "" });
+Collect(colGridRows, ForAll(Sort(Filter(colAll, 그룹 = "C"), 정렬) As M,
+    { 헤더: false, 이름: M.Title, 파트: M.파트, 휴직: Coalesce(M.휴직, "") }));
+Notify("명부를 다시 읽었습니다 — 모수 " & gvActive & "명 · 필요 " & gvNeed & "명",
+       NotificationType.Success)
+```
+
+명부를 고칠 때 지켜야 할 것 세 가지.
+
+| 상황 | 해야 할 일 | 하면 안 되는 일 |
+|---|---|---|
+| 전출 · 휴직 | `휴직` 열에 `Y` | **행 삭제** — 지난 근태기록이 이름으로 연결돼 있어 집계가 깨진다 |
+| 전입 · 신규 | `이름` · `그룹` · `직책` · `정렬` 네 칸을 채운다 | `정렬` 을 비우면 매트릭스 순서가 무작위가 된다 |
+| 개명 · 오타 수정 | 먼저 `근태기록.구성원` 을 같이 바꾼다 | 명부만 고치기 — 그 사람의 지난 기록이 전부 끊긴다 |
+
+`휴직 = Y` 로 바꾸면 모수에서 빠지고 필요 인원이 함께 줄지만, **매트릭스에는 회색 줄로
+남는다**(`galCell.TemplateFill` 의 휴직 분기). 누가 왜 빠졌는지 화면에서 보이는 편이 낫다.
+
 ## 5. Teams 탭으로 게시
 
 1. Power Apps 편집기 → `게시`(Publish)
