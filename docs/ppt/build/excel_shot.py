@@ -17,7 +17,7 @@ openpyxl 로 셀을 읽어 HTML 로 그린 뒤 headless Chromium 으로 찍는�
 산출물 (docs/ppt/assets/)
     xl_profile.png    값 보기 — 담당자가 실제로 보던 화면
     xl_formula.png    수식 보기 — 이 표 한 장이 다른 시트를 참조하는 모습
-    xl_links.png      외부 링크 — 2019년 파일을 아직 참조하고 있다
+    xl_links.png      외부 링크 — 2019년 파일을 아직 참조하고 있다 (--links 일 때만)
 """
 from __future__ import annotations
 
@@ -205,6 +205,8 @@ def shot(html_text: str, png: Path, w: int, h: int) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-mask", action="store_true", help="서버 IP·사번을 가리지 않는다")
+    ap.add_argument("--links", action="store_true",
+                    help="외부 링크 캡처도 만든다 (기본은 만들지 않는다 — 위 주석 참조)")
     a = ap.parse_args()
     if not CHROME.exists():
         sys.exit(f"headless Chromium 이 없습니다: {CHROME}")
@@ -223,7 +225,10 @@ def main() -> None:
                     title="엑셀 ③ 수식 보기 (Ctrl + `)  —  [온도 Profile] 시트"),
          OUT / "xl_formula.png", 900, 560)
 
-    shot(links_html(not a.no_mask), OUT / "xl_links.png", 900, 220)
+    if a.links:
+        # 2019년 경로에 서버 IP 와 남의 사번이 그대로 남아 있다. 장표에 넣으면
+        # 지적하는 자리처럼 보여서 쓰지 않기로 했다(2026-09-14). 필요하면 --links.
+        shot(links_html(not a.no_mask), OUT / "xl_links.png", 900, 220)
 
 
 if __name__ == "__main__":
