@@ -11,10 +11,10 @@
 'use strict';
 const A = require('./assets.js');
 const STEP = [
-  ['① 계측값 받아오기', A.xl1,  '날짜와 시각을 넣으면 온도와 압력 같은 값 14개를 끌어옵니다.'],
-  ['② 온도별로 계산', A.xl2,  '공기 압력을 넣으면 영하 20도부터 40도까지 61개 값이 나옵니다.'],
-  ['③ 차이를 더하기', A.xl2blt,    '시험한 온도에서 생긴 차이를 61개 값에 모두 더합니다.'],
-  ['④ 표 완성', A.xl3,  '이 표를 그대로 옮겨 붙이면 그날 알릴 숫자가 됩니다.'],
+  ['① 계측값 받아오기', A.xl1,  '시험한 날의 계측값을 받아옵니다.'],
+  ['② 온도별로 계산', A.xl2,  '온도별로 계산값이 나옵니다.'],
+  ['③ 차이를 더하기', A.xl2blt,    '시험 결과와의 차이를 더합니다.'],
+  ['④ 표 완성', A.xl3,  '옮겨 붙이면 끝입니다.'],
 ];
 const T0 = -20, T1 = 40, PX0 = 200, PXW = 920;
 const TX = t => PX0 + (t - T0) * (PXW / (T1 - T0));
@@ -24,7 +24,7 @@ module.exports = (pptx, T, meta, D) => {
   const { C, G, LW } = T;
   const { d } = T.shell(pptx, { name: '기존 방식', idx: 1, step: 1 });
   T.title(d, '예전에 숫자를 만든 방법', null, { px: 33 });
-  T.lead(d, '시험 결과를 엑셀 네 개에 차례로 옮겨 담아 알릴 숫자를 만들었습니다.',
+  T.lead(d, '엑셀 네 개를 차례로 열어야 했습니다. 값은 손으로 옮겼습니다.',
          { y: 146, lines: 1 });
 
   /* 구획 1 — 절차 */
@@ -45,8 +45,8 @@ module.exports = (pptx, T, meta, D) => {
      이번에는 **61개 온도에 실제로 들어간 값을 막대 61개로 세운다.**
      전부 같은 높이인데 근거가 있는 것은 한 개뿐이라는 것이 바로 보인다.   */
   d.section(G.L, 404, G.W, 220, 2, '더할 값을 정하는 방법', '시험 1곳 → 61개 온도');
-  d.text('시험한 온도에서 나온 차이 하나를 61개 온도에 모두 같은 크기로 더했습니다.',
-         { x: 96, y: 440, w: 700, px: 13, lh: 1.3, lines: 1, color: C.dim });
+  d.text('시험은 하루에 한 번뿐입니다. 나머지 온도는 시험해 본 적이 없었습니다.',
+         { x: 96, y: 438, w: 700, px: 14, lh: 1.3, lines: 1, color: C.body });
 
   const BASE = 580, MWPX = 18, VAL = 4;
   const BY = v => BASE - v * MWPX;
@@ -67,10 +67,10 @@ module.exports = (pptx, T, meta, D) => {
   d.text('℃', { x: TX(T1) + 26, y: BASE + 6, w: 24, px: 10.5, lh: 1.2, color: C.dim2 });
 
   d.vline(TX(SHOT), BY(VAL) - 24, 20, C.brass, 1);
-  d.text('이 온도만 실제로 시험', { x: TX(SHOT) - 150, y: BY(VAL) - 42, w: 300, px: 13,
+  d.text('이 온도만 시험했습니다', { x: TX(SHOT) - 150, y: BY(VAL) - 42, w: 300, px: 13,
                                     lh: 1.3, bold: true, color: C.brass, align: 'center' });
   d.rect(210, BY(6) + 2, 14, 7, C.slate);
-  d.text('나머지 60개 온도는 시험하지 않고 같은 값',
+  d.text('나머지는 같은 값을 썼습니다',
          { x: 230, y: BY(6) - 2, w: 400, px: 12.5, lh: 1.3, color: C.slateL });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);

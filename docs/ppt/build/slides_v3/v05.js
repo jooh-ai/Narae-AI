@@ -18,8 +18,7 @@ module.exports = (pptx, T, meta, D) => {
   const gaps = LOG.rows.map(r => r.gap), aps = LOG.rows.map(r => r.applied);
   const lo = Math.min(...gaps), hi = Math.max(...gaps);
   T.title(d, '기존 방식의 문제점', null, { px: 33 });
-  T.lead(d, '문제는 세 가지였습니다. 절차가 번거롭고, 더하는 값이 하나로 고정되며, ' +
-         '그래서 숫자가 어긋났습니다.', { y: 146, lines: 1 });
+  T.lead(d, '불편한 점이 세 가지 있었습니다.', { y: 146, lines: 1 });
 
   /* 구획 1 — 번거로운 절차 */
   d.section(G.L, 186, G.W, 92, 1, '번거로운 절차', '한 회차마다 되풀이');
@@ -62,8 +61,8 @@ module.exports = (pptx, T, meta, D) => {
   d.text('더한 값', { x: X(21), y: Y(D.blanket.flat) - 18, w: 180, px: 11, lh: 1.2,
                             bold: true, color: C.slateL, align: 'right' });
   D.scatter.forEach(([t, c]) => d.dot(X(t), Y(c), 2.9, C.body));
-  [['겨울', C.slateL, '더 낼 수 있는데 적게 알렸습니다. 팔 수 있는 양을 못 팔았습니다.'],
-   ['여름', C.red, '못 내는데 많이 알렸습니다. 알린 만큼 못 내면 벌칙을 받습니다.'],
+  [['겨울', C.slateL, '더 낼 수 있었는데 적게 알렸습니다.'],
+   ['여름', C.red, '못 내는데 많이 알렸습니다.'],
    ['결과', C.brass, '시험 ' + D.n + '회 가운데 ' + B.short + '회가 알린 만큼 못 냈습니다.']]
     .forEach(([k, col, v], i) => {
       const y = 496 + i * 44;
@@ -74,5 +73,5 @@ module.exports = (pptx, T, meta, D) => {
     });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '온도마다 다른 것을 하나로 맞추려니 맞을 수가 없었습니다.');
+  T.foot(d, '하나의 숫자로는 맞출 수가 없었습니다.');
 };

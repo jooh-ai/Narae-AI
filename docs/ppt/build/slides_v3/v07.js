@@ -1,72 +1,72 @@
-/* v3-06 · 온도별로 배우는 보정 모델.
-   구획 셋. 어떻게 바꿨나(2층 구조) / 결과 곡선 / 겪은 일(모델을 몰라 겨루게 했다).
+/* v3-07 · 바꾼 것 두 가지.
 
-   이 장의 그림은 도구가 그린 실제 곡선이다. 점선이 계산값, 주황이 실제,
-   흰 점이 시험 결과. 흰 점이 주황 곡선을 따라가는 것이 이 과제가 한 일 전부다. */
+   2026-09-16 회신이 이 장을 다시 쓰게 했다.
+     "내가 이 Tool을 개발한 이유는 단순해. 여러가지로 반복되는 과정을 합치고,
+      결과의 정확도를 높인다. 하지만 이 단순한 내용을 PPT는 어렵게 풀어내."
+
+   맞는 말이었다. 이 장이 '정확도' 이야기만 하고 있었다. 만든 이유가 둘인데
+   하나만 적어 놓았으니 읽는 사람은 왜 만들었는지 절반만 알게 된다.
+   그래서 구획 1 을 **두 기둥**으로 다시 세웠다. 합친 것과 정확해진 것.       */
 'use strict';
+const A = require('./assets.js');
 module.exports = (pptx, T, meta, D) => {
-  const { C, G, LW } = T;
-  const A = require('./assets.js');
-  const { d } = T.shell(pptx, { name: '개선 방안', idx: 4, step: 4 });
+  const { C, G } = T;
   const M = D.methods;
-  T.title(d, '온도마다 다르게 배우기', null, { px: 33 });
-  T.lead(d, '계산식은 그대로 두고, 계산한 값과 실제의 차이만 온도마다 따로 배우게 했습니다.',
+  const { d } = T.shell(pptx, { name: '개선 방안', idx: 4, step: 4 });
+  T.title(d, '바꾼 것 두 가지', null, { px: 33 });
+  T.lead(d, '하나는 흩어진 과정을 합친 것입니다. 다른 하나는 숫자를 온도마다 다르게 한 것입니다.',
          { y: 146, lines: 1 });
 
-  /* 구획 1 — 2층 구조 */
-  d.section(G.L, 186, 400, 232, 1, '바꾼 것과 두고 온 것', '');
-  d.box(92, 226, 360, 74, null, C.slate, 1.4);
-  d.text('그대로 둔 것', { x: 106, y: 236, w: 200, px: 11.5, lh: 1.2, bold: true,
-                            color: C.slateL });
-  d.text('제작사 계산식', { x: 106, y: 256, w: 330, px: 17, lh: 1.3, bold: true,
-                            color: C.ink });
-  d.text('검증된 식입니다. 손대지 않았습니다.',
-         { x: 106, y: 278, w: 330, px: 12, lh: 1.3, color: C.dim });
-  d.text('↓', { x: 92, y: 306, w: 30, px: 18, lh: 1.2, color: C.brass });
-  d.text('계산한 값과 실제의 차이만 넘깁니다', { x: 124, y: 310, w: 320, px: 12, lh: 1.3,
-                                              color: C.dim });
-  d.box(92, 338, 360, 74, null, C.brass, 1.6);
-  d.text('새로 만든 것', { x: 106, y: 348, w: 200, px: 11.5, lh: 1.2, bold: true,
+  /* 구획 1 — 두 기둥 */
+  d.section(G.L, 186, 400, 232, 1, '무엇을 바꿨나', '');
+  [['흩어진 과정을 합쳤다', '엑셀 4개', '도구 1개'],
+   ['숫자를 온도마다 다르게', '값 1개', '온도별 곡선']].forEach(([k, a, b], i) => {
+    const y = 226 + i * 88;
+    d.rect(92, y, 4, 62, C.brass);
+    d.text(String(i + 1), { x: 108, y, w: 20, px: 13, lh: 1.2, mono: true, bold: true,
                             color: C.brass });
-  d.text('온도마다 다른 값', { x: 106, y: 368, w: 330, px: 17, lh: 1.3, bold: true,
-                                color: C.ink });
-  d.text('시험 ' + D.n + '회를 학습해 온도마다 다른 값을 줍니다.',
-         { x: 106, y: 390, w: 330, px: 12, lh: 1.3, color: C.dim });
+    d.text(k, { x: 132, y: y - 2, w: 306, px: 17.5, lh: 1.3, bold: true, color: C.ink });
+    const aw = Math.ceil(T.textW(a, 15)) + 4;
+    d.text(a, { x: 132, y: y + 30, w: aw, px: 15, lh: 1.25, color: C.slateL });
+    d.text('→', { x: 132 + aw + 8, y: y + 32, w: 22, px: 13, lh: 1.2, color: C.dim2 });
+    d.text(b, { x: 132 + aw + 34, y: y + 28, w: 452 - (132 + aw + 34), px: 17, lh: 1.25, bold: true,
+                color: C.brass });
+  });
+  d.text('제작사 계산식은 손대지 않았습니다.',
+         { x: 92, y: 392, w: 360, px: 13, lh: 1.3, color: C.dim });
 
-  /* 구획 2 — 도구가 실제로 그려 주는 화면. 내가 다시 그리지 않고 캡처를 쓴다.
-     회신 "중간중간에 Tool 캡쳐를 섞어 쓰면 좋을 듯" 반영. */
+  /* 구획 2 — 도구가 실제로 그려 주는 화면 */
   d.section(488, 186, 720, 232, 2, '도구가 그려 주는 화면', '주황이 배운 값, 흰 점이 시험 결과');
   d.imgFit(A.toolGap, 500, 222, 696, 162);
-  d.text('온도마다 더할 값이 다릅니다. 흰 점이 실제 시험 결과이고, 주황 선이 도구가 배운 값입니다.',
-         { x: 500, y: 392, w: 696, px: 12, lh: 1.3, color: C.dim2 });
+  d.text('온도마다 더할 값이 다릅니다.',
+         { x: 500, y: 392, w: 696, px: 13, lh: 1.3, color: C.dim });
 
   /* 구획 3 — 겪은 일 */
   d.section(G.L, 430, G.W, 194, 3, '겪은 일 · 어떤 방법을 써야 하는지 몰랐다', '후보 7가지');
-  d.text('이런 예측을 처음 다뤘습니다. 무엇을 써야 하는지 몰라서 후보 일곱 가지를 ' +
-         '늘어놓고 같은 데이터로 겨루게 했습니다.\n' +
-         '한 회를 가리고 나머지로 그 회를 맞혀 봅니다. 사람이 아니라 성적이 골랐습니다.',
-         { x: 92, y: 470, w: 470, px: 13, lh: 1.6, lines: 4, color: C.body });
+  d.text('이런 예측을 해 본 적이 없었습니다. 그래서 후보 일곱 가지를 늘어놓고 ' +
+         '같은 데이터로 겨루게 했습니다.\n한 회를 가리고 나머지로 그 회를 맞혀 봅니다. ' +
+         '사람이 아니라 성적이 골랐습니다.',
+         { x: 92, y: 472, w: 470, px: 13.5, lh: 1.6, lines: 4, color: C.body });
 
   const lo = Math.floor(Math.min(...M.map(m => m.mae)) * 10) / 10 - 0.1;
   const hi = Math.max(...M.map(m => m.mae));
   const BX = v => 700 + (v - lo) / (hi - lo) * 330;
+  const NAME = { 'gp:rbf': 'RBF', 'gp:rq': 'RQ', 'gp:matern52': 'Matern 5/2',
+                 'gp:matern32': 'Matern 3/2', 'gp:exp': '지수',
+                 'curve': '거리가중', 'bin': '구간평균' };
   M.forEach((m, i) => {
     const y = 468 + i * 21, win = i === 0;
-    const NAME = { 'gp:rbf': 'RBF', 'gp:rq': 'RQ', 'gp:matern52': 'Matern 5/2',
-                   'gp:matern32': 'Matern 3/2', 'gp:exp': '지수',
-                   'curve': '거리가중', 'bin': '구간평균' };
-    const nm = NAME[m.key] || m.key;
-    d.text(nm, { x: 574, y, w: 122, px: 11.5, lh: 1.2, bold: win,
-                 color: win ? C.brass : C.dim2, align: 'right' });
+    d.text(NAME[m.key] || m.key, { x: 574, y, w: 122, px: 11.5, lh: 1.2, bold: win,
+                                   color: win ? C.brass : C.dim2, align: 'right' });
     d.rect(700, y + 2, Math.max(BX(m.mae) - 700, 4), 10, win ? C.brass : C.steel);
     d.text(m.mae.toFixed(2), { x: BX(m.mae) + 8, y, w: 52, px: 11, lh: 1.2, mono: true,
                                bold: win, color: win ? C.brass : C.dim });
-    if (win) d.text('← 1위. 이것을 씁니다', { x: 1050, y, w: 158, px: 11.5, lh: 1.2,
-                                              bold: true, color: C.brass });
+    if (win) d.text('← 이것을 씁니다', { x: 1050, y, w: 158, px: 11.5, lh: 1.2,
+                                          bold: true, color: C.brass });
   });
   d.text('막대가 짧을수록 잘 맞힌 것입니다. 단위 MW.',
          { x: 574, y: 616, w: 440, px: 11, lh: 1.2, color: C.dim2 });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '계산식은 그대로 두었으니, 다른 발전소로도 그대로 옮길 수 있습니다.');
+  T.foot(d, '계산식을 그대로 두었으니 다른 발전소에도 옮겨 쓸 수 있습니다.');
 };
