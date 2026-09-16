@@ -1,45 +1,68 @@
-/* v3-03 · ① 개요 및 추진 배경 — 기존에는 이렇게 했다.
+/* v3-03 · 기존에는 이렇게 했습니다.
 
-   2026-09-16 다시 씀. 앞 판이 막힌 이유를 회신에서 이렇게 읽었다.
-     · 제목이 슬로건이라 처음 보는 사람은 무슨 말인지 모른다
-     · 문장마다 각을 세워 놓으니 정작 설명이 없다
-     · 텍스트 덩어리가 여기저기 흩어져 눈이 한 곳에 못 머문다
+   2026-09-16 3차. 회신 두 줄이 핵심이었다.
+     "직관적으로 바뀐 것 같아" / "하지만 기존에 있던 성의가 모두 사라진 느낌"
+     "텍스트도 주저리 주저리 길어진 것 같고"
 
-   그래서 규칙을 바꿨다.
-     제목은 라벨처럼 담백하게. 결론은 맨 아래 한 줄로만.
-     그림 아래에 **설명 문단 하나**. 짧게 자르지 않고 끝까지 풀어 쓴다.
-     그림 위에는 라벨만 얹고 문장은 쓰지 않는다.
-     중점(·)과 줄표(—)를 본문에 쓰지 않는다. 그게 제일 큰 기계 냄새였다.   */
+   앞 판에서 내가 한 것은 **정교한 차트를 빼고 그 자리에 문단을 넣은 것**이었다.
+   말은 길어지고 그림은 초라해졌으니 둘 다 나빠졌다. 방향이 거꾸로였다.
+
+     성의는 그림에서 나온다. 쉬움은 짧은 말에서 나온다.
+     그러니 말을 줄이고 그림을 늘려야 한다. 설명을 문단이 아니라 그림이 한다.
+
+   그래서 "시험은 한 점, 신고는 61개" 를 글로 쓰지 않고 **그려** 놓았다.
+   온도 눈금 61개를 실제로 찍고, 시험한 자리 하나만 표시하고, 같은 값이
+   전 구간에 깔리는 것을 선으로 보인다. 글은 한 줄만 남겼다.                */
 'use strict';
 const A = require('./assets.js');
 const STEP = [['① 값 받아오기', A.xl1], ['② 온도별 계산', A.xl2],
               ['③ 차이 더하기', A.xl2blt], ['④ 프로파일 완성', A.xl3]];
+const T0 = -20, T1 = 40, PX0 = 214, PXW = 906;      // 온도축 픽셀
+const TX = t => PX0 + (t - T0) * (PXW / (T1 - T0));
+const SHOT = 25;                                     // 그림에 표시할 '시험한 온도'
+
 module.exports = (pptx, T, meta, D) => {
-  const { C, G } = T;
+  const { C, G, LW } = T;
   const { d } = T.shell(pptx, { sec: '추진 배경', idx: 1, step: 1 });
   T.title(d, '기존에는 이렇게 했습니다', null);
 
+  /* 위 — 파일 네 개를 순서대로 */
   const BW = 266, GAP = 24;
   STEP.forEach(([name, file], i) => {
     const x = G.L + i * (BW + GAP);
-    d.text(name, { x, y: 172, w: BW, px: 15, lh: 1.3, bold: true, color: C.brass,
+    d.text(name, { x, y: 168, w: BW, px: 14.5, lh: 1.3, bold: true, color: C.brass,
                    align: 'center' });
-    d.zone(x, 198, BW, 250);
-    d.imgFit(file, x + 10, 208, BW - 20, 230);
-    if (i < STEP.length - 1) d.arrow(x + BW + 2, 312);
+    d.zone(x, 192, BW, 196);
+    d.imgFit(file, x + 10, 200, BW - 20, 180);
+    if (i < STEP.length - 1) d.arrow(x + BW + 2, 282);
   });
 
-  /* 설명은 한 덩어리로 끝까지 쓴다. 문장 길이를 일부러 고르지 않게 둔다. */
-  d.text('시험은 하루에 한 번, 그날 날씨에서만 합니다. 그런데 신고는 영하 20도부터 40도까지 ' +
-         '61개 온도를 다 해야 합니다.\n' +
-         '해보지 않은 온도는 실제로 얼마가 나오는지 알 방법이 없었습니다. ' +
-         '그래서 시험한 날에 생긴 차이를 나머지 온도에도 똑같이 더해서 신고했습니다.',
-         { x: G.L, y: 476, w: 820, px: 16, lh: 1.72, lines: 4, color: C.body });
+  /* 아래 — 말로 설명하지 않고 그린다 */
+  d.zone(G.L, 404, G.W, 220);
+  d.plab('시험한 온도는 하루에 한 곳뿐입니다', 96, 416, 500);
 
-  d.rect(920, 480, 3, 96, C.rule);
-  d.text('엑셀 파일 4개', { x: 942, y: 484, w: 266, px: 15, lh: 1.4, color: C.dim });
-  d.text('손으로 옮기는 값 61개', { x: 942, y: 512, w: 266, px: 15, lh: 1.4, color: C.dim });
-  d.text('대기압 받는 파일 별도', { x: 942, y: 540, w: 266, px: 15, lh: 1.4, color: C.dim });
+  const BASE = 574, LINE = 496;
+  for (let t = T0; t <= T1; t++) {                   // 눈금 61개를 실제로 찍는다
+    const on = t === SHOT;
+    d.vline(TX(t), BASE - (on ? 16 : 7), on ? 16 : 7, on ? C.brass : C.rule, on ? 2 : 1);
+  }
+  d.hline(PX0 - 8, BASE, PXW + 16, C.rule, 1);
+  [T0, -10, 0, 10, 20, 30, T1].forEach(t => d.text((t > 0 ? '+' : '') + t,
+    { x: TX(t) - 24, y: BASE + 8, w: 48, px: 10.5, lh: 1.2, mono: true,
+      color: C.dim2, align: 'center' }));
+  d.text('℃', { x: TX(T1) + 26, y: BASE + 8, w: 24, px: 10.5, lh: 1.2, color: C.dim2 });
+
+  d.hline(PX0, LINE, PXW, C.slateL, LW.ref, 'dash');
+  d.dot(TX(SHOT), LINE, 7, C.brass);
+  d.vline(TX(SHOT), LINE + 8, BASE - LINE - 24, C.brass, 1, 'dash');
+  d.text('여기서 시험했습니다', { x: TX(SHOT) - 140, y: LINE - 30, w: 280, px: 14,
+                                  lh: 1.3, bold: true, color: C.brass, align: 'center' });
+  d.text('여기서 나온 차이를', { x: 96, y: LINE - 34, w: 240, px: 13.5, lh: 1.4,
+                                 color: C.dim });
+  d.text('61개 온도 전부에 똑같이 얹었습니다',
+         { x: 96, y: LINE + 6, w: 240, px: 13.5, lh: 1.4, lines: 2, color: C.slateL });
+  d.text('나머지 60개 온도는 시험해 보지 않았습니다',
+         { x: PX0, y: BASE + 30, w: PXW, px: 13, lh: 1.3, color: C.dim, align: 'center' });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
   T.foot(d, '그때는 이게 최선이었습니다.');
