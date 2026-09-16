@@ -5,7 +5,7 @@
 'use strict';
 module.exports = (pptx, T, meta, D) => {
   const { C, G, LW } = T;
-  const { d } = T.shell(pptx, { name: '향후 계획', idx: 8, step: 8 });
+  const { d } = T.shell(pptx, { name: '향후 계획', idx: 7, step: 7 });
   const L = D.learning, BK = L.blocks;
   T.title(d, '다른 발전소에도 쓰기', null, { px: 33 });
   T.lead(d, '시험은 계속합니다. 쌓이면 더 정확해집니다. 이미 그러고 있습니다.',
