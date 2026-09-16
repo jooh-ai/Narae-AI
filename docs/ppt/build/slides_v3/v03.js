@@ -24,24 +24,26 @@ const SHOT = 25;                                     // 그림에 표시할 '시
 module.exports = (pptx, T, meta, D) => {
   const { C, G, LW } = T;
   const { d } = T.shell(pptx, { sec: '추진 배경', idx: 1, step: 1 });
-  T.title(d, '기존에는 이렇게 했습니다', null);
+  T.title(d, '기존 방식', null);
+  T.lead(d, '엑셀 파일 네 개를 순서대로 돌려서 신고할 숫자를 만들었습니다.',
+         { y: 152, lines: 1 });
 
   /* 위 — 파일 네 개를 순서대로 */
   const BW = 266, GAP = 24;
   STEP.forEach(([name, file], i) => {
     const x = G.L + i * (BW + GAP);
-    d.text(name, { x, y: 168, w: BW, px: 14.5, lh: 1.3, bold: true, color: C.brass,
+    d.text(name, { x, y: 196, w: BW, px: 14.5, lh: 1.3, bold: true, color: C.brass,
                    align: 'center' });
-    d.zone(x, 192, BW, 196);
-    d.imgFit(file, x + 10, 200, BW - 20, 180);
-    if (i < STEP.length - 1) d.arrow(x + BW + 2, 282);
+    d.zone(x, 220, BW, 182);
+    d.imgFit(file, x + 10, 228, BW - 20, 166);
+    if (i < STEP.length - 1) d.arrow(x + BW + 2, 302);
   });
 
   /* 아래 — 말로 설명하지 않고 그린다 */
-  d.zone(G.L, 404, G.W, 220);
-  d.plab('시험한 온도는 하루에 한 곳뿐입니다', 96, 416, 500);
+  d.zone(G.L, 416, G.W, 208);
+  d.plab('시험 지점과 신고 범위', 96, 428, 300);
 
-  const BASE = 574, LINE = 496;
+  const BASE = 578, LINE = 504;
   for (let t = T0; t <= T1; t++) {                   // 눈금 61개를 실제로 찍는다
     const on = t === SHOT;
     d.vline(TX(t), BASE - (on ? 16 : 7), on ? 16 : 7, on ? C.brass : C.rule, on ? 2 : 1);
@@ -55,14 +57,12 @@ module.exports = (pptx, T, meta, D) => {
   d.hline(PX0, LINE, PXW, C.slateL, LW.ref, 'dash');
   d.dot(TX(SHOT), LINE, 7, C.brass);
   d.vline(TX(SHOT), LINE + 8, BASE - LINE - 24, C.brass, 1, 'dash');
-  d.text('여기서 시험했습니다', { x: TX(SHOT) - 140, y: LINE - 30, w: 280, px: 14,
-                                  lh: 1.3, bold: true, color: C.brass, align: 'center' });
-  d.text('여기서 나온 차이를', { x: 96, y: LINE - 34, w: 240, px: 13.5, lh: 1.4,
-                                 color: C.dim });
-  d.text('61개 온도 전부에 똑같이 얹었습니다',
-         { x: 96, y: LINE + 6, w: 240, px: 13.5, lh: 1.4, lines: 2, color: C.slateL });
-  d.text('나머지 60개 온도는 시험해 보지 않았습니다',
-         { x: PX0, y: BASE + 30, w: PXW, px: 13, lh: 1.3, color: C.dim, align: 'center' });
+  d.text('시험한 온도 1곳', { x: TX(SHOT) - 140, y: LINE - 30, w: 280, px: 14,
+                              lh: 1.3, bold: true, color: C.brass, align: 'center' });
+  d.text('신고 범위 61개 온도', { x: 96, y: LINE - 32, w: 240, px: 13.5, lh: 1.4,
+                                   bold: true, color: C.slateL });
+  d.text('시험한 한 곳의 차이를 나머지 온도에도 똑같이 더했습니다.',
+         { x: 96, y: LINE + 4, w: 240, px: 12.5, lh: 1.45, lines: 3, color: C.dim });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
   T.foot(d, '그때는 이게 최선이었습니다.');
