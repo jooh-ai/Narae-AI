@@ -1,49 +1,54 @@
-/* v3-09 · 시험이 쌓이면 스스로 갱신.
-   구획 둘. 갱신 순환(도구 화면 포함) / 잘못된 회차를 걸러내는 장치.
-   앞 장에서 "막힌 자리마다 검사를 심었다" 고 닫았으니, 그 검사들이 여기 모인다. */
+/* v3-10 · 정착과 수평 전개.
+   구획 둘. 쌓일수록 나아진다는 증거(학습 곡선) / 앞으로 할 일.
+   마지막 본문 장이므로 여기서 미래를 말한다. 과장하지 않고 이미 그러고 있다는
+   것만 보인다.                                                            */
 'use strict';
-const A = require('./assets.js');
-const STEP = ['시험을 한다', '날짜와 시각을 넣는다', '곡선이 다시 배운다',
-              '다음 숫자에 쓰인다'];
 module.exports = (pptx, T, meta, D) => {
-  const { C, G } = T;
-  const { d } = T.shell(pptx, { name: '유지 관리', idx: 7, step: 7 });
-  T.title(d, '시험이 쌓이면 스스로 갱신', null, { px: 33 });
-  T.lead(d, '사람이 다시 계산하지 않습니다. 시험 결과를 넣으면 도구가 스스로 다시 배웁니다.',
+  const { C, G, LW } = T;
+  const { d } = T.shell(pptx, { name: '향후 계획', idx: 8, step: 8 });
+  const L = D.learning, BK = L.blocks;
+  T.title(d, '다른 발전소에도 쓰기', null, { px: 33 });
+  T.lead(d, '시험은 계속합니다. 쌓이면 더 정확해집니다. 이미 그러고 있습니다.',
          { y: 146, lines: 1 });
 
-  /* 구획 1 — 순환 */
-  d.section(G.L, 186, G.W, 108, 1, '한 회차가 도는 순서', '날짜와 시각만 입력');
-  STEP.forEach((s, i) => {
-    const x = 96 + i * 282;
-    d.text(String(i + 1), { x, y: 232, w: 24, px: 15, lh: 1.2, mono: true, bold: true,
-                            color: C.brass });
-    d.text(s, { x: x + 28, y: 230, w: 206, px: 14.5, lh: 1.3, color: C.ink });
-    if (i < 3) d.arrow(x + 240, 230);
+  /* 구획 1 — 학습 곡선 */
+  d.section(G.L, 186, 700, 438, 1, '쌓일수록 나아지고 있습니다',
+            '시험 순서대로 앞부터 배워 뒤를 맞혀 본 결과');
+  const hi = Math.max(...BK.map(b => b.mae)) * 1.15;
+  const BW2 = 128, X0 = 140;
+  const BH = v => Math.round(v / hi * 220);
+  BK.forEach((b, i) => {
+    const x = X0 + i * (BW2 + 38), h = BH(b.mae);
+    const y = 520 - h;
+    d.rect(x, y, BW2, h, i === 0 ? C.slate : C.brass);
+    d.text(b.mae.toFixed(2), { x, y: y - 24, w: BW2, px: 17, lh: 1.2, mono: true,
+                               bold: true, color: i === 0 ? C.slateL : C.brass,
+                               align: 'center' });
+    d.text(b.from + ' ~ ' + b.to + '회', { x, y: 530, w: BW2, px: 12, lh: 1.3,
+                                            color: C.dim, align: 'center' });
   });
+  d.hline(X0 - 20, 520, 660, C.rule, 1);
+  d.text('틀리는 폭  MW', { x: 92, y: 300, w: 46, px: 10.5, lh: 1.3, lines: 2,
+                             color: C.dim2, align: 'right' });
+  d.text('시험이 늘어난 것 말고 바뀐 것은 없습니다.',
+         { x: 92, y: 560, w: 660, px: 13, lh: 1.5, lines: 2, color: C.body });
+  d.text('마지막 구간이 조금 올라간 것은 겨울 시험이 적게 섞인 탓입니다. 있는 대로 적었습니다.',
+         { x: 92, y: 598, w: 660, px: 11.5, lh: 1.3, color: C.dim2 });
 
-  /* 구획 2 — 도구 화면 */
-  d.section(G.L, 306, 700, 318, 2, '도구 화면', '시험 ' + D.n + '회가 쌓인 상태');
-  d.imgFit(A.toolWin, 92, 344, 660, 232);
-  d.text('날짜와 시각을 넣고 실행하면 61개 온도의 숫자가 한 번에 나옵니다.',
-         { x: 92, y: 586, w: 660, px: 12, lh: 1.3, color: C.dim2 });
-
-  /* 구획 3 — 걸러내는 장치 */
-  d.section(788, 306, 420, 318, 3, '잘못된 회차를 걸러냅니다', '');
-  [['공기를 더 넣지 않고 한 시험', '아예 쓰지 않습니다',
-    '결론을 뒤집게 만든 그 시험입니다.'],
-   ['시험한 범위를 벗어난 온도', '끝값을 그대로 씁니다',
-    '배우지 않은 구간은 늘려 쓰지 않습니다.'],
-   ['일부 회차만 골라 만든 관계', '검사가 걸러냅니다',
-    '진공도에서 세 번 걸렸던 착각입니다.']]
-    .forEach(([k, v, why], i) => {
-      const y = 348 + i * 88;
-      d.rect(808, y + 2, 4, 62, C.red);
-      d.text(k, { x: 828, y, w: 360, px: 13, lh: 1.3, lines: 1, color: C.dim });
-      d.text(v, { x: 828, y: y + 22, w: 360, px: 15, lh: 1.3, bold: true, color: C.brass });
-      d.text(why, { x: 828, y: y + 46, w: 360, px: 11.5, lh: 1.35, lines: 2, color: C.dim2 });
+  /* 구획 2 — 앞으로 */
+  d.section(788, 186, 420, 438, 2, '앞으로 할 일', '');
+  [['지금', '위례에 정착', '2주마다 시험하고 결과를 도구에 넣습니다.'],
+   ['다음', '같은 구조 발전소로', '계산식을 손대지 않았으니 그대로 옮길 수 있습니다.'],
+   ['그다음', '절차로 굳히기', '시험 결과를 넣고 숫자를 내는 순서를 사업소 표준으로 정리합니다.']]
+    .forEach(([when, what, why], i) => {
+      const y = 232 + i * 128;
+      d.text(when, { x: 808, y, w: 90, px: 11.5, lh: 1.2, mono: true, bold: true,
+                     color: C.brass, cs: 1.2 });
+      d.text(what, { x: 808, y: y + 20, w: 380, px: 18, lh: 1.3, bold: true, color: C.ink });
+      d.text(why, { x: 808, y: y + 48, w: 380, px: 12.5, lh: 1.5, lines: 3, color: C.dim });
+      if (i < 2) d.hline(808, y + 108, 380, C.rule2, 1);
     });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '사람이 놓칠 수 있는 자리를 도구가 대신 봅니다.');
+  T.foot(d, '한 번 만들고 끝나는 도구가 아닙니다. 쓸수록 나아집니다.');
 };

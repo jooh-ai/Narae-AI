@@ -1,75 +1,73 @@
-/* v3-03 · 우리가 하는 일 — 전제를 설명하는 장 (2026-09-16 신규).
+/* v3-03 · 개요 및 추진 배경.
+   구획 셋. 우리가 하는 일(전제) / 이 과제를 고른 이유 / 기존 절차.
 
-   자체 검토에서 가장 크게 걸린 것이 이것이었다. **전제를 아무 데서도 설명하지
-   않았다.** 발전소가 전기를 팔기 전에 "얼마나 낼 수 있다" 를 미리 알려야 한다는
-   것, 그 숫자가 틀리면 손해가 난다는 것, 낼 수 있는 양이 날씨에 따라 달라진다는
-   것. 이 셋을 모르면 뒤의 모든 장이 소용없다.
-
-   그림으로만 설명한다. 글은 칸 이름과 한 줄씩. 목차 항목이 없는 장이므로
-   오른쪽 위 눈금도 띄우지 않는다.                                          */
+   2026-09-17 회신이 이 장을 만들었다. 우리 둘은 정비기술팀이고 공급가능용량
+   테스트는 발전운영팀 일이다. 남의 팀 업무인데 왜 골랐느냐 — 이 질문에 대한
+   답이 곧 '과제 필요성' 이고, 심사 배점에서 문제정의(20점)의 평가내용이다.
+   그래서 배경 장의 가운데에 세웠다.                                        */
 'use strict';
+const A = require('./assets.js');
 module.exports = (pptx, T, meta, D) => {
   const { C, G, LW } = T;
-  const { d } = T.shell(pptx, { sec: '들어가기 전에' });
-  T.title(d, '우리가 하는 일', null, { px: 34 });
-  T.lead(d, '발전소는 전기를 만들어 팝니다. 팔기 전에 얼마나 낼 수 있는지 미리 알려야 합니다.',
-         { y: 150, lines: 1 });
+  const { d } = T.shell(pptx, { name: '추진 배경', idx: 1, step: 1 });
+  T.title(d, '이 과제를 시작한 이유', null, { px: 33 });
+  T.lead(d, '발전소는 전기를 팔기 전에 얼마나 낼 수 있는지 미리 알려야 합니다. 그 숫자를 만드는 일입니다.',
+         { y: 146, lines: 1 });
 
-  /* 구획 1 — 파는 순서 */
-  d.section(G.L, 192, G.W, 112, 1, '전기를 파는 순서', '');
-  [['전기를 만든다', '가스와 증기로 돌립니다.'],
-   ['얼마나 낼 수 있는지 알린다', '하루 전에 알립니다.'],
-   ['그 숫자로 팔린다', '알린 만큼만 팔립니다.'],
-   ['그만큼 실제로 낸다', '못 내면 벌칙이 있습니다.']]
-    .forEach(([k, v], i) => {
-      const x = 96 + i * 282;
-      d.text(String(i + 1), { x, y: 236, w: 22, px: 15, lh: 1.2, mono: true, bold: true,
-                              color: C.brass });
-      d.text(k, { x: x + 26, y: 234, w: 214, px: 14.5, lh: 1.3, bold: true, color: C.ink });
-      d.text(v, { x: x + 26, y: 258, w: 214, px: 12, lh: 1.3, color: C.dim });
-      if (i < 3) d.arrow(x + 246, 240);
-    });
-
-  /* 구획 2 — 날씨에 따라 달라진다 */
-  d.section(G.L, 316, 556, 308, 2, '어려운 점 하나', '날씨에 따라 달라집니다');
+  /* 구획 1 — 전제. 온도에 따라 달라지고, 틀리면 손해다. */
+  d.section(G.L, 186, G.W, 148, 1, '미리 알리는 숫자', '온도마다 다릅니다');
   const R = D.profile.rows.filter(r => r.t >= -10 && r.t <= 40);
-  const vs = R.map(r => r.theory);
-  const lo = Math.min(...vs), hi = Math.max(...vs);
-  const X = t => 140 + (t + 10) * 8.9, Y = v => 520 - (v - lo) / (hi - lo) * 124;
-  d.hline(132, 528, 480, C.rule, 1);
-  d.vline(132, 380, 148, C.rule, 1);
+  const vs = R.map(r => r.theory), lo = Math.min(...vs), hi = Math.max(...vs);
+  const X = t => 116 + (t + 10) * 6.4, Y = v => 316 - (v - lo) / (hi - lo) * 76;
+  d.hline(110, 320, 340, C.rule, 1);
   for (let i = 0; i < R.length - 1; i++)
     d.seg(X(R[i].t), Y(R[i].theory), X(R[i + 1].t), Y(R[i + 1].theory), C.brass, LW.main);
-  d.text('많이', { x: 84, y: Y(hi) - 8, w: 44, px: 11.5, lh: 1.2, color: C.dim2,
+  d.text('추우면 많이', { x: 110, y: 228, w: 120, px: 12, lh: 1.2, color: C.dim2 });
+  d.text('더우면 적게', { x: 350, y: 296, w: 106, px: 12, lh: 1.2, color: C.dim2,
+                           align: 'right' });
+  d.text('추울 때와 더울 때 낼 수 있는 양이 다릅니다.',
+         { x: 490, y: 226, w: 340, px: 14, lh: 1.45, lines: 2, color: C.body });
+  d.text('그래서 영하 20도부터 40도까지 61개 온도의 숫자를 따로 냅니다.',
+         { x: 490, y: 270, w: 340, px: 12.5, lh: 1.4, lines: 2, color: C.dim });
+  d.vline(862, 222, 96, C.rule2, 1);
+  d.text('알린 숫자가 어긋나면', { x: 890, y: 224, w: 300, px: 12, lh: 1.2, color: C.dim2 });
+  d.text('많이 알리고 못 내면', { x: 890, y: 248, w: 190, px: 13, lh: 1.3, color: C.body });
+  d.text('벌칙', { x: 1086, y: 246, w: 100, px: 14, lh: 1.3, bold: true, color: C.red,
                     align: 'right' });
-  d.text('적게', { x: 84, y: Y(lo) - 8, w: 44, px: 11.5, lh: 1.2, color: C.dim2,
-                    align: 'right' });
-  d.text('추울 때', { x: 132, y: 534, w: 90, px: 12, lh: 1.2, color: C.dim });
-  d.text('더울 때', { x: 520, y: 534, w: 90, px: 12, lh: 1.2, color: C.dim,
-                       align: 'right' });
-  d.dot(X(-8), Y(R[1].theory), 6, C.brass);
-  d.dot(X(38), Y(R[R.length - 2].theory), 6, C.brass);
-  d.text('추우면 많이 나옵니다. 더우면 적게 나옵니다.',
-         { x: 92, y: 360, w: 516, px: 15.5, lh: 1.4, color: C.body });
-  d.text('그래서 온도마다 숫자가 다릅니다.',
-         { x: 92, y: 562, w: 516, px: 13, lh: 1.4, color: C.dim });
+  d.text('적게 알리면', { x: 890, y: 278, w: 146, px: 13, lh: 1.3, color: C.body });
+  d.text('팔 기회를 놓침', { x: 1046, y: 276, w: 140, px: 14, lh: 1.3, bold: true,
+                              color: C.slateL, align: 'right' });
 
-  /* 구획 3 — 틀리면 손해 */
-  d.section(644, 316, 564, 308, 3, '어려운 점 둘', '틀리면 손해가 납니다');
-  d.text('알린 숫자가 실제와 어긋나면 손해가 납니다.',
-         { x: 664, y: 360, w: 524, px: 15.5, lh: 1.4, color: C.body });
-  [[C.red, '많이 알렸는데 못 냈다', '벌칙을 받습니다.'],
-   [C.slateL, '적게 알렸는데 더 낼 수 있었다', '팔 기회를 놓칩니다.']]
-    .forEach(([col, k, v], i) => {
-      const y = 406 + i * 104;
-      d.box(664, y, 524, 84, null, col, 1.4);
-      d.rect(664, y, 5, 84, col);
-      d.text(k, { x: 686, y: y + 16, w: 486, px: 17, lh: 1.3, bold: true, color: C.ink });
-      d.text(v, { x: 686, y: y + 46, w: 486, px: 13, lh: 1.3, color: C.dim });
+  /* 구획 2 — 우리 팀 일이 아닌데 왜 골랐나 */
+  d.section(G.L, 346, 556, 278, 2, '왜 우리가 이 과제를 골랐나', '정비기술팀');
+  d.text('공급가능용량 테스트는 발전운영팀 업무입니다.',
+         { x: 92, y: 388, w: 516, px: 15, lh: 1.4, bold: true, color: C.ink });
+  d.text('우리는 정비기술팀입니다. 절차도 원리도 몰랐습니다.',
+         { x: 92, y: 414, w: 516, px: 13.5, lh: 1.4, color: C.dim });
+  [['눈에 먼저 보였다', '엑셀 네 개를 오가는 일이 번거로워 보였습니다.'],
+   ['수익으로 이어진다', '숫자가 정확해지면 그만큼 손해가 줄어듭니다.']]
+    .forEach(([k, v], i) => {
+      const y = 458 + i * 62;
+      d.rect(92, y + 2, 4, 44, C.brass);
+      d.text(k, { x: 112, y, w: 496, px: 15.5, lh: 1.3, bold: true, color: C.brass });
+      d.text(v, { x: 112, y: y + 24, w: 496, px: 13, lh: 1.35, color: C.body });
     });
-  d.text('그래서 이 숫자를 잘 맞혀야 합니다.',
-         { x: 664, y: 600, w: 524, px: 13, lh: 1.3, color: C.dim2 });
+  d.text('그래서 우리 팀 일이 아닌데도 과제로 잡았습니다.',
+         { x: 92, y: 594, w: 516, px: 12.5, lh: 1.3, color: C.dim2 });
+
+  /* 구획 3 — 기존 절차 */
+  d.section(644, 346, 564, 278, 3, '기존에 숫자를 만든 순서', '엑셀 파일 4개 · 한 회에 1시간');
+  const STEP = [['① 계측값 받아오기', A.xl1], ['② 온도별로 계산', A.xl2],
+                ['③ 차이를 더하기', A.xl2blt], ['④ 표 완성', A.xl3]];
+  STEP.forEach(([name, file], i) => {
+    const x = 664 + (i % 2) * 272, y = 388 + Math.floor(i / 2) * 118;
+    d.text(name, { x, y, w: 250, px: 12.5, lh: 1.25, bold: true, color: C.brass });
+    d.box(x, y + 20, 250, 74, null, C.rule2, 1);
+    d.imgFit(file, x + 5, y + 24, 240, 66);
+  });
+  d.text('값은 손으로 옮겼습니다. 옮겨 적는 값이 61개였습니다.',
+         { x: 664, y: 606, w: 524, px: 12, lh: 1.3, color: C.dim2 });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '이 숫자를 만드는 일을 바꿨습니다.');
+  T.foot(d, '모르는 업무였지만 비효율이 먼저 보였습니다. 거기서 시작했습니다.');
 };

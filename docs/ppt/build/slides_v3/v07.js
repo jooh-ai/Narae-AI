@@ -1,72 +1,53 @@
-/* v3-07 · 바꾼 것 두 가지.
-
-   2026-09-16 회신이 이 장을 다시 쓰게 했다.
-     "내가 이 Tool을 개발한 이유는 단순해. 여러가지로 반복되는 과정을 합치고,
-      결과의 정확도를 높인다. 하지만 이 단순한 내용을 PPT는 어렵게 풀어내."
-
-   맞는 말이었다. 이 장이 '정확도' 이야기만 하고 있었다. 만든 이유가 둘인데
-   하나만 적어 놓았으니 읽는 사람은 왜 만들었는지 절반만 알게 된다.
-   그래서 구획 1 을 **두 기둥**으로 다시 세웠다. 합친 것과 정확해진 것.       */
+/* v3-09 · 시험이 쌓이면 스스로 갱신.
+   구획 둘. 갱신 순환(도구 화면 포함) / 잘못된 회차를 걸러내는 장치.
+   앞 장에서 "막힌 자리마다 검사를 심었다" 고 닫았으니, 그 검사들이 여기 모인다. */
 'use strict';
 const A = require('./assets.js');
+const STEP = ['시험을 한다', '날짜와 시각을 넣는다', '곡선이 다시 배운다',
+              '다음 숫자에 쓰인다'];
 module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
-  const M = D.methods;
-  const { d } = T.shell(pptx, { name: '개선 방안', idx: 4, step: 4 });
-  T.title(d, '바꾼 것 두 가지', null, { px: 33 });
-  T.lead(d, '하나는 흩어진 과정을 합친 것입니다. 다른 하나는 숫자를 온도마다 다르게 한 것입니다.',
+  const { d } = T.shell(pptx, { name: '모니터링', idx: 5, step: 5 });
+  T.title(d, '실제로 쓰면서 확인했습니다', null, { px: 33 });
+  T.lead(d, '넉 달 동안 기존 방식과 나란히 돌렸습니다. 예측을 먼저 적고 실제와 대조했습니다.',
          { y: 146, lines: 1 });
 
-  /* 구획 1 — 두 기둥 */
-  d.section(G.L, 186, 400, 232, 1, '무엇을 바꿨나', '');
-  [['흩어진 과정을 합쳤다', '엑셀 4개', '도구 1개'],
-   ['숫자를 온도마다 다르게', '값 1개', '온도별 곡선']].forEach(([k, a, b], i) => {
-    const y = 226 + i * 88;
-    d.rect(92, y, 4, 62, C.brass);
-    d.text(String(i + 1), { x: 108, y, w: 20, px: 13, lh: 1.2, mono: true, bold: true,
+  /* 구획 1 — 순환 */
+  d.section(G.L, 186, G.W, 108, 1, '한 회차가 도는 순서', '날짜와 시각만 입력');
+  STEP.forEach((s, i) => {
+    const x = 96 + i * 282;
+    d.text(String(i + 1), { x, y: 232, w: 24, px: 15, lh: 1.2, mono: true, bold: true,
                             color: C.brass });
-    d.text(k, { x: 132, y: y - 2, w: 306, px: 17.5, lh: 1.3, bold: true, color: C.ink });
-    const aw = Math.ceil(T.textW(a, 15)) + 4;
-    d.text(a, { x: 132, y: y + 30, w: aw, px: 15, lh: 1.25, color: C.slateL });
-    d.text('→', { x: 132 + aw + 8, y: y + 32, w: 22, px: 13, lh: 1.2, color: C.dim2 });
-    d.text(b, { x: 132 + aw + 34, y: y + 28, w: 452 - (132 + aw + 34), px: 17, lh: 1.25, bold: true,
-                color: C.brass });
+    d.text(s, { x: x + 28, y: 230, w: 206, px: 14.5, lh: 1.3, color: C.ink });
+    if (i < 3) d.arrow(x + 240, 230);
   });
-  d.text('제작사 계산식은 손대지 않았습니다.',
-         { x: 92, y: 392, w: 360, px: 13, lh: 1.3, color: C.dim });
 
-  /* 구획 2 — 도구가 실제로 그려 주는 화면 */
-  d.section(488, 186, 720, 232, 2, '도구가 그려 주는 화면', '주황이 배운 값, 흰 점이 시험 결과');
-  d.imgFit(A.toolGap, 500, 222, 696, 162);
-  d.text('온도마다 더할 값이 다릅니다.',
-         { x: 500, y: 392, w: 696, px: 13, lh: 1.3, color: C.dim });
+  /* 구획 2 — 도구 화면 */
+  d.section(G.L, 306, 700, 318, 2, '도구 화면', '시험 ' + D.n + '회가 쌓인 상태');
+  d.imgFit(A.toolWin, 92, 340, 660, 200);
+  const CM = D.commission;
+  d.hline(92, 552, 660, C.rule2, 1);
+  d.text('병행운전', { x: 92, y: 564, w: 90, px: 12, lh: 1.2, bold: true, color: C.brass });
+  d.text(CM.from + ' ~ ' + CM.to + ' 에 ' + CM.n + '회. 예측을 먼저 적고 실제와 대조했습니다. ' +
+         '평균 어긋난 폭은 ' + CM.mae.toFixed(2) + ' MW 였습니다.',
+         { x: 182, y: 564, w: 570, px: 12, lh: 1.35, lines: 2, color: C.body });
 
-  /* 구획 3 — 겪은 일 */
-  d.section(G.L, 430, G.W, 194, 3, '겪은 일 · 어떤 방법을 써야 하는지 몰랐다', '후보 7가지');
-  d.text('이런 예측을 해 본 적이 없었습니다. 그래서 후보 일곱 가지를 늘어놓고 ' +
-         '같은 데이터로 겨루게 했습니다.\n한 회를 가리고 나머지로 그 회를 맞혀 봅니다. ' +
-         '사람이 아니라 성적이 골랐습니다.',
-         { x: 92, y: 472, w: 470, px: 13.5, lh: 1.6, lines: 4, color: C.body });
-
-  const lo = Math.floor(Math.min(...M.map(m => m.mae)) * 10) / 10 - 0.1;
-  const hi = Math.max(...M.map(m => m.mae));
-  const BX = v => 700 + (v - lo) / (hi - lo) * 330;
-  const NAME = { 'gp:rbf': 'RBF', 'gp:rq': 'RQ', 'gp:matern52': 'Matern 5/2',
-                 'gp:matern32': 'Matern 3/2', 'gp:exp': '지수',
-                 'curve': '거리가중', 'bin': '구간평균' };
-  M.forEach((m, i) => {
-    const y = 468 + i * 21, win = i === 0;
-    d.text(NAME[m.key] || m.key, { x: 574, y, w: 122, px: 11.5, lh: 1.2, bold: win,
-                                   color: win ? C.brass : C.dim2, align: 'right' });
-    d.rect(700, y + 2, Math.max(BX(m.mae) - 700, 4), 10, win ? C.brass : C.steel);
-    d.text(m.mae.toFixed(2), { x: BX(m.mae) + 8, y, w: 52, px: 11, lh: 1.2, mono: true,
-                               bold: win, color: win ? C.brass : C.dim });
-    if (win) d.text('← 이것을 씁니다', { x: 1050, y, w: 158, px: 11.5, lh: 1.2,
-                                          bold: true, color: C.brass });
-  });
-  d.text('막대가 짧을수록 잘 맞힌 것입니다. 단위 MW.',
-         { x: 574, y: 616, w: 440, px: 11, lh: 1.2, color: C.dim2 });
+  /* 구획 3 — 걸러내는 장치 */
+  d.section(788, 306, 420, 318, 3, '잘못된 회차를 걸러냅니다', '');
+  [['공기를 더 넣지 않고 한 시험', '아예 쓰지 않습니다',
+    '결론을 뒤집게 만든 그 시험입니다.'],
+   ['시험한 범위를 벗어난 온도', '끝값을 그대로 씁니다',
+    '배우지 않은 구간은 늘려 쓰지 않습니다.'],
+   ['일부 회차만 골라 만든 관계', '검사가 걸러냅니다',
+    '진공도에서 세 번 걸렸던 착각입니다.']]
+    .forEach(([k, v, why], i) => {
+      const y = 348 + i * 88;
+      d.rect(808, y + 2, 4, 62, C.red);
+      d.text(k, { x: 828, y, w: 360, px: 13, lh: 1.3, lines: 1, color: C.dim });
+      d.text(v, { x: 828, y: y + 22, w: 360, px: 15, lh: 1.3, bold: true, color: C.brass });
+      d.text(why, { x: 828, y: y + 46, w: 360, px: 11.5, lh: 1.35, lines: 2, color: C.dim2 });
+    });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '계산식을 그대로 두었으니 다른 발전소에도 옮겨 쓸 수 있습니다.');
+  T.foot(d, '책상에서만 맞춘 것이 아니라 현장에서 넉 달을 같이 돌려 봤습니다.');
 };

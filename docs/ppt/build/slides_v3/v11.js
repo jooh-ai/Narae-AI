@@ -1,54 +1,79 @@
-/* v3-10 · 정착과 수평 전개.
-   구획 둘. 쌓일수록 나아진다는 증거(학습 곡선) / 앞으로 할 일.
-   마지막 본문 장이므로 여기서 미래를 말한다. 과장하지 않고 이미 그러고 있다는
-   것만 보인다.                                                            */
+/* v3-11 · 넘어온 과정과 협업 — 가점 대응 장 (+10점).
+   구획 셋이 가점 항목 셋과 짝이다.
+     1 모르는 업무에서 시작했다   →  학습·도전 및 성장성 (+3)
+     2 막혔던 것과 푼 방법        →  프로젝트 스토리 완성도 (+4)
+     3 역할을 어떻게 나눴나        →  협업 및 역할분담 (+3)
+
+   7단계 구성을 흩뜨리지 않으려고 향후계획 뒤에 두었다. 발표에서도 마지막에
+   "여기까지 오는 동안" 으로 얹는다.
+
+   구획 3 은 2026-09-17 회신에서 그대로 받아 적었다.                       */
 'use strict';
+const A = require('./assets.js');
 module.exports = (pptx, T, meta, D) => {
-  const { C, G, LW } = T;
-  const { d } = T.shell(pptx, { name: '향후 계획', idx: 8, step: 8 });
-  const L = D.learning, BK = L.blocks;
-  T.title(d, '다른 발전소에도 쓰기', null, { px: 33 });
-  T.lead(d, '시험은 계속합니다. 쌓이면 더 정확해집니다. 이미 그러고 있습니다.',
+  const { C, G } = T;
+  const { d } = T.shell(pptx, { sec: '여기까지 오는 동안' });
+  T.title(d, '넘어온 과정', null, { px: 33 });
+  T.lead(d, '해 본 적 없는 일이었습니다. 모르는 업무에서 시작했고 막히는 데가 많았습니다.',
          { y: 146, lines: 1 });
 
-  /* 구획 1 — 학습 곡선 */
-  d.section(G.L, 186, 700, 438, 1, '쌓일수록 나아지고 있습니다',
-            '시험 순서대로 앞부터 배워 뒤를 맞혀 본 결과');
-  const hi = Math.max(...BK.map(b => b.mae)) * 1.15;
-  const BW2 = 128, X0 = 140;
-  const BH = v => Math.round(v / hi * 220);
-  BK.forEach((b, i) => {
-    const x = X0 + i * (BW2 + 38), h = BH(b.mae);
-    const y = 520 - h;
-    d.rect(x, y, BW2, h, i === 0 ? C.slate : C.brass);
-    d.text(b.mae.toFixed(2), { x, y: y - 24, w: BW2, px: 17, lh: 1.2, mono: true,
-                               bold: true, color: i === 0 ? C.slateL : C.brass,
-                               align: 'center' });
-    d.text(b.from + ' ~ ' + b.to + '회', { x, y: 530, w: BW2, px: 12, lh: 1.3,
-                                            color: C.dim, align: 'center' });
-  });
-  d.hline(X0 - 20, 520, 660, C.rule, 1);
-  d.text('틀리는 폭  MW', { x: 92, y: 300, w: 46, px: 10.5, lh: 1.3, lines: 2,
-                             color: C.dim2, align: 'right' });
-  d.text('시험이 늘어난 것 말고 바뀐 것은 없습니다.',
-         { x: 92, y: 560, w: 660, px: 13, lh: 1.5, lines: 2, color: C.body });
-  d.text('마지막 구간이 조금 올라간 것은 겨울 시험이 적게 섞인 탓입니다. 있는 대로 적었습니다.',
-         { x: 92, y: 598, w: 660, px: 11.5, lh: 1.3, color: C.dim2 });
-
-  /* 구획 2 — 앞으로 */
-  d.section(788, 186, 420, 438, 2, '앞으로 할 일', '');
-  [['지금', '위례에 정착', '2주마다 시험하고 결과를 도구에 넣습니다.'],
-   ['다음', '같은 구조 발전소로', '계산식을 손대지 않았으니 그대로 옮길 수 있습니다.'],
-   ['그다음', '절차로 굳히기', '시험 결과를 넣고 숫자를 내는 순서를 사업소 표준으로 정리합니다.']]
-    .forEach(([when, what, why], i) => {
-      const y = 232 + i * 128;
-      d.text(when, { x: 808, y, w: 90, px: 11.5, lh: 1.2, mono: true, bold: true,
-                     color: C.brass, cs: 1.2 });
-      d.text(what, { x: 808, y: y + 20, w: 380, px: 18, lh: 1.3, bold: true, color: C.ink });
-      d.text(why, { x: 808, y: y + 48, w: 380, px: 12.5, lh: 1.5, lines: 3, color: C.dim });
-      if (i < 2) d.hline(808, y + 108, 380, C.rule2, 1);
+  /* 구획 1 — 모르는 업무에서 시작했다 */
+  d.section(G.L, 182, G.W, 150, 1, '모르는 업무에서 시작했다', '정비기술팀');
+  d.text('공급가능용량 테스트는 발전운영팀 업무입니다. 우리는 정비기술팀이고, ' +
+         '절차도 원리도 몰랐습니다. 처음에는 사전 지식을 쌓는 것부터 힘들었습니다.',
+         { x: 92, y: 224, w: 520, px: 13.5, lh: 1.55, lines: 3, color: C.body });
+  d.vline(646, 220, 92, C.rule2, 1);
+  [['모여서 공부했다', '둘이 앉아 절차부터 뜯어 봤습니다.'],
+   ['담당자에게 물었다', '모르는 것은 발전운영팀에 자문을 구했습니다.'],
+   ['직접 해 봤다', '테스트 절차를 우리가 직접 해 보며 배웠습니다.']]
+    .forEach(([k, v], i) => {
+      const y = 222 + i * 32;
+      d.text(String(i + 1), { x: 676, y: y + 2, w: 18, px: 12, lh: 1.2, mono: true,
+                              bold: true, color: C.brass });
+      d.text(k, { x: 700, y, w: 170, px: 14, lh: 1.3, bold: true, color: C.ink });
+      d.text(v, { x: 880, y: y + 2, w: 308, px: 12, lh: 1.3, color: C.dim });
     });
 
+  /* 구획 2 — 막혔던 것과 푼 방법 */
+  d.section(G.L, 344, 700, 280, 2, '막혔던 것과 푼 방법', '');
+  [['사내 시스템에서 값을 어떻게 받아오나',
+    '기존 엑셀에 붙어 있던 기능을 뜯어 봤습니다. 같은 방식으로 받아오게 했습니다.',
+    '값을 자동으로 받습니다'],
+   ['시험이 적어서 곡선을 믿을 수 있나',
+    '한 회를 가리고 나머지로 맞혀 보게 했습니다. 이 검사를 도구에 넣었습니다.',
+    '쌓일 때마다 다시 검사합니다'],
+   ['우리가 만든 계산이 맞는지',
+    '기존 엑셀과 답이 같은지 하나씩 맞춰 봤습니다. 여섯 군데를 고쳤습니다.',
+    '엑셀과 같은 답을 냅니다']]
+    .forEach(([q, did, got], i) => {
+      const y = 388 + i * 78;
+      d.text(q, { x: 92, y, w: 430, px: 14, lh: 1.3, bold: true, color: C.ink });
+      d.text(did, { x: 92, y: y + 22, w: 430, px: 12, lh: 1.35, lines: 2, color: C.dim });
+      d.rect(536, y + 2, 4, 34, C.brass);
+      d.text(got, { x: 552, y: y + 4, w: 216, px: 13, lh: 1.3, lines: 2, bold: true,
+                    color: C.brass });
+      if (i < 2) d.hline(92, y + 64, 680, C.rule2, 1);
+    });
+
+  /* 구획 3 — 역할. 회신 내용을 그대로 적었다. */
+  d.section(788, 344, 420, 280, 3, '역할을 어떻게 나눴나', '두 사람');
+  [[meta.authors[1], '데이터 취합과 분석', C.slateL,
+    '시험 결과를 모아 정리하고, 병행운전 데이터를 분석했습니다. ' +
+    '문제점과 개선사항을 찾아 넘겼습니다.'],
+   [meta.authors[0], '도구 개발과 반영', C.brass,
+    '받은 문제점과 개선사항을 도구에 고쳐 넣었습니다. ' +
+    '시운전에서 드러난 것도 그때그때 반영했습니다.']]
+    .forEach(([who, what, col, how], i) => {
+      const y = 388 + i * 116;
+      d.box(808, y, 380, 96, null, col, 1.4);
+      d.rect(808, y, 5, 96, col);
+      d.text(who, { x: 828, y: y + 12, w: 150, px: 17, lh: 1.3, bold: true, color: C.ink });
+      d.text(what, { x: 828, y: y + 36, w: 340, px: 12.5, lh: 1.2, bold: true, color: col });
+      d.text(how, { x: 828, y: y + 56, w: 340, px: 11.5, lh: 1.35, lines: 2, color: C.dim });
+    });
+  d.text('찾으면 넘기고, 고치면 다시 확인했습니다. 이 왕복을 넉 달 돌렸습니다.',
+         { x: 808, y: 596, w: 380, px: 12, lh: 1.35, lines: 2, color: C.dim2 });
+
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '한 번 만들고 끝나는 도구가 아닙니다. 쓸수록 나아집니다.');
+  T.foot(d, '막힌 자리마다 도구에 검사를 하나씩 심어 두었습니다.');
 };

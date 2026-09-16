@@ -1,66 +1,76 @@
-/* v3-05 · 차이가 생기는 원인.
-   구획 셋. 후보 넷을 놓고 하나만 남긴 과정 / 진공도를 세 번 접은 이야기 /
-   결론을 한 번 철회한 이야기.
+/* v3-07 · 바꾼 것 두 가지.
 
-   통계 용어는 쓰지 않는다. 표 대신 후보 상자 넷을 놓고 셋에 가로줄을 긋는다.
-   "무엇을 넣어 봤고 무엇이 남았나" 만 보이면 된다. 숫자는 마지막 한 줄에만.  */
+   2026-09-16 회신이 이 장을 다시 쓰게 했다.
+     "내가 이 Tool을 개발한 이유는 단순해. 여러가지로 반복되는 과정을 합치고,
+      결과의 정확도를 높인다. 하지만 이 단순한 내용을 PPT는 어렵게 풀어내."
+
+   맞는 말이었다. 이 장이 '정확도' 이야기만 하고 있었다. 만든 이유가 둘인데
+   하나만 적어 놓았으니 읽는 사람은 왜 만들었는지 절반만 알게 된다.
+   그래서 구획 1 을 **두 기둥**으로 다시 세웠다. 합친 것과 정확해진 것.       */
 'use strict';
-const CAND = [
-  ['외기 온도', true,  '이것만 보면 됐습니다.'],
-  ['복수기 진공도', false, '온도를 빼면 남는 게 없었습니다.'],
-  ['대기압', false, '계산식이 이미 쓰고 있었습니다.'],
-  ['상대 습도', false, '넣어도 나아지지 않았습니다.'],
-];
+const A = require('./assets.js');
 module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
-  const { d } = T.shell(pptx, { name: '원인', idx: 3, step: 3 });
-  T.title(d, '무엇 때문에 어긋났나', null, { px: 33 });
-  T.lead(d, '무엇 때문인지 하나씩 확인했습니다. 결국 온도였습니다.',
+  const M = D.methods;
+  const { d } = T.shell(pptx, { name: '개선 방안', idx: 4, step: 4 });
+  T.title(d, '바꾼 것 두 가지', null, { px: 33 });
+  T.lead(d, '하나는 흩어진 과정을 합친 것입니다. 다른 하나는 숫자를 온도마다 다르게 한 것입니다.',
          { y: 146, lines: 1 });
 
-  /* 구획 1 — 후보 넷 */
-  d.section(G.L, 186, G.W, 196, 1, '넣어 본 것과 남은 것', '후보 4개 → 1개');
-  const BW = 258, GAP = 20;
-  CAND.forEach(([name, keep, why], i) => {
-    const x = 88 + i * (BW + GAP);
-    d.box(x, 226, BW, 60, keep ? null : C.groove, keep ? C.brass : C.rule2, keep ? 1.6 : 1);
-    d.text(name, { x: x + 14, y: 244, w: BW - 28, px: 17, lh: 1.3, bold: true,
-                   color: keep ? C.brass : C.dim2 });
-    if (!keep) d.hline(x + 14, 256, Math.min(T.textW(name, 17) + 6, BW - 28), C.dim2, 1.4);
-    d.text(keep ? '남았습니다' : '아니었습니다',
-           { x: x + 14, y: 296, w: BW - 28, px: 12.5, lh: 1.3, bold: true,
-             color: keep ? C.brass : C.dim2 });
-    d.text(why, { x: x + 14, y: 318, w: BW - 28, px: 12, lh: 1.5, lines: 3, color: C.dim });
+  /* 구획 1 — 두 기둥 */
+  d.section(G.L, 186, 400, 232, 1, '무엇을 바꿨나', '');
+  [['흩어진 과정을 합쳤다', '엑셀 4개', '도구 1개'],
+   ['숫자를 온도마다 다르게', '값 1개', '온도별 곡선']].forEach(([k, a, b], i) => {
+    const y = 226 + i * 88;
+    d.rect(92, y, 4, 62, C.brass);
+    d.text(String(i + 1), { x: 108, y, w: 20, px: 13, lh: 1.2, mono: true, bold: true,
+                            color: C.brass });
+    d.text(k, { x: 132, y: y - 2, w: 306, px: 17.5, lh: 1.3, bold: true, color: C.ink });
+    const aw = Math.ceil(T.textW(a, 15)) + 4;
+    d.text(a, { x: 132, y: y + 30, w: aw, px: 15, lh: 1.25, color: C.slateL });
+    d.text('→', { x: 132 + aw + 8, y: y + 32, w: 22, px: 13, lh: 1.2, color: C.dim2 });
+    d.text(b, { x: 132 + aw + 34, y: y + 28, w: 452 - (132 + aw + 34), px: 17, lh: 1.25, bold: true,
+                color: C.brass });
   });
+  d.text('제작사 계산식은 손대지 않았습니다.',
+         { x: 92, y: 386, w: 360, px: 13, lh: 1.3, color: C.dim });
 
-  /* 구획 2 — 진공도. 세 번 의심해 세 번 접은 이야기 */
-  d.section(G.L, 394, 556, 230, 2, '겪은 일 · 진공도를 세 번 접었다', '');
-  d.text('복수기 진공도를 의심했습니다. 여름에 나빠지니 그럴듯했습니다.',
-         { x: 92, y: 434, w: 516, px: 13, lh: 1.55, lines: 3, color: C.body });
-  [['첫 번째', '계절 탓인지 설비 탓인지 갈라 봤습니다.', '아니었습니다'],
-   ['두 번째', '연도를 나눠 봤습니다.', '한 해만 그랬습니다'],
-   ['세 번째', '온도를 걷어내고 다시 봤습니다.', '사라졌습니다']]
-    .forEach(([k, v, r], i) => {
-      const y = 500 + i * 34;
-      d.text(k, { x: 92, y, w: 68, px: 12.5, lh: 1.3, bold: true, color: C.slateL });
-      d.text(v, { x: 168, y, w: 300, px: 12.5, lh: 1.3, color: C.body });
-      d.text(r, { x: 472, y, w: 136, px: 12.5, lh: 1.3, bold: true, color: C.red,
-                  align: 'right' });
-    });
-  d.text('세 번 다 착각이었습니다.',
-         { x: 92, y: 602, w: 516, px: 13, lh: 1.3, lines: 1, color: C.dim2 });
+  /* 구획 2 — 도구가 실제로 그려 주는 화면 */
+  d.section(488, 186, 720, 232, 2, '도구가 그려 주는 화면', '주황이 배운 값, 흰 점이 시험 결과');
+  d.imgFit(A.toolGap, 500, 222, 696, 162);
+  d.text('온도마다 더할 값이 다릅니다.',
+         { x: 500, y: 392, w: 696, px: 13, lh: 1.3, color: C.dim });
 
-  /* 구획 3 — 결론 철회 */
-  d.section(644, 394, 564, 230, 3, '겪은 일 · 결론을 한 번 뒤집었다', '');
-  d.text('2025년 봄 시험이 유별나게 낮았습니다. 설비가 오래됐다고 보고 문서까지 썼습니다.',
-         { x: 664, y: 434, w: 524, px: 13, lh: 1.55, lines: 3, color: C.body });
-  d.rect(664, 500, 4, 92, C.red);
-  d.text('다시 파 보니 원인이 달랐습니다.',
-         { x: 684, y: 500, w: 504, px: 14.5, lh: 1.4, bold: true, color: C.ink });
-  d.text('IGV 를 올리지 않고 시험한 날이었습니다. 결론을 거뒀습니다.\n' +
-         '이제 이런 날의 시험은 도구가 걸러냅니다.',
-         { x: 684, y: 526, w: 504, px: 13, lh: 1.55, lines: 4, color: C.dim });
+  /* 구획 3 — 겪은 일 */
+  d.section(G.L, 430, G.W, 194, 3, '겪은 일 · 어떤 방법을 써야 하는지 몰랐다', '후보 7가지');
+  d.text('이런 예측을 해 본 적이 없었습니다. 그래서 후보 일곱 가지를 늘어놓고 ' +
+         '같은 데이터로 겨루게 했습니다.\n사람이 아니라 성적이 골랐습니다.',
+         { x: 92, y: 468, w: 470, px: 13.5, lh: 1.6, lines: 3, color: C.body });
+
+  const lo = Math.floor(Math.min(...M.map(m => m.mae)) * 10) / 10 - 0.1;
+  const hi = Math.max(...M.map(m => m.mae));
+  const BX = v => 700 + (v - lo) / (hi - lo) * 330;
+  const NAME = { 'gp:rbf': 'RBF', 'gp:rq': 'RQ', 'gp:matern52': 'Matern 5/2',
+                 'gp:matern32': 'Matern 3/2', 'gp:exp': '지수',
+                 'curve': '거리가중', 'bin': '구간평균' };
+  M.forEach((m, i) => {
+    const y = 468 + i * 21, win = i === 0;
+    d.text(NAME[m.key] || m.key, { x: 574, y, w: 122, px: 11.5, lh: 1.2, bold: win,
+                                   color: win ? C.brass : C.dim2, align: 'right' });
+    d.rect(700, y + 2, Math.max(BX(m.mae) - 700, 4), 10, win ? C.brass : C.steel);
+    d.text(m.mae.toFixed(2), { x: BX(m.mae) + 8, y, w: 52, px: 11, lh: 1.2, mono: true,
+                               bold: win, color: win ? C.brass : C.dim });
+    if (win) d.text('← 이것을 씁니다', { x: 1050, y, w: 158, px: 11.5, lh: 1.2,
+                                          bold: true, color: C.brass });
+  });
+  d.text('막대가 짧을수록 잘 맞힌 것입니다. 단위 MW.',
+         { x: 574, y: 616, w: 440, px: 11, lh: 1.2, color: C.dim2 });
+  /* 배점표의 'AI 활용 및 분석 타당성'(20점) 근거. 본문은 쉬운 말로 두고
+     쓴 방법의 이름은 각주에서 댄다 — 가이드 7번 "필요시 각주로 설명". */
+  d.text('* 후보 7가지 = 구간 평균 · 거리가중 평균 · 가우시안 프로세스(GP) 커널 5종. ' +
+         '채점은 교차검증(LOOCV)으로 했고, 곡선의 성질은 학습 데이터만으로 정합니다.',
+         { x: 92, y: 616, w: 470, px: 10, lh: 1.35, lines: 2, color: C.dim2 });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '의심을 하나씩 접고 나니 온도만 남았습니다.');
+  T.foot(d, '계산식을 그대로 두었으니 다른 발전소에도 옮겨 쓸 수 있습니다.');
 };
