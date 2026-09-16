@@ -1,76 +1,72 @@
-/* v3-07 · 신고 정확도와 업무 시간.
-   구획 셋. 정확도 / 업무 / 겪은 일(우리 규칙이 엑셀과 달랐다).
+/* v3-06 · 온도별로 배우는 보정 모델.
+   구획 셋. 어떻게 바꿨나(2층 구조) / 결과 곡선 / 겪은 일(모델을 몰라 겨루게 했다).
 
-   숫자를 크게 쓰는 유일한 장이다. 대신 종전 값을 나란히 놓아 크기를 짐작하게
-   한다. 큰 숫자 셋을 넘기지 않는다.                                        */
+   이 장의 그림은 도구가 그린 실제 곡선이다. 점선이 계산값, 주황이 실제,
+   흰 점이 시험 결과. 흰 점이 주황 곡선을 따라가는 것이 이 과제가 한 일 전부다. */
 'use strict';
 module.exports = (pptx, T, meta, D) => {
-  const { C, G } = T;
-  const { d } = T.shell(pptx, { name: '개선 효과', idx: 5, step: 5 });
-  const I = D.impact, B = I.blanket, GP = I.gp, K = I.cut;
-  T.title(d, '신고 정확도와 업무 시간', null, { px: 33 });
-  T.lead(d, '누적 ' + D.n + '회에 종전 방식과 새 방식을 각각 적용해 채점한 결과입니다.',
+  const { C, G, LW } = T;
+  const A = require('./assets.js');
+  const { d } = T.shell(pptx, { name: '개선 방안', idx: 4, step: 4 });
+  const M = D.methods;
+  T.title(d, '온도마다 다르게 배우기', null, { px: 33 });
+  T.lead(d, '계산식은 그대로 두고, 계산한 값과 실제의 차이만 온도마다 따로 배우게 했습니다.',
          { y: 146, lines: 1 });
 
-  /* 구획 1 — 정확도 */
-  d.section(G.L, 186, 700, 232, 1, '신고 정확도', '시험 ' + D.n + '회 채점');
-  [['틀리는 폭', B.mae.toFixed(1), GP.mae.toFixed(1), 'MW', K.mae],
-   ['신고값을 못 채운 횟수', String(B.short), String(GP.short), '회', K.short],
-   ['실제보다 높게 신고한 양', B.over.toFixed(0), GP.over.toFixed(0), 'MW', K.over]]
-    .forEach(([k, before, after, unit, cut], i) => {
-      const x = 92 + i * 232;
-      d.text(k, { x, y: 226, w: 210, px: 12, lh: 1.3, lines: 1, color: C.dim2 });
-      const bw = Math.ceil(T.textW(before, 18)) + 4;
-      d.text(before, { x, y: 256, w: bw, px: 18, lh: 1.2, mono: true, color: C.slateL });
-      d.text('→', { x: x + bw + 6, y: 259, w: 22, px: 13, lh: 1.2, color: C.dim2 });
-      const nw = Math.ceil(T.textW(after, 36)) + 4;
-      d.text(after, { x: x + bw + 34, y: 246, w: nw, px: 36, lh: 1.15, mono: true,
-                      bold: true, color: C.brass });
-      d.text(unit, { x: x + bw + 38 + nw, y: 268, w: 40, px: 13, lh: 1.2, color: C.dim });
-      d.rect(x, 316, 204, 8, C.groove);
-      d.rect(x, 316, Math.round(204 * (100 - cut) / 100), 8, C.slate);
-      d.text(cut + '% 줄었습니다', { x, y: 330, w: 204, px: 12.5, lh: 1.3, bold: true,
-                                     color: C.brass });
-      d.text('종전 ' + before + ' ' + unit, { x, y: 352, w: 204, px: 11.5, lh: 1.3,
-                                               color: C.dim2 });
-      if (i < 2) d.vline(x + 218, 226, 140, C.rule2, 1);
-    });
-  d.text('한 회를 가리고 나머지로 그 회를 맞혀 보는 방식으로 채점했습니다. ' +
-         '실제 신고 이력이 아니라 같은 데이터에 두 방식을 적용해 본 값입니다.',
-         { x: 92, y: 384, w: 660, px: 11.5, lh: 1.3, lines: 2, color: C.dim2 });
+  /* 구획 1 — 2층 구조 */
+  d.section(G.L, 186, 400, 232, 1, '바꾼 것과 두고 온 것', '');
+  d.box(92, 226, 360, 74, null, C.slate, 1.4);
+  d.text('그대로 둔 것', { x: 106, y: 236, w: 200, px: 11.5, lh: 1.2, bold: true,
+                            color: C.slateL });
+  d.text('제작사 계산식', { x: 106, y: 256, w: 330, px: 17, lh: 1.3, bold: true,
+                            color: C.ink });
+  d.text('검증된 식입니다. 손대지 않았습니다.',
+         { x: 106, y: 278, w: 330, px: 12, lh: 1.3, color: C.dim });
+  d.text('↓', { x: 92, y: 306, w: 30, px: 18, lh: 1.2, color: C.brass });
+  d.text('계산한 값과 실제의 차이만 넘깁니다', { x: 124, y: 310, w: 320, px: 12, lh: 1.3,
+                                              color: C.dim });
+  d.box(92, 338, 360, 74, null, C.brass, 1.6);
+  d.text('새로 만든 것', { x: 106, y: 348, w: 200, px: 11.5, lh: 1.2, bold: true,
+                            color: C.brass });
+  d.text('온도마다 다른 값', { x: 106, y: 368, w: 330, px: 17, lh: 1.3, bold: true,
+                                color: C.ink });
+  d.text('시험 ' + D.n + '회를 학습해 온도마다 다른 값을 줍니다.',
+         { x: 106, y: 390, w: 330, px: 12, lh: 1.3, color: C.dim });
 
-  /* 구획 2 — 업무 */
-  d.section(788, 186, 420, 232, 2, '업무 처리', '한 회차 기준');
-  [['엑셀 파일', '4개', '1개'], ['손으로 옮기는 값', '61개', '0개'],
-   ['사람이 넣는 값', '3곳', '날짜와 시각']]
-    .forEach(([k, a, b], i) => {
-      const y = 232 + i * 56;
-      d.text(k, { x: 808, y, w: 240, px: 12.5, lh: 1.3, color: C.dim2 });
-      const aw = Math.ceil(T.textW(a, 17)) + 4;
-      d.text(a, { x: 808, y: y + 20, w: aw, px: 17, lh: 1.25, color: C.slateL });
-      d.text('→', { x: 808 + aw + 8, y: y + 22, w: 22, px: 13, lh: 1.2, color: C.dim2 });
-      d.text(b, { x: 808 + aw + 36, y: y + 18, w: 1184 - (808 + aw + 36), px: 18,
-                  lh: 1.25, bold: true, color: C.brass });
-      if (i < 2) d.hline(808, y + 46, 380, C.rule2, 1);
-    });
-  d.text('날짜와 시각을 넣고 실행하면 끝납니다.',
-         { x: 808, y: 396, w: 380, px: 12, lh: 1.3, color: C.dim });
+  /* 구획 2 — 도구가 실제로 그려 주는 화면. 내가 다시 그리지 않고 캡처를 쓴다.
+     회신 "중간중간에 Tool 캡쳐를 섞어 쓰면 좋을 듯" 반영. */
+  d.section(488, 186, 720, 232, 2, '도구가 그려 주는 화면', '주황이 배운 값, 흰 점이 시험 결과');
+  d.imgFit(A.toolGap, 500, 222, 696, 162);
+  d.text('온도마다 더할 값이 다릅니다. 흰 점이 실제 시험 결과이고, 주황 선이 도구가 배운 값입니다.',
+         { x: 500, y: 392, w: 696, px: 12, lh: 1.3, color: C.dim2 });
 
   /* 구획 3 — 겪은 일 */
-  d.section(G.L, 430, G.W, 194, 3, '겪은 일 · 우리 계산이 엑셀과 달랐다', '');
-  d.text('새로 만든 도구가 기존 엑셀과 같은 답을 내는지 맞춰 보는 과정에서 드러났습니다. ' +
-         '적용할 대기압을 우리는 7일 평균으로 계산하고 있었는데, 엑셀 수식을 뜯어 보니 ' +
-         '3일차부터 7일차까지 5일 평균이었습니다.',
-         { x: 92, y: 470, w: 540, px: 13.5, lh: 1.6, lines: 4, color: C.body });
-  d.rect(664, 466, 4, 130, C.brass);
-  d.text('처방도 한 번 틀렸습니다.', { x: 684, y: 466, w: 504, px: 15, lh: 1.35,
-                                       bold: true, color: C.ink });
-  d.text('처음에는 "사용자가 고를 수 있게 선택 항목을 주자" 고 했습니다. ' +
-         '그런데 실무는 하나로 정해져 있어서 고를 여지가 없었습니다. ' +
-         '선택 항목을 빼고 규칙을 엑셀 수식과 똑같이 맞췄습니다. ' +
-         '지금은 수식이 바뀌면 시험이 먼저 잡아냅니다.',
-         { x: 684, y: 494, w: 504, px: 13, lh: 1.55, lines: 5, color: C.dim });
+  d.section(G.L, 430, G.W, 194, 3, '겪은 일 · 어떤 방법을 써야 하는지 몰랐다', '후보 7가지');
+  d.text('이런 예측을 처음 다뤘습니다. 무엇을 써야 하는지 몰라서 후보 일곱 가지를 ' +
+         '늘어놓고 같은 데이터로 겨루게 했습니다.\n' +
+         '한 회를 가리고 나머지로 그 회를 맞혀 봅니다. 사람이 아니라 성적이 골랐습니다.',
+         { x: 92, y: 470, w: 470, px: 13, lh: 1.6, lines: 4, color: C.body });
+
+  const lo = Math.floor(Math.min(...M.map(m => m.mae)) * 10) / 10 - 0.1;
+  const hi = Math.max(...M.map(m => m.mae));
+  const BX = v => 700 + (v - lo) / (hi - lo) * 330;
+  M.forEach((m, i) => {
+    const y = 468 + i * 21, win = i === 0;
+    const NAME = { 'gp:rbf': 'RBF', 'gp:rq': 'RQ', 'gp:matern52': 'Matern 5/2',
+                   'gp:matern32': 'Matern 3/2', 'gp:exp': '지수',
+                   'curve': '거리가중', 'bin': '구간평균' };
+    const nm = NAME[m.key] || m.key;
+    d.text(nm, { x: 574, y, w: 122, px: 11.5, lh: 1.2, bold: win,
+                 color: win ? C.brass : C.dim2, align: 'right' });
+    d.rect(700, y + 2, Math.max(BX(m.mae) - 700, 4), 10, win ? C.brass : C.steel);
+    d.text(m.mae.toFixed(2), { x: BX(m.mae) + 8, y, w: 52, px: 11, lh: 1.2, mono: true,
+                               bold: win, color: win ? C.brass : C.dim });
+    if (win) d.text('← 1위. 이것을 씁니다', { x: 1050, y, w: 158, px: 11.5, lh: 1.2,
+                                              bold: true, color: C.brass });
+  });
+  d.text('막대가 짧을수록 잘 맞힌 것입니다. 단위 MW.',
+         { x: 574, y: 616, w: 440, px: 11, lh: 1.2, color: C.dim2 });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '숫자가 좋아진 것보다, 그 숫자가 왜 그런지 말할 수 있게 된 것이 더 큽니다.');
+  T.foot(d, '계산식은 그대로 두었으니, 다른 발전소로도 그대로 옮길 수 있습니다.');
 };

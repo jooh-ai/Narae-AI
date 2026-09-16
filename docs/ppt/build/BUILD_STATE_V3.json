@@ -19,8 +19,8 @@
       "향후 계획 및 수평 전개 방안"
     ],
     "note": "본문 8장 + 표지·목차·마무리 = 11장. 목차 항목 이름은 쉬운 단어로 바꾸고 모니터링(⑤)과 효과(⑥) 순서를 바꿨다. 과정(시행착오)은 한 장에 몰지 않고 5·6·7장 마지막 구획과 8장 전용 장에 나눠 깔았다.",
-    "updated": "2026-09-16 10:39",
-    "done": 11,
+    "updated": "2026-09-16 10:59",
+    "done": 12,
     "next": null
   },
   "slides": [
@@ -39,70 +39,76 @@
     {
       "no": 3,
       "file": "v03.js",
+      "title": "우리가 하는 일 — 전제 설명 (신규)",
+      "status": "done"
+    },
+    {
+      "no": 4,
+      "file": "v04.js",
       "idx": 1,
       "name": "기존 방식",
       "title": "기존 공급가능용량 산정 방식",
       "status": "done"
     },
     {
-      "no": 4,
-      "file": "v04.js",
+      "no": 5,
+      "file": "v05.js",
       "idx": 2,
       "name": "문제점",
       "title": "절차 · 일괄 보정 · 예측 오차",
       "status": "done"
     },
     {
-      "no": 5,
-      "file": "v05.js",
+      "no": 6,
+      "file": "v06.js",
       "idx": 3,
       "name": "원인",
       "title": "무엇 때문에 어긋났나 + 진공도·결론 철회",
       "status": "done"
     },
     {
-      "no": 6,
-      "file": "v06.js",
+      "no": 7,
+      "file": "v07.js",
       "idx": 4,
       "name": "개선 방안",
       "title": "온도별 보정 모델 + 모델 7가지 겨루기",
       "status": "done"
     },
     {
-      "no": 7,
-      "file": "v07.js",
+      "no": 8,
+      "file": "v08.js",
       "idx": 5,
       "name": "개선 효과",
       "title": "정확도와 업무 시간 + 규칙 불일치",
       "status": "done"
     },
     {
-      "no": 8,
-      "file": "v08.js",
+      "no": 9,
+      "file": "v09.js",
       "idx": 6,
       "name": "넘어온 과정",
       "title": "막혔던 것과 푼 방법 3건",
       "status": "done"
     },
     {
-      "no": 9,
-      "file": "v09.js",
+      "no": 10,
+      "file": "v10.js",
       "idx": 7,
       "name": "유지 관리",
       "title": "갱신 순환 · 도구 화면 · 걸러내는 장치",
       "status": "done"
     },
     {
-      "no": 10,
-      "file": "v10.js",
+      "no": 11,
+      "file": "v11.js",
       "idx": 8,
       "name": "향후 계획",
       "title": "학습 곡선 · 정착과 수평 전개",
       "status": "done"
     },
     {
-      "no": 11,
-      "file": "v11.js",
+      "no": 12,
+      "file": "v12.js",
       "title": "마무리 — 감사합니다 + 출력 곡선",
       "status": "done"
     }

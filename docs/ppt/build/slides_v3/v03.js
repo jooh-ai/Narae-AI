@@ -1,78 +1,75 @@
-/* v3-03 · 기존 공급가능용량 산정 방식.
+/* v3-03 · 우리가 하는 일 — 전제를 설명하는 장 (2026-09-16 신규).
 
-   5차. 회신 네 가지를 반영했다.
-     "'기존 방식' 만 있으면 뭘 했던 기존 방식인지 인식이 안 된다"
-       → 제목에 주제를 넣는다. 단어를 유지하되 무엇에 대한 장인지 밝힌다.
-     "전반적으로 설명이 부족해 보이고, 내용을 조금 더 추가했으면"
-       → 단계마다 설명을 되살렸다. 다만 구획(zone)으로 묶어 산만해지지 않게 한다.
-     "내용은 쉽지만 잘 만든 PPT 느낌을 내고 싶어"
-       → 목표를 이렇게 읽었다. 포스터가 아니라 **쉬운 말로 쓴 잘 만든 보고서**다.
-         비우는 것이 답이 아니고, 채우되 구조가 보이게 하는 것이 답이다.       */
+   자체 검토에서 가장 크게 걸린 것이 이것이었다. **전제를 아무 데서도 설명하지
+   않았다.** 발전소가 전기를 팔기 전에 "얼마나 낼 수 있다" 를 미리 알려야 한다는
+   것, 그 숫자가 틀리면 손해가 난다는 것, 낼 수 있는 양이 날씨에 따라 달라진다는
+   것. 이 셋을 모르면 뒤의 모든 장이 소용없다.
+
+   그림으로만 설명한다. 글은 칸 이름과 한 줄씩. 목차 항목이 없는 장이므로
+   오른쪽 위 눈금도 띄우지 않는다.                                          */
 'use strict';
-const A = require('./assets.js');
-const STEP = [
-  ['① 시험 결과 받아오기', A.xl1,  '날짜와 시각을 넣으면 계측값 14개를 시스템에서 끌어옵니다.'],
-  ['② 온도별 이론값 계산', A.xl2,  '대기압을 넣으면 영하 20도부터 40도까지 61개 값이 나옵니다.'],
-  ['③ 보정값 더하기', A.xl2blt,    '시험한 온도에서 생긴 차이를 61개 값에 모두 더합니다.'],
-  ['④ 온도 프로파일 완성', A.xl3,  '이 표를 그대로 옮겨 붙이면 그날 신고할 숫자가 됩니다.'],
-];
-const T0 = -20, T1 = 40, PX0 = 200, PXW = 920;
-const TX = t => PX0 + (t - T0) * (PXW / (T1 - T0));
-const SHOT = 25;
-
 module.exports = (pptx, T, meta, D) => {
   const { C, G, LW } = T;
-  const { d } = T.shell(pptx, { name: '기존 방식', idx: 1, step: 1 });
-  T.title(d, '기존 공급가능용량 산정 방식', null, { px: 33 });
-  T.lead(d, '시험 결과를 엑셀 네 개에 차례로 옮겨 담아 신고할 숫자를 만들었습니다.',
-         { y: 146, lines: 1 });
+  const { d } = T.shell(pptx, { sec: '들어가기 전에' });
+  T.title(d, '우리가 하는 일', null, { px: 34 });
+  T.lead(d, '발전소는 전기를 만들어 팝니다. 팔기 전에 얼마나 낼 수 있는지 미리 알려 줘야 합니다.',
+         { y: 150, lines: 1 });
 
-  /* 구획 1 — 절차 */
-  d.section(G.L, 186, G.W, 206, 1, '산정 절차', '엑셀 파일 4개');
-  const BW = 258, GAP = 20;
-  STEP.forEach(([name, file, why], i) => {
-    const x = 88 + i * (BW + GAP);
-    d.text(name, { x, y: 222, w: BW, px: 13.5, lh: 1.3, bold: true, color: C.brass });
-    d.box(x, 242, BW, 88, null, C.rule2, 1);
-    d.imgFit(file, x + 6, 246, BW - 12, 80);
-    d.text(why, { x, y: 338, w: BW, px: 11.5, lh: 1.5, lines: 3, color: C.dim });
-    if (i < STEP.length - 1) d.arrow(x + BW + 1, 280);
-  });
+  /* 구획 1 — 파는 순서 */
+  d.section(G.L, 192, G.W, 112, 1, '전기를 파는 순서', '');
+  [['전기를 만든다', '가스와 증기로 돌립니다.'],
+   ['얼마나 낼 수 있다고 알린다', '하루 전에 숫자를 냅니다.'],
+   ['그만큼 팔린다', '알린 숫자가 기준이 됩니다.'],
+   ['그만큼 실제로 낸다', '못 내면 벌칙이 있습니다.']]
+    .forEach(([k, v], i) => {
+      const x = 96 + i * 282;
+      d.text(String(i + 1), { x, y: 236, w: 22, px: 15, lh: 1.2, mono: true, bold: true,
+                              color: C.brass });
+      d.text(k, { x: x + 26, y: 234, w: 214, px: 14.5, lh: 1.3, bold: true, color: C.ink });
+      d.text(v, { x: x + 26, y: 258, w: 214, px: 12, lh: 1.3, color: C.dim });
+      if (i < 3) d.arrow(x + 246, 240);
+    });
 
-  /* 구획 2 — 보정값을 어떻게 정했나.
-     회신: "한눈에 차트가 이해되지 않아. 좀 더 쉽고 구체적으로."
-     종전에는 점 하나와 점선 하나였다. 무엇을 보라는 것인지 알 수 없었다.
-     이번에는 **61개 온도에 실제로 들어간 값을 막대 61개로 세운다.**
-     전부 같은 높이인데 근거가 있는 것은 한 개뿐이라는 것이 바로 보인다.   */
-  d.section(G.L, 404, G.W, 220, 2, '보정값을 정하는 방법', '시험 1곳 → 61개 온도');
-  d.text('시험한 온도에서 나온 차이 하나를 61개 온도에 모두 같은 크기로 더했습니다.',
-         { x: 96, y: 440, w: 700, px: 13, lh: 1.3, lines: 1, color: C.dim });
+  /* 구획 2 — 날씨에 따라 달라진다 */
+  d.section(G.L, 316, 556, 308, 2, '어려운 점 하나', '날씨에 따라 달라집니다');
+  const R = D.profile.rows.filter(r => r.t >= -10 && r.t <= 40);
+  const vs = R.map(r => r.theory);
+  const lo = Math.min(...vs), hi = Math.max(...vs);
+  const X = t => 140 + (t + 10) * 8.9, Y = v => 520 - (v - lo) / (hi - lo) * 124;
+  d.hline(132, 528, 480, C.rule, 1);
+  d.vline(132, 380, 148, C.rule, 1);
+  for (let i = 0; i < R.length - 1; i++)
+    d.seg(X(R[i].t), Y(R[i].theory), X(R[i + 1].t), Y(R[i + 1].theory), C.brass, LW.main);
+  d.text('많이', { x: 84, y: Y(hi) - 8, w: 44, px: 11.5, lh: 1.2, color: C.dim2,
+                    align: 'right' });
+  d.text('적게', { x: 84, y: Y(lo) - 8, w: 44, px: 11.5, lh: 1.2, color: C.dim2,
+                    align: 'right' });
+  d.text('추울 때', { x: 132, y: 534, w: 90, px: 12, lh: 1.2, color: C.dim });
+  d.text('더울 때', { x: 520, y: 534, w: 90, px: 12, lh: 1.2, color: C.dim,
+                       align: 'right' });
+  d.dot(X(-8), Y(R[1].theory), 6, C.brass);
+  d.dot(X(38), Y(R[R.length - 2].theory), 6, C.brass);
+  d.text('추운 날은 많이 낼 수 있고, 더운 날은 적게 낼 수 있습니다.',
+         { x: 92, y: 360, w: 516, px: 14.5, lh: 1.4, color: C.body });
+  d.text('그래서 하나의 숫자로는 안 되고, 온도마다 따로 알려 줘야 합니다.',
+         { x: 92, y: 562, w: 516, px: 12.5, lh: 1.4, color: C.dim });
 
-  const BASE = 580, MWPX = 18, VAL = 4;
-  const BY = v => BASE - v * MWPX;
-  [0, 2, 4, 6].forEach(v => {
-    d.hline(196, BY(v), PXW + 12, v === 0 ? C.rule : C.rule2, 1);
-    d.text(String(v), { x: 150, y: BY(v) - 7, w: 36, px: 10.5, lh: 1.2, mono: true,
-                        color: C.dim2, align: 'right' });
-  });
-  d.text('더한 값\nMW', { x: 96, y: BY(6) - 4, w: 46, px: 10, lh: 1.3, lines: 2,
-                           color: C.dim2, align: 'right' });
-  for (let t = T0; t <= T1; t++) {
-    const on = t === SHOT;
-    d.rect(TX(t) - 4.5, BY(VAL), 9, VAL * MWPX, on ? C.brass : C.slate);
-  }
-  [T0, -10, 0, 10, 20, 30, T1].forEach(t => d.text((t > 0 ? '+' : '') + t,
-    { x: TX(t) - 24, y: BASE + 6, w: 48, px: 10.5, lh: 1.2, mono: true, color: C.dim2,
-      align: 'center' }));
-  d.text('℃', { x: TX(T1) + 26, y: BASE + 6, w: 24, px: 10.5, lh: 1.2, color: C.dim2 });
-
-  d.vline(TX(SHOT), BY(VAL) - 24, 20, C.brass, 1);
-  d.text('이 온도만 실제로 시험', { x: TX(SHOT) - 150, y: BY(VAL) - 42, w: 300, px: 13,
-                                    lh: 1.3, bold: true, color: C.brass, align: 'center' });
-  d.rect(210, BY(6) + 2, 14, 7, C.slate);
-  d.text('나머지 60개 온도는 시험하지 않고 같은 값',
-         { x: 230, y: BY(6) - 2, w: 400, px: 12.5, lh: 1.3, color: C.slateL });
+  /* 구획 3 — 틀리면 손해 */
+  d.section(644, 316, 564, 308, 3, '어려운 점 둘', '틀리면 손해가 납니다');
+  d.text('미리 알린 숫자와 실제가 어긋나면 두 가지로 손해가 납니다.',
+         { x: 664, y: 360, w: 524, px: 14.5, lh: 1.4, color: C.body });
+  [[C.red, '많이 알렸는데 못 냈다', '알린 만큼 못 내면 벌칙을 받습니다.'],
+   [C.slateL, '적게 알렸는데 더 낼 수 있었다', '팔 수 있는 양을 못 팔았습니다.']]
+    .forEach(([col, k, v], i) => {
+      const y = 406 + i * 104;
+      d.box(664, y, 524, 84, null, col, 1.4);
+      d.rect(664, y, 5, 84, col);
+      d.text(k, { x: 686, y: y + 16, w: 486, px: 17, lh: 1.3, bold: true, color: C.ink });
+      d.text(v, { x: 686, y: y + 46, w: 486, px: 13, lh: 1.3, color: C.dim });
+    });
+  d.text('어느 쪽이든 손해입니다. 그래서 숫자를 잘 맞히는 일이 중요합니다.',
+         { x: 664, y: 600, w: 524, px: 12.5, lh: 1.3, color: C.dim2 });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '해보지 않은 온도는 알 방법이 없었으니, 그때는 이게 최선이었습니다.');
+  T.foot(d, '이 과제는 그 숫자를 더 잘 맞히려고 한 일입니다.');
 };

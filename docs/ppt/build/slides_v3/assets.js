@@ -16,6 +16,9 @@ module.exports = {
   toolWin: 'tool_window.png',
   toolIn:  'tool_input.png',
   toolCur: 'tool_curve.png',
+  toolOut: 'tool_out.png',   // 위 절반 — 출력 곡선 (도구 화면에서 오린 것)
+  toolGap: 'tool_gap.png',   // 아래 절반 — 온도별 차이와 실측점
+  toolMod: 'tool_models.png',
   toolList:'tool_list.png',
   ci:      'ci_narae.png',
 };
