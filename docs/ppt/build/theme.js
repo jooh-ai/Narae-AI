@@ -11,6 +11,7 @@
 const C = {
   ground : '0F1A28',  // 배경 — 검정이 아니라 '푸른' 네이비
   groove : '0A1320',  // 데이터가 앉는 홈 면
+  head   : '17283C',  // 구획 머리 띠 — 몸통(groove)보다 밝아 층이 갈린다
   rule   : '22354A',  // 헤어라인
   rule2  : '182838',  // 더 약한 헤어라인
   ink    : 'EAE7E0',  // 본문 강조 — 따뜻한 회백            14.2 : 1
@@ -231,6 +232,34 @@ function draw(pptx, s) {
     /* 그림 — Tool 화면 캡처. 테두리를 한 줄 둘러 '창' 이라는 것을 보이게 한다.
        캡처는 docs/ppt/assets/ 에 있고 파일명만 준다(ASSET 이 경로를 만든다).
        w·h 는 원본 비율대로 넣는다 — 늘리면 글자가 뭉개져서 캡처가 지저분해진다. */
+    /* 구획 — 번호 붙은 머리 띠와 테두리. 회신 "구획을 더 또렷하게" 반영.
+       종전 zone() 은 홈 면에 헤어라인 하나여서 네이비 배경에서 거의 안 보였다.
+       층을 셋으로 갈라 세운다.
+         몸통  groove (가장 어둡다)
+         머리  head   (가장 밝다) + 왼쪽 놋빛 바 + 번호
+         테두리 rule 1.2 (헤어라인 한 단 위)
+       돌려주는 값은 **내용이 시작되는 y** 다. 장마다 좌표를 다시 세지 않는다. */
+    section(x, y, w, h, no, label, right) {
+      const HH = 30;
+      api.box(x, y, w, h, C.groove, C.rule, 1.2);
+      api.rect(x + 1, y + 1, w - 2, HH - 1, C.head);
+      api.hline(x, y + HH, w, C.rule, 1.2);
+      api.rect(x + 1, y + 1, 4, HH - 1, C.brass);
+      let tx = x + 18;
+      if (no != null) {
+        api.text(String(no), { x: tx, y: y + 8, w: 18, px: 13, lh: 1.2, mono: true,
+                               bold: true, color: C.brass });
+        tx += 24;
+      }
+      /* 오른쪽 보조 문구 폭은 글자 길이로 잡는다. 고정폭으로 두면 좁은 구획에서
+         왼쪽 라벨 자리를 다 먹는다(470px 구획에서 실제로 넘쳤다). */
+      const RW = right ? Math.ceil(textW(right, 11)) + 10 : 0;
+      api.text(label, { x: tx, y: y + 8, w: w - (tx - x) - RW - 14, px: 13.5, lh: 1.2,
+                        bold: true, color: C.ink, cs: 0.3 });
+      if (right) api.text(right, { x: x + w - RW - 14, y: y + 9, w: RW, px: 11, lh: 1.2,
+                                   color: C.dim2, align: 'right' });
+      return y + HH;
+    },
     /* 표 — 헤더 음영과 줄 구분선까지 그린다. '잘 만든 보고서' 느낌은 표에서
        많이 온다. 숫자를 그냥 늘어놓는 것과 표로 앉히는 것은 다르게 읽힌다.
          cols: [{ label, w, align, mono }]

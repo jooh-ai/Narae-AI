@@ -20,9 +20,8 @@ module.exports = (pptx, T, meta, D) => {
          { y: 146, lines: 1 });
 
   /* 왼쪽 — 표 */
-  d.zone(G.L, 190, 470, 434);
-  d.plab('기존 실적 시트 기록', 92, 200, 260);
-  d.table(100, 226,
+  d.section(G.L, 186, 470, 438, 1, '기존 실적 시트 기록', '2월 ~ 4월 13회');
+  d.table(100, 232,
     [{ label: '날짜', w: 74 }, { label: '실제 차이', w: 122, align: 'right', mono: true },
      { label: '적용한 보정값', w: 148, align: 'right', mono: true }],
     LOG.rows.map(r => [r.date,
@@ -31,16 +30,14 @@ module.exports = (pptx, T, meta, D) => {
     { rh: 22, foot: ['범위', { t: lo.toFixed(1) + ' ~ ' + hi.toFixed(1), bold: true },
                      { t: Math.min(...aps) + ' ~ ' + Math.max(...aps) }] });
   d.text('단위 MW. 기존 실적 시트에서 옮겨 적었습니다.',
-         { x: 100, y: 600, w: 344, px: 10.5, lh: 1.2, color: C.dim2 });
+         { x: 100, y: 598, w: 344, px: 10.5, lh: 1.2, color: C.dim2 });
 
   /* 오른쪽 — 40회 전체와 그래서 무엇이 문제인가 */
   const RX = 558, RW = 650;
-  d.zone(RX, 190, RW, 434);
-  d.plab('시험 ' + D.n + '회 전체', RX + 20, 200, 240);
-  d.text('가로 외기온도 ℃ / 세로 실제 차이 MW',
-         { x: RX + 320, y: 199, w: 310, px: 10.5, lh: 1.2, color: C.dim2, align: 'right' });
+  d.section(RX, 186, RW, 234, 2, '시험 ' + D.n + '회 전체',
+            '가로 외기온도 ℃ / 세로 실제 차이 MW');
 
-  const X = t => RX + 64 + (t + 3) * 13.6, Y = c => 240 + (14 - c) * 10.6;
+  const X = t => RX + 64 + (t + 3) * 13.6, Y = c => 240 + (14 - c) * 7.4;
   [12, 8, 4, -4].forEach(v => d.hline(X(-3), Y(v), 558, C.rule2, 1));
   d.hline(X(-3), Y(0), 558, C.rule, 1);
   [12, 8, 4, 0, -4].forEach(v => d.text((v > 0 ? '+' : '') + v,
@@ -54,16 +51,16 @@ module.exports = (pptx, T, meta, D) => {
                             bold: true, color: C.slateL, align: 'right' });
   D.scatter.forEach(([t, c]) => d.dot(X(t), Y(c), 3.3, C.body));
 
-  d.hline(RX + 20, 470, RW - 40, C.rule, 1);
+  d.section(RX, 432, RW, 192, 3, '무엇이 문제인가', '미달 ' + B.short + '회');
   [['겨울', C.slateL, '더 낼 수 있는데 적게 신고했습니다. 팔 수 있는 양을 못 팔았습니다.'],
    ['여름', C.red, '못 내는데 많이 신고했습니다. 신고값을 못 채우면 정산에서 불이익을 받습니다.'],
    ['결과', C.brass, '시험 ' + D.n + '회 가운데 ' + B.short + '회가 신고값을 못 채웠고, ' +
     '가장 크게 어긋난 날은 ' + B.max.toFixed(1) + ' MW 였습니다.']]
     .forEach(([k, col, v], i) => {
-      const y = 488 + i * 44;
+      const y = 470 + i * 50;
       d.rect(RX + 20, y + 3, 4, 26, col);
       d.text(k, { x: RX + 34, y, w: 54, px: 15, lh: 1.3, bold: true, color: col });
-      d.text(v, { x: RX + 96, y: y + 1, w: RW - 136, px: 13.5, lh: 1.45, lines: 2,
+      d.text(v, { x: RX + 96, y: y + 1, w: RW - 136, px: 13, lh: 1.45, lines: 2,
                   color: C.body });
     });
 

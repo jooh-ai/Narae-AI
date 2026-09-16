@@ -28,28 +28,24 @@ module.exports = (pptx, T, meta, D) => {
          { y: 146, lines: 1 });
 
   /* 구획 1 — 절차 */
-  d.zone(G.L, 190, G.W, 246);
-  d.plab('산정 절차', 96, 200, 200);
-  d.text('엑셀 파일 4개', { x: 908, y: 199, w: 280, px: 11, lh: 1.2, mono: true,
-                             color: C.dim2, align: 'right' });
+  d.section(G.L, 186, G.W, 240, 1, '산정 절차', '엑셀 파일 4개');
   const BW = 258, GAP = 20;
   STEP.forEach(([name, file, why], i) => {
     const x = 88 + i * (BW + GAP);
-    d.text(name, { x, y: 222, w: BW, px: 13.5, lh: 1.3, bold: true, color: C.brass });
-    d.box(x, 244, BW, 114, null, C.rule2, 1);
-    d.imgFit(file, x + 6, 250, BW - 12, 102);
-    d.text(why, { x, y: 368, w: BW, px: 11.5, lh: 1.5, lines: 3, color: C.dim });
-    if (i < STEP.length - 1) d.arrow(x + BW + 1, 292);
+    d.text(name, { x, y: 228, w: BW, px: 13.5, lh: 1.3, bold: true, color: C.brass });
+    d.box(x, 250, BW, 106, null, C.rule2, 1);
+    d.imgFit(file, x + 6, 255, BW - 12, 96);
+    d.text(why, { x, y: 364, w: BW, px: 11.5, lh: 1.5, lines: 3, color: C.dim });
+    if (i < STEP.length - 1) d.arrow(x + BW + 1, 295);
   });
 
   /* 구획 2 — 왜 하나를 전부에 더했나. 글로 쓰지 않고 그린다. */
-  d.zone(G.L, 448, G.W, 176);
-  d.plab('보정값을 정하는 방법', 96, 458, 260);
+  d.section(G.L, 438, G.W, 186, 2, '보정값을 정하는 방법', '시험 1곳 → 61개 온도');
   d.text('시험은 하루에 한 곳에서만 합니다. 그 한 곳에서 나온 차이를 나머지 60개 온도에도 ' +
          '똑같이 더했습니다.',
-         { x: 380, y: 456, w: 808, px: 13, lh: 1.3, lines: 1, color: C.dim, align: 'right' });
+         { x: 96, y: 480, w: 1088, px: 13, lh: 1.3, lines: 1, color: C.dim });
 
-  const BASE = 598, LINE = 528;
+  const BASE = 602, LINE = 546;
   for (let t = T0; t <= T1; t++) {
     const on = t === SHOT;
     d.vline(TX(t), BASE - (on ? 14 : 6), on ? 14 : 6, on ? C.brass : C.rule, on ? 2 : 1);
@@ -64,7 +60,7 @@ module.exports = (pptx, T, meta, D) => {
   d.vline(TX(SHOT), LINE + 8, BASE - LINE - 22, C.brass, 1, 'dash');
   d.text('시험한 온도 1곳', { x: TX(SHOT) - 150, y: LINE - 28, w: 300, px: 13.5, lh: 1.3,
                               bold: true, color: C.brass, align: 'center' });
-  d.text('신고 범위 61개 온도', { x: 96, y: LINE - 10, w: 96, px: 12, lh: 1.3, lines: 2,
+  d.text('신고 범위\n61개 온도', { x: 96, y: LINE - 14, w: 96, px: 12, lh: 1.3, lines: 2,
                                   bold: true, color: C.slateL });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
