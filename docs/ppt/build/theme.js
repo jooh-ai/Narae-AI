@@ -231,6 +231,43 @@ function draw(pptx, s) {
     /* 그림 — Tool 화면 캡처. 테두리를 한 줄 둘러 '창' 이라는 것을 보이게 한다.
        캡처는 docs/ppt/assets/ 에 있고 파일명만 준다(ASSET 이 경로를 만든다).
        w·h 는 원본 비율대로 넣는다 — 늘리면 글자가 뭉개져서 캡처가 지저분해진다. */
+    /* 표 — 헤더 음영과 줄 구분선까지 그린다. '잘 만든 보고서' 느낌은 표에서
+       많이 온다. 숫자를 그냥 늘어놓는 것과 표로 앉히는 것은 다르게 읽힌다.
+         cols: [{ label, w, align, mono }]
+         rows: [[셀, 셀, ...], ...]   셀은 문자열이거나 { t, color, bold, px }
+         o.foot: 맨 아래 요약 행(같은 형식). 위에 굵은 선을 둔다.            */
+    table(x, y, cols, rows, o) {
+      o = o || {};
+      const rh = o.rh || 23, hh = o.hh || 26;
+      const W = cols.reduce((a, c) => a + c.w, 0);
+      const cell = (v, c, cy, def) => {
+        const t = (v && typeof v === 'object') ? v : { t: v };
+        api.text(String(t.t == null ? '' : t.t),
+          { x: cx + 9, y: cy, w: c.w - 18, px: t.px || 12.5, lh: 1.2, mono: c.mono,
+            bold: t.bold, color: t.color || def, align: c.align || 'left' });
+      };
+      let cx = x;
+      api.rect(x, y, W, hh, C.groove);
+      api.hline(x, y + hh, W, C.rule, 1.2);
+      cols.forEach(c => { cell(c.label, c, y + 8, C.dim2); cx += c.w; });
+      rows.forEach((r, i) => {
+        const ry = y + hh + i * rh;
+        if (i % 2 === 1)
+          api.rect(x, ry, W, rh, C.groove, { fill: { color: C.groove, transparency: 55 } });
+        api.hline(x, ry + rh, W, C.rule2, 1);
+        cx = x;
+        cols.forEach((c, j) => { cell(r[j], c, ry + (rh - 15) / 2, C.body); cx += c.w; });
+      });
+      let h = hh + rows.length * rh;
+      if (o.foot) {
+        const fy = y + h;
+        api.hline(x, fy, W, C.rule, 1.2);
+        cx = x;
+        cols.forEach((c, j) => { cell(o.foot[j], c, fy + (rh - 15) / 2 + 2, C.dim); cx += c.w; });
+        h += rh + 2;
+      }
+      return { w: W, h };
+    },
     /* 원본 비율을 지켜 상자 안에 맞춘다. 캡처는 가로세로비가 제각각이라
        (엑셀 실적 3.1:1, 온도별 표 1.2:1) 상자에 억지로 늘리면 글자가 뭉개진다.
        상자 안에서 가운데 정렬하고, 남는 자리는 비운다. */
@@ -261,7 +298,9 @@ function shell(pptx, opt) {
     if (opt.idx) {
       runs.push({ text: String(opt.idx).padStart(2, '0') + '   ',
                   options: { fontFace: F.mono, bold: true, color: C.brass, fontSize: PT(15) } });
-      runs.push({ text: INDEX[opt.idx - 1],
+      /* v3 는 목차 항목 이름을 쉬운 단어로 바꿨다. INDEX 는 18장판·v2 가 쓰고
+         있으므로 건드리지 않고, 쓰는 쪽에서 name 으로 덮어쓴다. */
+      runs.push({ text: opt.name || INDEX[opt.idx - 1],
                   options: { fontFace: F.kr, bold: true, color: C.ink, fontSize: PT(15) } });
       if (opt.sec) runs.push({ text: '   ·   ' + opt.sec,
                   options: { fontFace: F.kr, color: C.dim, fontSize: PT(13) } });

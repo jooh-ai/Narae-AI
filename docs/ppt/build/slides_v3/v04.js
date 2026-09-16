@@ -1,71 +1,71 @@
-/* v3-04 · 문제점.
+/* v3-04 · 기존 방식의 문제점.
 
-   4차. 회신 두 가지를 반영했다.
-     "BLT 사진이 너무 허접한데, 차라리 표로 하는게 낫지 않나?"
-     "텍스트가 너무 다 구어체야. 단순한 단어가 필요한 곳은 단어로."
-
-   ① 엑셀 캡처를 걷어내고 **표**로 바꿨다. 다만 숫자만 늘어놓으면 읽어야 하므로
-      각 행에 막대를 붙였다. 놋빛 막대(실제 차이)는 들쭉날쭉하고 회색 막대
-      (적용한 값)는 늘 짧고 비슷하다. 읽지 않아도 어긋난 것이 보인다.
-      숫자는 legacy_log.json — 담당자 시트에서 옮겨 적은 기록이다.
-
-   ② 말의 층을 나눴다. 제목과 라벨은 **단어**, 설명은 문장, 결론은 맨 아래 한 줄.
-      앞 판은 전부 "~했습니다" 라서 어디가 중요한지 구분이 안 됐다.            */
+   5차. 회신 반영.
+     "BLT 값을 차트보다는 표로. 날짜, 실제 차이, 적용한 보정값 세 개로."
+       → 막대를 걷어내고 세 열 표로 앉혔다. 헤더 음영·줄 구분·범위 요약 행까지
+         theme.table 로 그린다. 숫자를 늘어놓는 것과 표로 앉히는 것은 다르게 읽힌다.
+     "설명이 부족하고 내용을 조금 더 추가했으면"
+       → 오른쪽에 '왜 문제인가' 를 세 줄로 붙였다. 겨울·여름·결과.
+     제목에 주제를 넣었다.                                                   */
 'use strict';
 const LOG = require('../legacy_log.json');
 module.exports = (pptx, T, meta, D) => {
   const { C, G, LW } = T;
-  const { d } = T.shell(pptx, { sec: '문제점', idx: 2, step: 2 });
-  T.title(d, '문제점', null);
+  const { d } = T.shell(pptx, { name: '문제점', idx: 2, step: 2 });
+  const B = D.impact.blanket;
+  const gaps = LOG.rows.map(r => r.gap), aps = LOG.rows.map(r => r.applied);
+  const lo = Math.min(...gaps), hi = Math.max(...gaps);
+  T.title(d, '기존 방식의 문제점', null, { px: 33 });
   T.lead(d, '시험 결과는 회차마다 달랐지만, 더해 주는 보정값은 거의 하나로 고정돼 있었습니다.',
-         { y: 168, lines: 1 });
+         { y: 146, lines: 1 });
 
-  /* 왼쪽 — 표. 행마다 막대 두 개. */
-  d.zone(G.L, 226, 548, 402);
-  d.plab('기존 실적 시트 기록', 92, 238, 240);
-  d.text('MW', { x: 470, y: 237, w: 130, px: 10.5, lh: 1.2, mono: true, color: C.dim2,
-                 align: 'right' });
-  const Z = 232, K = 18.6;                        // 0 위치와 MW 당 픽셀
-  const BX = v => Z + v * K;
-  d.vline(Z, 258, 330, C.rule, 1);
-  LOG.rows.forEach((r, i) => {
-    const y = 266 + i * 25;
-    d.text(r.date, { x: 92, y: y + 2, w: 58, px: 12, lh: 1.2, mono: true, color: C.dim,
-                     align: 'right' });
-    const g = BX(r.gap);
-    d.rect(Math.min(Z, g), y, Math.max(Math.abs(g - Z), 2), 9, r.gap < 0 ? C.red : C.brass);
-    d.rect(Z, y + 11, Math.max(BX(r.applied) - Z, 2), 5, C.slate);
-    d.text(r.gap.toFixed(1), { x: 452, y: y + 1, w: 48, px: 12, lh: 1.2, mono: true,
-                               bold: true, color: r.gap < 0 ? C.red : C.brass,
-                               align: 'right' });
-    d.text(String(r.applied), { x: 512, y: y + 1, w: 48, px: 12, lh: 1.2, mono: true,
-                                color: C.slateL, align: 'right' });
-  });
-  d.rect(92, 600, 16, 8, C.brass);
-  d.text('실제 차이', { x: 114, y: 597, w: 120, px: 11.5, lh: 1.2, color: C.dim });
-  d.rect(240, 601, 16, 6, C.slate);
-  d.text('적용한 보정값', { x: 262, y: 597, w: 140, px: 11.5, lh: 1.2, color: C.dim });
+  /* 왼쪽 — 표 */
+  d.zone(G.L, 190, 470, 434);
+  d.plab('기존 실적 시트 기록', 92, 200, 260);
+  d.table(100, 226,
+    [{ label: '날짜', w: 74 }, { label: '실제 차이', w: 122, align: 'right', mono: true },
+     { label: '적용한 보정값', w: 148, align: 'right', mono: true }],
+    LOG.rows.map(r => [r.date,
+      { t: r.gap.toFixed(1), bold: true, color: r.gap < 0 ? C.red : C.brass },
+      { t: String(r.applied), color: C.slateL }]),
+    { rh: 22, foot: ['범위', { t: lo.toFixed(1) + ' ~ ' + hi.toFixed(1), bold: true },
+                     { t: Math.min(...aps) + ' ~ ' + Math.max(...aps) }] });
+  d.text('단위 MW. 기존 실적 시트에서 옮겨 적었습니다.',
+         { x: 100, y: 600, w: 344, px: 10.5, lh: 1.2, color: C.dim2 });
 
-  /* 오른쪽 — 40회 전부 */
-  d.zone(636, 226, 572, 402);
-  d.plab('시험 ' + D.n + '회 전체', 656, 238, 240);
-  d.text('가로 외기온도 ℃ / 세로 차이 MW', { x: 948, y: 237, w: 240, px: 10.5, lh: 1.2,
-                                              color: C.dim2, align: 'right' });
-  const X = t => 700 + (t + 3) * 11.3, Y = c => 288 + (14 - c) * 12.4;
-  [12, 8, 4, -4].forEach(v => d.hline(X(-3), Y(v), 470, C.rule2, 1));
-  d.hline(X(-3), Y(0), 470, C.rule, 1);
+  /* 오른쪽 — 40회 전체와 그래서 무엇이 문제인가 */
+  const RX = 558, RW = 650;
+  d.zone(RX, 190, RW, 434);
+  d.plab('시험 ' + D.n + '회 전체', RX + 20, 200, 240);
+  d.text('가로 외기온도 ℃ / 세로 실제 차이 MW',
+         { x: RX + 320, y: 199, w: 310, px: 10.5, lh: 1.2, color: C.dim2, align: 'right' });
+
+  const X = t => RX + 64 + (t + 3) * 13.6, Y = c => 240 + (14 - c) * 10.6;
+  [12, 8, 4, -4].forEach(v => d.hline(X(-3), Y(v), 558, C.rule2, 1));
+  d.hline(X(-3), Y(0), 558, C.rule, 1);
   [12, 8, 4, 0, -4].forEach(v => d.text((v > 0 ? '+' : '') + v,
-    { x: 656, y: Y(v) - 7, w: 34, px: 10, lh: 1.2, mono: true, color: C.dim2,
+    { x: RX + 18, y: Y(v) - 7, w: 36, px: 10, lh: 1.2, mono: true, color: C.dim2,
       align: 'right' }));
   [0, 10, 20, 30].forEach(t => { d.vline(X(t), Y(-6), 5, C.dim2, 1);
     d.text(t === 0 ? '0℃' : String(t), { x: X(t) - 22, y: Y(-6) + 8, w: 44, px: 10,
       lh: 1.2, mono: true, color: C.dim2, align: 'center' }); });
-  d.hline(X(-3), Y(D.blanket.flat), 470, C.slateL, LW.ref, 'dash');
-  d.text('적용한 보정값', { x: X(22), y: Y(D.blanket.flat) - 20, w: 180, px: 11.5,
-                            lh: 1.2, bold: true, color: C.slateL, align: 'right' });
-  D.scatter.forEach(([t, c]) => d.dot(X(t), Y(c), 3.2, C.body));
-  d.text('추울 때는 더 나오고 더울 때는 덜 나옵니다. 그 폭이 온도마다 달랐습니다.',
-         { x: 656, y: 570, w: 540, px: 14, lh: 1.6, lines: 2, color: C.body });
+  d.hline(X(-3), Y(D.blanket.flat), 558, C.slateL, LW.ref, 'dash');
+  d.text('적용한 보정값', { x: X(20), y: Y(D.blanket.flat) - 19, w: 180, px: 11.5, lh: 1.2,
+                            bold: true, color: C.slateL, align: 'right' });
+  D.scatter.forEach(([t, c]) => d.dot(X(t), Y(c), 3.3, C.body));
+
+  d.hline(RX + 20, 470, RW - 40, C.rule, 1);
+  [['겨울', C.slateL, '더 낼 수 있는데 적게 신고했습니다. 팔 수 있는 양을 못 팔았습니다.'],
+   ['여름', C.red, '못 내는데 많이 신고했습니다. 신고값을 못 채우면 정산에서 불이익을 받습니다.'],
+   ['결과', C.brass, '시험 ' + D.n + '회 가운데 ' + B.short + '회가 신고값을 못 채웠고, ' +
+    '가장 크게 어긋난 날은 ' + B.max.toFixed(1) + ' MW 였습니다.']]
+    .forEach(([k, col, v], i) => {
+      const y = 488 + i * 44;
+      d.rect(RX + 20, y + 3, 4, 26, col);
+      d.text(k, { x: RX + 34, y, w: 54, px: 15, lh: 1.3, bold: true, color: col });
+      d.text(v, { x: RX + 96, y: y + 1, w: RW - 136, px: 13.5, lh: 1.45, lines: 2,
+                  color: C.body });
+    });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
   T.foot(d, '온도마다 다른 것을 하나로 맞추려니 맞을 수가 없었습니다.');
