@@ -16,12 +16,16 @@ const pptxgen = require('pptxgenjs');
 const T = require('./theme.js');
 
 const DIR = __dirname;
-/* --v2 : 컴팩트판(13장). 기존 18장 판은 인자 없이 그대로 만든다. */
-const V2 = process.argv.includes('--v2');
-const SLIDE_DIR = path.join(DIR, V2 ? 'slides_v2' : 'slides');
-const STATE_PATH = path.join(DIR, V2 ? 'BUILD_STATE_V2.json' : 'BUILD_STATE.json');
-const OUT = path.join(DIR, '..', V2 ? '위례_공급가능용량_최종발표_v2.pptx'
-                                    : '위례_공급가능용량_최종발표.pptx');
+/* 판(版) 세 가지. 인자 없으면 18장판, --v2 컴팩트판, --v3 스토리판(STORY.md).
+   앞의 두 판은 그대로 둔다 — 되돌릴 자리가 있어야 한다. */
+const V3 = process.argv.includes('--v3');
+const V2 = !V3 && process.argv.includes('--v2');
+const TAG = V3 ? 'v3' : V2 ? 'v2' : '';
+const SLIDE_DIR = path.join(DIR, V3 ? 'slides_v3' : V2 ? 'slides_v2' : 'slides');
+const STATE_PATH = path.join(DIR, V3 ? 'BUILD_STATE_V3.json'
+                                : V2 ? 'BUILD_STATE_V2.json' : 'BUILD_STATE.json');
+const OUT = path.join(DIR, '..', TAG ? `위례_공급가능용량_최종발표_${TAG}.pptx`
+                                     : '위례_공급가능용량_최종발표.pptx');
 
 const state = JSON.parse(fs.readFileSync(STATE_PATH, 'utf8'));
 /* 장표 수치는 전부 여기서 온다. 데이터가 갱신되면 refresh_data.py 를 먼저 돌린다.

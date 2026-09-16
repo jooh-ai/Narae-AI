@@ -60,6 +60,22 @@ const LW = { main: 1.8, ref: 1.4, aux: 1.0, mark: 1.2, grid: 1 };
 const path = require('path');
 const ASSET = name => path.join(__dirname, '..', 'assets', name);
 
+/* PNG 원본 픽셀 크기 (IHDR). 비율을 지켜 배치하려면 알아야 한다. 같은 파일을
+   여러 장에서 쓰므로 한 번 읽고 기억한다. */
+const _pngCache = new Map();
+function pngSize(file) {
+  if (_pngCache.has(file)) return _pngCache.get(file);
+  const fd = require('fs').openSync(file, 'r');
+  const buf = Buffer.alloc(24);
+  require('fs').readSync(fd, buf, 0, 24, 0);
+  require('fs').closeSync(fd);
+  if (buf.slice(0, 8).toString('hex') !== '89504e470d0a1a0a')
+    throw new Error('PNG 이 아닙니다: ' + file);
+  const wh = [buf.readUInt32BE(16), buf.readUInt32BE(20)];
+  _pngCache.set(file, wh);
+  return wh;
+}
+
 /* px → in / pt */
 const IN = px => px / 96;
 const PT = px => px * 0.75;
@@ -215,6 +231,15 @@ function draw(pptx, s) {
     /* 그림 — Tool 화면 캡처. 테두리를 한 줄 둘러 '창' 이라는 것을 보이게 한다.
        캡처는 docs/ppt/assets/ 에 있고 파일명만 준다(ASSET 이 경로를 만든다).
        w·h 는 원본 비율대로 넣는다 — 늘리면 글자가 뭉개져서 캡처가 지저분해진다. */
+    /* 원본 비율을 지켜 상자 안에 맞춘다. 캡처는 가로세로비가 제각각이라
+       (엑셀 실적 3.1:1, 온도별 표 1.2:1) 상자에 억지로 늘리면 글자가 뭉개진다.
+       상자 안에서 가운데 정렬하고, 남는 자리는 비운다. */
+    imgFit(name, bx, by, bw, bh, opt) {
+      const [iw, ih] = pngSize(ASSET(name));
+      const k = Math.min(bw / iw, bh / ih);
+      const w = iw * k, h = ih * k;
+      return api.img(name, bx + (bw - w) / 2, by + (bh - h) / 2, w, h, opt);
+    },
     img(name, x, y, w, h, opt) {
       s.addImage(Object.assign({
         path: ASSET(name), x: IN(x), y: IN(y), w: IN(w), h: IN(h),
@@ -285,4 +310,4 @@ function foot(d, str) {
   return d.text(str, { x: G.L + 56, y: G.FOOT_Y, w: G.W - 56, px: 16.5, lh: 1.4 });
 }
 
-module.exports = { C, F, LW, IN, PT, G, INDEX, ASSET, rt, textW, draw, shell, title, lead, foot };
+module.exports = { C, F, LW, IN, PT, G, INDEX, ASSET, pngSize, rt, textW, draw, shell, title, lead, foot };
