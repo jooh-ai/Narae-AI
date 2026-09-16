@@ -28,40 +28,50 @@ module.exports = (pptx, T, meta, D) => {
          { y: 146, lines: 1 });
 
   /* 구획 1 — 절차 */
-  d.section(G.L, 186, G.W, 240, 1, '산정 절차', '엑셀 파일 4개');
+  d.section(G.L, 186, G.W, 206, 1, '산정 절차', '엑셀 파일 4개');
   const BW = 258, GAP = 20;
   STEP.forEach(([name, file, why], i) => {
     const x = 88 + i * (BW + GAP);
-    d.text(name, { x, y: 228, w: BW, px: 13.5, lh: 1.3, bold: true, color: C.brass });
-    d.box(x, 250, BW, 106, null, C.rule2, 1);
-    d.imgFit(file, x + 6, 255, BW - 12, 96);
-    d.text(why, { x, y: 364, w: BW, px: 11.5, lh: 1.5, lines: 3, color: C.dim });
-    if (i < STEP.length - 1) d.arrow(x + BW + 1, 295);
+    d.text(name, { x, y: 222, w: BW, px: 13.5, lh: 1.3, bold: true, color: C.brass });
+    d.box(x, 242, BW, 88, null, C.rule2, 1);
+    d.imgFit(file, x + 6, 246, BW - 12, 80);
+    d.text(why, { x, y: 338, w: BW, px: 11.5, lh: 1.5, lines: 3, color: C.dim });
+    if (i < STEP.length - 1) d.arrow(x + BW + 1, 280);
   });
 
-  /* 구획 2 — 왜 하나를 전부에 더했나. 글로 쓰지 않고 그린다. */
-  d.section(G.L, 438, G.W, 186, 2, '보정값을 정하는 방법', '시험 1곳 → 61개 온도');
-  d.text('시험은 하루에 한 곳에서만 합니다. 그 한 곳에서 나온 차이를 나머지 60개 온도에도 ' +
-         '똑같이 더했습니다.',
-         { x: 96, y: 480, w: 1088, px: 13, lh: 1.3, lines: 1, color: C.dim });
+  /* 구획 2 — 보정값을 어떻게 정했나.
+     회신: "한눈에 차트가 이해되지 않아. 좀 더 쉽고 구체적으로."
+     종전에는 점 하나와 점선 하나였다. 무엇을 보라는 것인지 알 수 없었다.
+     이번에는 **61개 온도에 실제로 들어간 값을 막대 61개로 세운다.**
+     전부 같은 높이인데 근거가 있는 것은 한 개뿐이라는 것이 바로 보인다.   */
+  d.section(G.L, 404, G.W, 220, 2, '보정값을 정하는 방법', '시험 1곳 → 61개 온도');
+  d.text('시험한 온도에서 나온 차이 하나를 61개 온도에 모두 같은 크기로 더했습니다.',
+         { x: 96, y: 440, w: 700, px: 13, lh: 1.3, lines: 1, color: C.dim });
 
-  const BASE = 602, LINE = 546;
+  const BASE = 580, MWPX = 18, VAL = 4;
+  const BY = v => BASE - v * MWPX;
+  [0, 2, 4, 6].forEach(v => {
+    d.hline(196, BY(v), PXW + 12, v === 0 ? C.rule : C.rule2, 1);
+    d.text(String(v), { x: 150, y: BY(v) - 7, w: 36, px: 10.5, lh: 1.2, mono: true,
+                        color: C.dim2, align: 'right' });
+  });
+  d.text('더한 값\nMW', { x: 96, y: BY(6) - 4, w: 46, px: 10, lh: 1.3, lines: 2,
+                           color: C.dim2, align: 'right' });
   for (let t = T0; t <= T1; t++) {
     const on = t === SHOT;
-    d.vline(TX(t), BASE - (on ? 14 : 6), on ? 14 : 6, on ? C.brass : C.rule, on ? 2 : 1);
+    d.rect(TX(t) - 4.5, BY(VAL), 9, VAL * MWPX, on ? C.brass : C.slate);
   }
-  d.hline(PX0 - 8, BASE, PXW + 16, C.rule, 1);
   [T0, -10, 0, 10, 20, 30, T1].forEach(t => d.text((t > 0 ? '+' : '') + t,
-    { x: TX(t) - 24, y: BASE + 7, w: 48, px: 10.5, lh: 1.2, mono: true, color: C.dim2,
+    { x: TX(t) - 24, y: BASE + 6, w: 48, px: 10.5, lh: 1.2, mono: true, color: C.dim2,
       align: 'center' }));
-  d.text('℃', { x: TX(T1) + 26, y: BASE + 7, w: 24, px: 10.5, lh: 1.2, color: C.dim2 });
-  d.hline(PX0, LINE, PXW, C.slateL, LW.ref, 'dash');
-  d.dot(TX(SHOT), LINE, 7, C.brass);
-  d.vline(TX(SHOT), LINE + 8, BASE - LINE - 22, C.brass, 1, 'dash');
-  d.text('시험한 온도 1곳', { x: TX(SHOT) - 150, y: LINE - 28, w: 300, px: 13.5, lh: 1.3,
-                              bold: true, color: C.brass, align: 'center' });
-  d.text('신고 범위\n61개 온도', { x: 96, y: LINE - 14, w: 96, px: 12, lh: 1.3, lines: 2,
-                                  bold: true, color: C.slateL });
+  d.text('℃', { x: TX(T1) + 26, y: BASE + 6, w: 24, px: 10.5, lh: 1.2, color: C.dim2 });
+
+  d.vline(TX(SHOT), BY(VAL) - 24, 20, C.brass, 1);
+  d.text('이 온도만 실제로 시험', { x: TX(SHOT) - 150, y: BY(VAL) - 42, w: 300, px: 13,
+                                    lh: 1.3, bold: true, color: C.brass, align: 'center' });
+  d.rect(210, BY(6) + 2, 14, 7, C.slate);
+  d.text('나머지 60개 온도는 시험하지 않고 같은 값',
+         { x: 230, y: BY(6) - 2, w: 400, px: 12.5, lh: 1.3, color: C.slateL });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
   T.foot(d, '해보지 않은 온도는 알 방법이 없었으니, 그때는 이게 최선이었습니다.');
