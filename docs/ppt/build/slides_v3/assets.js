@@ -20,6 +20,12 @@ module.exports = {
   toolGap: 'tool_gap.png',   // 아래 절반 — 온도별 차이와 실측점
   toolMod: 'tool_models.png',
   toolStatus: 'tool_status.png',
+  /* 2026-09-17 추가 — 회신 "시뮬레이션 기능이나 loocv 기능도 캡쳐해서
+     흐름에 맞게 넣으면 좋겠다". `ui_shots.py` 가 오프스크린으로 뽑았고,
+     장표에서 글자가 읽히도록 `crop_shot.py` 로 필요한 부분만 오렸다. */
+  toolSim:   'tool_sim.png',        // 출력 시뮬레이션 탭 (조건 넣고 실행한 화면)
+  toolSimOut:'tool_sim_out.png',    // 그 결과 칸만 — 계산이 이어지는 자리
+  toolLoocv: 'tool_loocv_top.png',  // 모델 선정 탭의 교차검증 표 (상위 3개 + 판정)
   toolList:'tool_list.png',
   ci:      'ci_narae.png',
 };

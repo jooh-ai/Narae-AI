@@ -4,18 +4,18 @@
 'use strict';
 module.exports = (pptx, T, meta, D) => {
   const { C, G, LW } = T;
-  const { d } = T.shell(pptx, {});
+  const { d } = T.shell(pptx, { topRight: false });
   const R = D.profile.rows;
-  d.text(meta.org, { x: G.L, y: G.SEC_Y, w: 600, px: 12, lh: 1.25, mono: true,
-                     color: C.dim2, cs: 1.8 });
-  d.text(meta.when, { x: 1008, y: G.SEC_Y, w: 200, px: 12, lh: 1.25, mono: true,
-                      color: C.dim2, cs: 1.8, align: 'right' });
+  /* 우상단은 shell() 이 쓰고 있다. 소속과 일자는 왼쪽 한 줄로 합친다. */
+  d.text(meta.org + '   ·   ' + meta.when,
+         { x: G.L, y: G.SEC_Y, w: 700, px: 12, lh: 1.25, mono: true,
+           color: C.dim2, cs: 1.8 });
 
   T.title(d, '감사합니다', null, { y: 106, w: 700, px: 56 });
   d.text('시험 ' + D.n + '회가 만든 곡선입니다.',
          { x: G.L, y: 190, w: 900, px: 17, lh: 1.4, color: C.body });
 
-  d.section(G.L, 244, G.W, 316, null, '외기온도별 신고 출력', '단위 MW · 흰 점은 실제 시험');
+  d.section(G.L, 244, G.W, 316, null, '외기온도별 신고 출력', '단위 MW · 검은 점은 실제 시험');
   const seg = R.filter(r => r.t >= -10 && r.t <= 40);
   const vs = seg.flatMap(r => [r.theory, r.real]);
   const lo = Math.floor(Math.min(...vs) / 10) * 10, hi = Math.ceil(Math.max(...vs) / 10) * 10;

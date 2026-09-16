@@ -13,7 +13,8 @@
 'use strict';
 const fs = require('fs'), path = require('path');
 const pptxgen = require('pptxgenjs');
-const T = require('./theme.js');
+/* v3 는 밝은 테마(사내 양식 참고)를 쓴다. 어두운 테마는 18장판·v2 가 그대로 쓴다. */
+const T = require(process.argv.includes('--v3') ? './theme_light.js' : './theme.js');
 
 const DIR = __dirname;
 /* 판(版) 세 가지. 인자 없으면 18장판, --v2 컴팩트판, --v3 스토리판(STORY.md).

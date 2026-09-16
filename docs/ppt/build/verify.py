@@ -6,7 +6,10 @@
 
 검사 4종
   ① 경계 이탈   모든 도형의 x+w, y+h 가 1280×720 안인가
-  ② 여백 침범   글자·도형이 외곽여백(좌우 72 / 상 44 / 하 686) 안인가
+  ② 여백 침범   글자·도형이 외곽여백 안인가 — 여백은 테마마다 다르다
+                 어두운 테마 상 44 / 하 686, v3 밝은 테마 상 34 / 하 702.
+                 파일명에 _v3 가 있으면 자동으로 밝은 테마 값을 쓴다.
+                 직접 주려면  --margin=72,34,1208,702
   ③ 글자 넘침   한글 자막폭을 넉넉하게(보수적으로) 추정해 필요 높이 vs 박스 높이
   ④ 상호 겹침   글자 박스끼리 겹치는가 (배경 도형은 의도된 것이라 제외)
 
@@ -20,7 +23,12 @@ A = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
 P = '{http://schemas.openxmlformats.org/presentationml/2006/main}'
 EMU = 9525.0                      # 1 px @96dpi
 W, H = 1280, 720
-MARGIN = (72, 44, 1208, 686)      # left, top, right, bottom
+# left, top, right, bottom
+# 어두운 테마(theme.js) — 머리글 y 44, 꼬리글 아래끝 686
+MARGIN    = (72, 44, 1208, 686)
+# v3 밝은 테마(theme_light.js) — 제목 왼쪽 빨간 바를 y 34 로 올리고
+# 쪽번호를 y 688(아래끝 702)에 둔다. 사내 양식의 여백에 맞춘 값이다.
+MARGIN_V3 = (72, 34, 1208, 702)
 SAFE = 1.08                       # 자막폭 안전 여유
 
 def px(v): return float(v) / EMU
@@ -106,9 +114,16 @@ def check(path):
     return len(names), fails
 
 if __name__ == '__main__':
-    path = sys.argv[1] if len(sys.argv) > 1 else 'docs/ppt/위례_공급가능용량_최종발표.pptx'
+    args = [a for a in sys.argv[1:] if not a.startswith('--')]
+    opts = [a for a in sys.argv[1:] if a.startswith('--')]
+    path = args[0] if args else 'docs/ppt/위례_공급가능용량_최종발표.pptx'
+    given = next((a.split('=', 1)[1] for a in opts if a.startswith('--margin=')), None)
+    if given:
+        MARGIN = tuple(float(v) for v in given.split(','))
+    elif '--v3' in opts or '_v3' in path:
+        MARGIN = MARGIN_V3
     n, fails = check(path)
-    print('검증  %d 장' % n)
+    print('검증  %d 장   여백 좌%g 상%g 우%g 하%g' % ((n,) + MARGIN))
     if not fails:
         print('통과  경계 이탈 0 · 여백 침범 0 · 글자 넘침 0 · 상호 겹침 0')
         sys.exit(0)

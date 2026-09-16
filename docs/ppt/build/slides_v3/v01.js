@@ -10,7 +10,9 @@
 const CI = { file: 'ci_narae.png', w: 5619, h: 1056 };   // 원본 픽셀 — 비율 5.32
 module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
-  const { d } = T.shell(pptx, { rule: false });
+  /* 표지에는 머리글·쪽번호를 두지 않는다. 우상단 소제목은 아래 '개선과제
+     최종 보고' 와 두 줄로 붙어 실수처럼 보였다. */
+  const { d } = T.shell(pptx, { topRight: false, page: false });
 
   /* CI — 흰 판 위에. 너무 크지 않게 폭 196px(슬라이드 폭의 15%) */
   const LW = 196, LH = Math.round(LW * CI.h / CI.w);      // 37
