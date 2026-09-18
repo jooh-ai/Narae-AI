@@ -29,8 +29,10 @@ module.exports = (pptx, T, meta, D) => {
   const R = D.profile.rows.filter(r => r.t >= -10 && r.t <= 40);
   const vs = R.map(r => r.theory), lo = Math.min(...vs), hi = Math.max(...vs);
   const X = t => 128 + (t + 10) * 6.2, Y = v => y1 + 92 - (v - lo) / (hi - lo) * 66;
+  /* 구획 안의 캡션은 다른 장과 같이 내용 왼쪽 축(92)에 맞춘다. 종전에는 74 라
+     머리글(72)과 2px 어긋나 보였다 — 2026-09-18 정렬 감사에서 잡았다. */
   d.text('세로 신고 출력(MW) · 가로 외기온도(℃) · 추우면 많이, 더우면 적게',
-         { x: 74, y: y1, w: 400, px: 10, lh: 1.2, color: C.dim2 });
+         { x: 92, y: y1, w: 400, px: 10, lh: 1.2, color: C.dim2 });
   d.hline(122, y1 + 96, 328, C.rule, 1);
   d.vline(122, y1 + 18, 78, C.rule, 1);
   for (let i = 0; i < R.length - 1; i++)
@@ -64,8 +66,8 @@ module.exports = (pptx, T, meta, D) => {
   const y2 = d.section(G.L, 342, 556, 282, 2, '과제 선정 이유', '정비기술팀 두 사람');
   d.text('해 본 적 없는 분야를 공부해서 직접 풀어 보고 싶었습니다.',
          { x: 92, y: y2, w: 516, px: 15, lh: 1.25, bold: true, color: C.ink });
-  d.text('업무를 줄이는 것만 생각했다면 엑셀을 손보고 끝냈을 것입니다.',
-         { x: 92, y: y2 + 24, w: 516, px: 12, lh: 1.35, lines: 2, color: C.dim });
+  d.text('남의 팀 업무인데도 과제로 잡은 이유가 셋 있습니다.',
+         { x: 92, y: y2 + 24, w: 516, px: 12, lh: 1.35, color: C.dim });
   [['AI 로 새 분야를 경험하고 싶었다',
     '예측·보정 모델은 해 본 적이 없었습니다. AI 를 길잡이로 삼아 직접 공부하고 ' +
     '풀어내는 성취감을 맛보고 싶었습니다.'],
@@ -97,5 +99,5 @@ module.exports = (pptx, T, meta, D) => {
          { x: 664, y: y3 + 226, w: 524, px: 11.5, lh: 1.3, color: C.dim2 });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '해 본 적 없는 분야를 공부해 보고 싶었고, 마침 눈에 보이던 비효율이 그 대상이었습니다.');
+  T.foot(d, '배워 보고 싶은 분야와, 곁에서 보이던 낭비가 같은 자리에 있었습니다.');
 };

@@ -46,8 +46,8 @@ module.exports = (pptx, T, meta, D) => {
   d.text('병행 운전', { x: 92, y: y1 + 70, w: 90, px: 11.5, lh: 1.2, bold: true,
                          color: C.brass });
   d.text(CM.from + ' ~ ' + CM.to + ' 에 *' + CM.n + '회*. 평균 어긋난 폭은 *' +
-         CM.mae.toFixed(2) + ' MW*, 치우침은 ' + CM.me.toFixed(2) +
-         ' MW 로 한쪽으로 쏠리지 않았습니다.',
+         CM.mae.toFixed(2) + ' MW*, 치우침은 ' +
+         CM.me.toFixed(2).replace('-', '−') + ' MW 로 한쪽으로 쏠리지 않았습니다.',
          { x: 190, y: y1 + 70, w: 992, px: 12.5, lh: 1.3, color: C.body });
 
   /* ── 구획 2 · 한 회를 돌린 결과 (도구 「공급가능용량 산정」 창) ──

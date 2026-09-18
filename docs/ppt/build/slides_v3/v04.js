@@ -27,7 +27,7 @@ module.exports = (pptx, T, meta, D) => {
   const m1 = avg(P.map(p => p.dev1)), ma = avg(P.map(p => p.applied));
 
   T.title(d, '기존 방식의 문제점', null, { px: 33 });
-  T.lead(d, '절차가 번거로웠고, 더하는 값을 하나로 끝냈습니다. 그래서 신고한 숫자가 어긋났습니다.',
+  T.lead(d, '절차가 번거로웠고, 더하는 값은 하나로 정해 두고 그대로 썼습니다. 그래서 신고한 숫자가 어긋났습니다.',
          { y: 134, lines: 1 });
 
   /* ── 구획 1 · 번거로운 절차 ───────────────────────────────────── */
@@ -98,7 +98,7 @@ module.exports = (pptx, T, meta, D) => {
   const X = t => 548 + (t + 4) * 14.0, Y = c => y3 + 30 + (13 - c) * 7.4;
   [12, 8, 4, -4].forEach(v => d.hline(X(-4), Y(v), X(40) - X(-4), C.rule2, 1));
   d.hline(X(-4), Y(0), X(40) - X(-4), C.rule, 1);
-  [12, 8, 4, 0, -4].forEach(v => d.text((v > 0 ? '+' : '') + v,
+  [12, 8, 4, 0, -4].forEach(v => d.text(v > 0 ? '+' + v : v < 0 ? '−' + -v : '0',
     { x: 508, y: Y(v) - 7, w: 32, px: 10, lh: 1.2, mono: true, color: C.dim2,
       align: 'right' }));
   [0, 10, 20, 30, 40].forEach(t => d.text(t === 0 ? '0℃' : String(t),
@@ -108,15 +108,21 @@ module.exports = (pptx, T, meta, D) => {
   d.text('더한 값 (늘 하나)', { x: X(30), y: Y(D.blanket.flat) - 17, w: 168, px: 11,
                                  lh: 1.2, bold: true, color: C.slateL, align: 'right' });
   D.scatter.forEach(([t, c]) => d.dot(X(t), Y(c), 2.8, C.body));
-  d.text('가로 외기온도 ℃ · 세로 실제 차이 MW · 점 하나가 시험 한 번',
-         { x: 508, y: Y(-6) + 22, w: 560, px: 10.5, lh: 1.2, color: C.dim2 });
+  /* 점은 40개(누적 전부)인데 아래 문장의 채점은 39회다. 한 장 안에 두 숫자가
+     근거 없이 같이 있으면 반드시 질문받는다 — 여기서 한 번 밝혀 둔다.
+     자세한 까닭은 9장 각주에 있다. */
+  d.text('가로 외기온도 ℃ · 세로 실제 차이 MW · 점 하나가 시험 한 번(누적 ' + D.n +
+         '회) · 채점 ' + D.n_score + '회(까닭은 9장 각주)',
+         { x: 508, y: Y(-6) + 22, w: 674, px: 10.5, lh: 1.2, color: C.dim2 });
 
   /* 두 그림을 잇는 한 줄 — 왜 어긋나는지 */
   const yc = y3 + 212;
   d.rect(508, yc, 4, 76, C.red);
   d.text('겨울에는 적게 신고하고, 여름에는 못 내는데 많이 신고하게 됩니다.',
          { x: 526, y: yc, w: 656, px: 14.5, lh: 1.4, bold: true, color: C.ink });
-  d.text('시험 ' + D.n + '회 가운데 *' + B.short + '회*가 신고한 만큼 못 냈습니다. ' +
+  /* 채점 대상은 누적 40회가 아니라 39회다(9장 각주와 같은 집합). 종전에는
+     40회로 적어 9장과 어긋나 있었다 — 2026-09-18 전면 검토에서 잡았다. */
+  d.text('채점한 시험 ' + D.n_score + '회 가운데 *' + B.short + '회*가 신고한 만큼 못 냈습니다. ' +
          '가장 크게 어긋난 회차는 *' + B.max.toFixed(1) + ' MW* 였습니다.',
          { x: 526, y: yc + 26, w: 656, px: 12.5, lh: 1.45, lines: 2, color: C.body });
 

@@ -21,12 +21,12 @@ const A = require('./assets.js');
 /* 후보의 성격 — 통계 용어를 풀어 한 줄로. "무엇을 겨루게 했나" 가 보이면 된다. */
 const KIND = {
   'gp:rbf':      '가장 부드러운 곡선',
-  'gp:rq':       '여러 굵기의 파동을 섞은 곡선',
-  'gp:matern52': '조금 덜 부드러운 곡선',
-  'gp:matern32': '더 덜 부드러운 곡선',
+  'gp:rq':       '완만한 물결과 급한 물결을 섞은 곡선',
+  'gp:matern52': '거의 부드러운 곡선',
+  'gp:matern32': '살짝 각이 지는 곡선',
   'gp:exp':      '꺾임을 허용하는 곡선',
   'curve':       '가까운 시험에 무게를 더 주는 평균',
-  'bin':         '온도 구간을 나눠 그 안의 평균을 씀 — 가장 단순',
+  'bin':         '온도 구간별 평균 — 가장 단순한 방법',
 };
 const NAME = {
   'gp:rbf': 'GP · RBF', 'gp:rq': 'GP · RQ', 'gp:matern52': 'GP · Matérn 5/2',
@@ -67,18 +67,19 @@ module.exports = (pptx, T, meta, D) => {
            { x: BX + BW + 158, y, w: 420, px: 11, lh: 1.2, bold: win,
              color: win ? C.brass : C.dim });
   });
-  d.text('세로 이름 · 막대는 1등과의 차이(오른쪽으로 갈수록 더 틀린 것) · 가운데 숫자가 ' +
-         '평균 오차 · 채점은 시험 ' + D.n_score + '회를 한 회씩 가려 맞혀 보는 방식',
-         { x: 92, y: y1 + 134, w: 1090, px: 10, lh: 1.3, color: C.dim2 });
+  d.text('막대는 1등과의 차이(오른쪽으로 갈수록 더 틀린 것) · 가운데 숫자가 평균 오차 · ' +
+         '채점은 한 회씩 가려 맞혀 보는 방식으로, 누적 ' + D.n + '회 가운데 ' + D.n_score +
+         '회를 썼습니다(한 회차는 구간평균이 답을 못 내 빠집니다)',
+         { x: 92, y: y1 + 130, w: 1090, px: 10, lh: 1.3, color: C.dim2 });
   d.text('* GP = 가우시안 프로세스. 값 하나를 내는 것이 아니라 곡선 전체를 후보로 두고 ' +
          '실적에 가장 잘 맞는 곡선을 고릅니다. 뒤에 붙은 이름(RBF · Matérn …)은 곡선이 ' +
          '얼마나 부드러운지를 정하는 설정입니다.',
-         { x: 92, y: y1 + 152, w: 1090, px: 10, lh: 1.3, lines: 1, color: C.dim2 });
+         { x: 92, y: y1 + 146, w: 1090, px: 10, lh: 1.3, color: C.dim2 });
 
   /* ── 구획 2 · 도구 안에서 고릅니다 ────────────────────────────── */
   const y2 = d.section(G.L, 380, G.W, 260, 2, '도구 안에서 고릅니다',
                        '모델 선정 화면 · 위 표와 같은 숫자입니다');
-  d.img(A.toolWinSel, 92, y2, 778, 226);
+  d.img(A.toolWinSel, 92, y2, 757, 220);
   [['왜 도구에 넣었나', '시험이 ' + D.n + '회뿐입니다. 실적이 늘면 성적이 바뀔 수 있어 ' +
     '그때마다 다시 채점해야 합니다.'],
    ['어떻게 채점하나', '한 회를 가리고 나머지로 그 회를 맞혀 봅니다. 전 회차를 돌아가며 ' +
@@ -86,8 +87,8 @@ module.exports = (pptx, T, meta, D) => {
    ['앞서면 바꾼다', '다른 모델이 앞서면 그때 바꿉니다. 지금은 GP·RBF 가 앞섭니다.']]
     .forEach(([k, v], i) => {
       const y = y2 + i * 76;
-      d.text(k, { x: 900, y, w: 282, px: 11.5, lh: 1.2, bold: true, color: C.brass });
-      d.text(v, { x: 900, y: y + 18, w: 282, px: 11, lh: 1.35, lines: 4, color: C.dim });
+      d.text(k, { x: 880, y, w: 302, px: 11.5, lh: 1.2, bold: true, color: C.brass });
+      d.text(v, { x: 880, y: y + 18, w: 302, px: 11, lh: 1.35, lines: 3, color: C.dim });
     });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);

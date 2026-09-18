@@ -33,7 +33,7 @@ module.exports = (pptx, T, meta, D) => {
     cit: '차이의 *85%* 를 이것만으로 설명합니다',
     rh: '0.01 나아졌지만 흔들림 ±' + near.vs_base.se.toFixed(2) + ' 보다 작습니다',
     press: '제작사 계산식이 이미 쓰고 있습니다 (두 번 반영)',
-    cp_meas: '온도와 같이 움직입니다 (겹침 ' + cp.vs_t.toFixed(2) + ')',
+    cp_meas: '온도와 거의 같이 움직입니다 (' + cp.vs_t.toFixed(2) + ')',
     all: '넣을수록 나빠졌습니다',
   };
   const key = r => (r.keys.length > 2 ? 'all' : r.keys[r.keys.length - 1]);
@@ -70,7 +70,7 @@ module.exports = (pptx, T, meta, D) => {
   [['혼자서 대부분을 설명한다',
     '차이의 85% 가 온도로 설명됩니다. 추우면 커지고 더우면 작아집니다.'],
    ['방향이 분명하다',
-    '온도와 차이가 반대로 움직입니다 (겹침 ' + Math.abs(CZ.rows[0].raw).toFixed(2) +
+    '온도가 오르면 차이가 내려갑니다 (반대 방향 ' + Math.abs(CZ.rows[0].raw).toFixed(2) +
     '). 네 후보 가운데 가장 뚜렷합니다.'],
    ['미리 알 수 있는 값이다',
     '신고는 영하 20도부터 40도까지 온도마다 내야 합니다. 입력이 온도여야 표를 만들 수 있습니다.']]
@@ -97,7 +97,7 @@ module.exports = (pptx, T, meta, D) => {
          '덜 올린 채로 쟀으니 낮게 나온 것입니다.',
          { x: 684, y: y3 + 68, w: 504, px: 12, lh: 1.45, lines: 4, color: C.body });
   d.text('보고 결론을 거뒀습니다. 지금은 그런 날의 시험을 도구가 걸러냅니다.',
-         { x: 664, y: y3 + 150, w: 524, px: 12, lh: 1.35, lines: 2, color: C.dim2 });
+         { x: 664, y: y3 + 150, w: 524, px: 12, lh: 1.35, color: C.dim2 });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
   T.foot(d, '후보를 하나씩 접고 나니 외기 온도만 남았습니다.');

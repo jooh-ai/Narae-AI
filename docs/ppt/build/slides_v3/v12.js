@@ -15,7 +15,7 @@ module.exports = (pptx, T, meta, D) => {
   d.text('시험 ' + D.n + '회가 만든 곡선입니다.',
          { x: G.L, y: 190, w: 900, px: 17, lh: 1.4, color: C.body });
 
-  d.section(G.L, 244, G.W, 316, null, '외기온도별 신고 출력', '단위 MW · 검은 점은 실제 시험');
+  d.section(G.L, 244, G.W, 316, null, '외기온도별 신고 출력', '단위 MW · 검은 점이 실제 시험 결과');
   const seg = R.filter(r => r.t >= -10 && r.t <= 40);
   const vs = seg.flatMap(r => [r.theory, r.real]);
   const lo = Math.floor(Math.min(...vs) / 10) * 10, hi = Math.ceil(Math.max(...vs) / 10) * 10;

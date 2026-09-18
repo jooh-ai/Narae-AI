@@ -72,13 +72,13 @@ module.exports = (pptx, T, meta, D) => {
       d.text(who, { x: x + 16, y: y2, w: 236, px: 15, lh: 1.25, bold: true, color: C.ink });
       d.text(what, { x: x + 16, y: y2 + 22, w: 236, px: 11.5, lh: 1.2, bold: true,
                      color: col });
-      d.text(how, { x: x + 16, y: y2 + 40, w: 236, px: 11, lh: 1.35, lines: 4,
+      d.text(how, { x: x + 16, y: y2 + 40, w: 236, px: 11, lh: 1.35, lines: 3,
                     color: C.dim });
       if (i === 0) d.vline(x + 258, y2 - 2, 84, C.rule2, 1);
     });
 
   /* ── 구획 3 · 막혔던 곳 다섯 군데 ─────────────────────────────── */
-  const y3 = d.section(G.L, 314, G.W, 326, 3, '막혔던 곳 다섯 군데', '막힌 것 → 한 일 → 남은 것');
+  const y3 = d.section(G.L, 314, G.W, 326, 3, '막혔던 곳 다섯 군데', '막혔던 것 → 한 일 → 남은 것');
   d.plab('막혔던 것', 92, y3, 300);
   d.plab('한 일', 404, y3, 500);
   d.plab('남은 것', 920, y3, 262);
