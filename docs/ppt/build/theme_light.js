@@ -102,8 +102,15 @@ const G = {
 };
 
 /* ── 인라인 강조 마크업 ───────────────────────────────────────────────
-   *앰버볼드*  _회백볼드_  ~슬레이트~  `숫자는 Consolas`
-   슬라이드 문장을 한 줄로 쓰고 색·서체는 여기서 붙인다.            */
+   *레드볼드*  _먹색볼드_  ~~슬레이트~~  `숫자는 Consolas`
+   슬라이드 문장을 한 줄로 쓰고 색·서체는 여기서 붙인다.
+
+   슬레이트만 물결 **두 개**다. 하나였을 때 `20~25℃ 는 1회, 15~20℃ 는 3회`
+   같은 문장에서 두 물결 사이가 마크업으로 먹혀 `2025℃ 는 1회, 1520℃` 로
+   나왔다(미리보기로 발견). 온도 구간을 적을 일이 많은 장표라 물결은 글자로
+   쓰는 편이 자연스럽고, 강조 쪽을 두 개로 미루는 것이 맞다.
+   어두운 테마(theme.js)는 그대로 하나다 — 18장판이 `~이론 출력~` 처럼
+   이미 쓰고 있어서 규칙을 바꾸면 그 판이 깨진다.                      */
 /* 자막폭 추정 — verify.py 와 같은 모델을 쓴다.
    한글·기호 1.0em / 영숫자 0.55em(Consolas 자폭) + 10% 안전 여유.
    숫자 박스를 이 폭으로 잡아야 박스가 겹치지도, 검증에서 넘치지도 않는다. */
@@ -115,7 +122,7 @@ function textW(str, px_) {
 
 function rt(str, base) {
   const b = Object.assign({ fontFace: F.kr }, base || {});
-  const re = /(\*[^*]+\*|_[^_]+_|~[^~]+~|`[^`]+`)/g;
+  const re = /(\*[^*]+\*|_[^_]+_|~~[^~]+~~|`[^`]+`)/g;
   const out = []; let i = 0, m;
   while ((m = re.exec(str)) !== null) {
     if (m.index > i) out.push({ text: str.slice(i, m.index), options: Object.assign({}, b) });
@@ -124,7 +131,7 @@ function rt(str, base) {
     else if (tok[0] === '_') { o.color = C.ink; o.bold = true; }
     else if (tok[0] === '~') { o.color = C.slate; }
     else { o.fontFace = F.mono; }
-    out.push({ text: body, options: o });
+    out.push({ text: tok[0] === '~' ? tok.slice(2, -2) : body, options: o });
     i = m.index + tok.length;
   }
   if (i < str.length) out.push({ text: str.slice(i), options: Object.assign({}, b) });
