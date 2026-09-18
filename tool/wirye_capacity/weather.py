@@ -107,20 +107,33 @@ def load_excel3_1(path: str) -> WeatherForecast:
                            update_time=_find_update_time(rows))
 
 
-def applied_pressure(fc: WeatherForecast, *, day: str | None = None,
-                     offset: float = C.WEATHER_SITE_OFFSET, aggregate: str = "mean") -> float:
-    """입찰 적용 대기압(mbar) = 중위 대기압 + 위치보정(−8).
+def bid_days(fc: WeatherForecast) -> list[str]:
+    """입찰 적용 대기압에 쓰는 예보일 목록 (3~7일차 = D+2~D+6).
 
-    day 지정 시 그 날의 중위, 아니면 전체 중위의 평균(mean) 또는 중앙값(median)."""
-    import statistics
-    if day is not None:
-        if day not in fc.pressure_median:
-            raise ValueError(
-                f"'{day}' 날짜의 중위 대기압이 없습니다 (가용: {fc.days})")
-        base = fc.pressure_median[day]
-    else:
-        vals = [v for v in fc.pressure_median.values() if isinstance(v, (int, float))]
-        if not vals:
-            raise ValueError("중위 대기압 데이터가 없습니다")
-        base = statistics.mean(vals) if aggregate == "mean" else statistics.median(vals)
-    return base + offset
+    엑셀3 '온도 Profile'!M2 = AVERAGE(Y8:Y12)-8 과 같은 창이다. 양식이 7일 고정이
+    아니면 오류로 막는다 — 잘못된 대기압은 프로파일 61행 전체를 조용히 밀어버리고
+    (0.4 MW/mbar) 입찰 문서에 그대로 들어간다. 조용히 틀리는 것보다 멈추는 게 낫다.
+    """
+    lo, hi = C.WEATHER_BID_SLICE
+    if len(fc.days) != C.WEATHER_FORECAST_DAYS:
+        raise ValueError(
+            f"예보 파일의 날짜가 {len(fc.days)}일입니다 — {C.WEATHER_FORECAST_DAYS}일 "
+            f"양식이어야 합니다(엑셀3 M2 수식이 {lo + 1}~{hi}일차를 평균하므로). "
+            f"읽은 날짜: {fc.days}")
+    return fc.days[lo:hi]
+
+
+def applied_pressure(fc: WeatherForecast, *,
+                     offset: float = C.WEATHER_SITE_OFFSET) -> float:
+    """입찰 적용 대기압(mbar) = 3~7일차 중위 대기압의 평균 + 위치보정(−8).
+
+    엑셀3 '온도 Profile'!M2 = AVERAGE(Y8:Y12)-8 을 파이썬으로 그대로 옮긴 것이다.
+    적용일을 고르는 인자는 없다 — 담당자 실무가 이 창 하나로 고정이고, 고를 수
+    있게 두면 M2 표시값과 파일 내용이 어긋난다(2026-08-25 부장님 확인).
+    """
+    days = bid_days(fc)
+    vals = [fc.pressure_median[d] for d in days if d in fc.pressure_median]
+    if len(vals) != len(days):
+        missing = [d for d in days if d not in fc.pressure_median]
+        raise ValueError(f"중위 대기압이 없는 날짜가 있습니다: {missing}")
+    return sum(vals) / len(vals) + offset

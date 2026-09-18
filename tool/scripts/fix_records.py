@@ -1,17 +1,20 @@
 """누적 기록 정정 — 기본은 미리보기(dry-run), --apply 로만 실제 변경.
 
-정정 대상 (2026-08 원본표 대조 결과)
-  담당자 실적표(2026-07-29 수령)와 히스토리안이 서로 일치하는데 우리 DB 만
-  다른 기록을 갖고 있던 2건. 근거가 확정된 것만 넣는다.
-
-    2025-04-15  DB: CIT 25.70 / CC 411.51   →  정답: CIT 13.69 / CC 438.10
-                이 날만 Data 취득창이 16:00~17:00 이다(Test 종료도 17:00).
-                17:00 창으로 읽으면 시험 종료 후 감발 구간이 섞여 409.95 가 나온다.
-    2026-01-08  DB: CIT  6.90 / CC 460.70   →  정답: CIT -1.45 / CC 472.49
-                히스토리안 17:00 창이 원본표(-1.5 / 472.5)와 일치. GT+ST 정합.
+무엇을 하는가 (2026-08 원본표 대조 결과 — 근거가 확정된 것만)
+  ① 교체 1건
+       2026-01-08  DB: CIT 6.90 / CC 460.70  →  CIT -1.45 / CC 472.49
+       히스토리안 17:00 창이 원본표(-1.5 / 472.5)와 일치. GT+ST 정합.
+  ② 삭제 1건
+       2025-04-15  DB: CIT 25.70 / CC 411.51 — 실적표 어느 행과도 안 맞는다.
+       그 날 실제 시험은 CIT 13.69/CC 438.10 이지만 증설(+5.56MW) 전이라 제외.
+  ③ 습도 5건  MBL → CXM (아래 참조)
 
   값은 코드에 박아 넣지 않고 히스토리안에서 다시 읽어 온다. 읽어온 값이 원본표와
   허용범위 안에서 맞는지 검증한 뒤에만 반영한다 — 엉뚱한 값으로 덮어쓰지 않도록.
+  삭제도 마찬가지로 DB 값이 예상과 맞을 때만 실행한다.
+
+  ※ 결과는 rebuild_seed.py 로 만든 번들 씨앗 31건과 같아야 한다. 두 스크립트의
+    판단이 갈리면 새로 설치한 PC 와 기존 PC 의 데이터가 달라진다.
 
 습도 정정 5일 (02/25·03/04·03/18·03/24·04/02)
   MBL(10MBL11CM001) 이 드리프트 중이어서 담당자가 그 5일만 CXM(10CXM00CM001)
@@ -47,12 +50,22 @@ NODEID_CACHE = str(Path.home() / ".wirye_opcua_nodeids.json")
 
 # 원본표(담당자 실적표) 기준값 — 히스토리안에서 읽은 값이 이것과 맞는지 검증용.
 FIXES = [
-    {"date": "2025-04-15", "start": "16:00",
-     "ref": {"cit": 13.7, "press": 995.8, "cc": 438.1},
-     "why": "Data 취득창이 16:00~17:00 (Test 종료 17:00). 32건 중 유일"},
     {"date": "2026-01-08", "start": "17:00",
      "ref": {"cit": -1.5, "press": 1017.0, "cc": 472.5},
      "why": "DB 기록(CIT 6.90/CC 460.70)이 원본표·히스토리안과 불일치"},
+]
+
+# 삭제할 기록 — 실적표에 대응이 없는 것. 값이 예상과 맞을 때만 지운다.
+#
+# 2025-04-15 의 DB 기록(CIT 25.70/CC 411.51)은 실적표 어느 행과도 맞지 않는다.
+# 그 날의 실제 시험은 CIT 13.69/CC 438.10(취득창 16~17시)인데, 실적표 '연도' 열의
+# 'IGV (+5.56MW)' 라벨 기준 증설 전 시험으로 판단해 씨앗에서도 제외했다
+# (보정값이 인접 대비 -4.53 MW, +5.56 보정 시 2025-11-04 와 일치).
+# → 여기서도 넣지 않는다. rebuild_seed.py 의 EXCLUDE 와 같은 판단이어야 한다.
+#   담당자가 라벨 구간을 확인해 주면 add 명령으로 넣는다.
+DELETE = [
+    {"date": "2025-04-15", "expect": {"cit": 25.70, "cc": 411.51},
+     "why": "실적표에 대응 없는 기록. 그 날 실제 시험은 증설 전이라 씨앗에서도 제외"},
 ]
 TOL = {"cit": 0.3, "press": 1.5, "cc": 0.5}     # 원본표는 소수 1자리 표기
 
@@ -199,7 +212,26 @@ def main():
               f"W {new.w:+3.0f}  보정 {new.corr:+7.3f}   (Δ보정 {new.corr - old.corr:+.3f} MW)")
         plan.append((f["date"], old, new))
 
-    hr("2. 습도 정정 5일 — MBL 드리프트 → CXM 값으로 교체 (CIT·대기압·CC 는 유지)")
+    hr("2. 실적표에 대응 없는 기록 삭제")
+    to_del = []
+    for f in DELETE:
+        d = f["date"]
+        old = next((r for r in store.all() if r.date == d), None)
+        if old is None:
+            print(f"  {d}  DB 에 없음 — 건너뜀")
+            continue
+        # 값이 예상과 다르면 건드리지 않는다. 엉뚱한 기록을 지우면 되돌릴 수 없다.
+        bad = [f"{k} {getattr(old, 'cc_meas' if k == 'cc' else k):.2f} vs 예상 {v:.2f}"
+               for k, v in f["expect"].items()
+               if abs(getattr(old, "cc_meas" if k == "cc" else k) - v) > 0.05]
+        if bad:
+            print(f"  {d}  ✗ 값이 예상과 달라 삭제하지 않음: {' / '.join(bad)}")
+            continue
+        print(f"  {d}  삭제 예정  CIT {old.cit:.2f} / CC {old.cc_meas:.2f} / "
+              f"보정 {old.corr:+.3f}   ({f['why']})")
+        to_del.append(d)
+
+    hr("3. 습도 정정 5일 — MBL 드리프트 → CXM 값으로 교체 (CIT·대기압·CC 는 유지)")
     if a.skip_rh:
         print("  --skip-rh 지정 — 건너뜁니다.")
     else:
@@ -235,7 +267,7 @@ def main():
     drop = None
     if a.drop_0106:
         drop = next((r for r in store.all() if r.date == "2026-01-06"), None)
-        hr("3. 2026-01-06 제외 (C/T Cell #2 정지로 미반영)")
+        hr("4. 2026-01-06 제외 (C/T Cell #2 정지로 미반영)")
         if drop is None:
             print("  해당 날짜 기록이 없습니다 — 건너뜁니다.")
         else:
@@ -246,23 +278,26 @@ def main():
 
     if not a.apply:
         hr("미리보기 종료")
-        print(f"  변경 예정 {len(plan)}건(기록 교체 + 습도 정정)"
-              + (" + 삭제 1건" if drop else ""))
+        print(f"  변경 예정 {len(plan)}건(기록 교체 + 습도 정정) / "
+              f"삭제 {len(to_del) + (1 if drop else 0)}건")
         print("  실제로 반영하려면 같은 명령에 --apply 를 붙이세요.")
         store.close()
         return 0
 
-    hr("4. 반영")
+    hr("5. 반영")
     for date, old, new in plan:
         n = store.delete_by_date(date)
         store.add(new)
         print(f"  {date}: 기존 {n}건 삭제 → 신규 1건 추가")
+    for d in to_del:
+        n = store.delete_by_date(d)
+        print(f"  {d}: {n}건 삭제(실적표 대응 없음)")
     if drop is not None:
         n = store.delete_by_date("2026-01-06")
         print(f"  2026-01-06: {n}건 삭제(학습 제외)")
     print(f"\n  누적 건수 {store.count()}건")
 
-    hr("5. 보정값 현황 — 바뀐 구간")
+    hr("6. 보정값 현황 — 바뀐 구간")
     show_diff(before, snapshot(store))
     print("\n  ※ 입찰파일은 다시 생성해야 반영됩니다(보정지문이 바뀝니다).")
     store.close()

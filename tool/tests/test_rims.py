@@ -10,7 +10,7 @@ from wirye_capacity.theory import TheoryEngine, igv_turnup
 def test_mock_implements_protocol():
     conn = MockRimsConnector.from_seed()
     assert isinstance(conn, RimsConnector)        # Protocol 충족
-    assert len(conn.dates) == 31
+    assert len(conn.dates) == 36
 
 
 def test_mock_acquire_returns_test():
@@ -55,9 +55,9 @@ def test_bulk_ingest_reproduces_seed_bins():
     store = MeasurementStore(":memory:")
     for d in conn.dates:
         store.record_from_rims(conn, d)
-    assert store.count() == 31
+    assert store.count() == 36
     table = store.correction_table()
     assert table[(0, 10)]["count"] == 7
-    assert table[(25, 30)]["count"] == 3
-    assert table[(30, 41)]["count"] == 9
+    assert table[(25, 30)]["count"] == 6
+    assert table[(30, 41)]["count"] == 11
     store.close()

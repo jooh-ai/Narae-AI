@@ -39,7 +39,9 @@ class CurveChart(QtWidgets.QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumHeight(430)
+        # 창을 세로로 줄일 수 있어야 한다 — 최소는 '그래도 읽히는' 높이로만
+        # 잡는다(종전 430 은 창 최소높이를 498 로 묶어 축소를 막았다).
+        self.setMinimumHeight(220)
         self.setMouseTracking(True)
         self._rows = []
         self._pts = []

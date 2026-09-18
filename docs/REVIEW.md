@@ -27,7 +27,7 @@
 | M3 | MAJOR | `r_squared`가 고정구간 점 포함 → 신뢰도 오표시 | avg 구간 기준으로 정정 |
 | RiMS | MAJOR | AG9 문자열 기입·취득값 미검증·비동기 미대기 | datetime 기입·숫자 검증·비동기 대기·알림차단 |
 | 패키징 | MAJOR | `Path(__file__)` 기반 자원경로 → .exe에서 깨짐 | `constants.resource()`(_MEIPASS) 도입 |
-| 입찰압 | MAJOR | `bid_day` CLI/GUI 미노출 → 항상 7일 평균 | `--bid-day`·GUI 필드·출력에 기준일 표시 |
+| 입찰압 | MAJOR | `bid_day` CLI/GUI 미노출 → 항상 7일 평균 | ~~`--bid-day`·GUI 필드~~ → **2026-08-25 철회**. 7일 평균이 틀린 것은 맞았지만 처방이 틀렸다. 엑셀3 M2 = `AVERAGE(Y8:Y12)-8` 이라 실무는 **3~7일차 5일 평균** 하나로 고정이다. 고를 여지가 없어 필드·CLI 옵션을 제거하고 규칙을 수식과 일치시켰다 |
 | 양식 | MAJOR | 템플릿 양식 변경 시 잘못된 셀에 기입 | Mode3 온도축(A5=−20·A65=40) 정합 검사 |
 | GUI | MINOR | RiMS 미지정 시 무경고·실행 중 멈춤 | 미지정 경고·버튼 비활성·대기 커서·곡선 토글 |
 | 미세 | MINOR | `applied_pressure` 미존재일 KeyError·median 부정확·Deg≤0 무가드 | 친절 오류·`statistics.median`·Deg 가드 |
