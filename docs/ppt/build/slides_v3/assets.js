@@ -29,6 +29,7 @@ module.exports = {
   toolWinSim:   'tool_win_sim.png',      // 출력 시뮬레이션 — 실행한 화면
   toolWinCurve: 'tool_win_curve_s.png',  // 출력곡선 비교 — 이론 vs 신고값 + 보정값
   toolWinSel:   'tool_win_sel_t.png',    // 모델 선정 — 후보 7가지 교차검증 전체
+  toolWinRunT:  'tool_win_run_t.png',    // 공급가능용량 산정 — 온도 61구간 표
   toolList:'tool_list.png',
   ci:      'ci_narae.png',
 };

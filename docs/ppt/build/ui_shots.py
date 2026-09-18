@@ -145,8 +145,15 @@ def main() -> int:
         win.sim_press.setValue(SIM["press"])
         win._on_simulate()
         pump()
+        # 테스트셋 비율을 0 으로 두고 돌린다. 기본값 20% 로 두면 학습셋이 32건이
+        # 되어 화면의 MAE 가 1.493 로 적히고, 장표 본문(누적 40회 전부로 채점,
+        # MAE 1.301)과 어긋난다. 같은 장에 표와 화면을 나란히 두는데 숫자가
+        # 다르면 "왜 다릅니까" 에 답할 것이 없다. 0 으로 두면 LOOCV 가 전부를
+        # 쓰므로 화면 숫자가 deck_data.methods 와 그대로 맞는다.
+        win.sel_frac.setValue(0.0)
+        pump()
         win._on_select()
-        pump(10)
+        pump(12)
 
         try:
             win.statusBar().showMessage(f"누적 {win.store.count()}건")

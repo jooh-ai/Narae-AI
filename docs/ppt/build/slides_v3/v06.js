@@ -59,8 +59,8 @@ module.exports = (pptx, T, meta, D) => {
       d.text(k, { x: 1012, y, w: 170, px: 11, lh: 1.2, bold: true, color: C.brass });
       d.text(v, { x: 1012, y: y + 18, w: 170, px: 11, lh: 1.4, lines: 4, color: C.dim });
     });
-  d.text('* 보정 곡선은 후보 7가지 — 구간 평균 · 거리가중 평균 · 가우시안 프로세스(GP) ' +
-         '커널 5종 — 을 같은 데이터로 겨루게 해서 고른 GP·RBF 로 그립니다. 겨룬 화면은 7장.',
+  d.text('* 이 보정 곡선을 무엇으로 그리는지 — 후보 회귀 모델 7가지를 겨루게 해서 고른 ' +
+         '과정은 다음 장에 있습니다.',
          { x: 92, y: y2 + 322, w: 1090, px: 10, lh: 1.35, color: C.dim2 });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
