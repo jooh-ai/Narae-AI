@@ -38,6 +38,8 @@ def main() -> None:
     ap.add_argument("--labels", default="", help='조각 위에 얹을 라벨, "|" 구분')
     ap.add_argument("--scale", type=float, default=2.0, help="출력 배율 (기본 2)")
     ap.add_argument("--gap", type=int, default=10, help="조각 사이 간격 px")
+    ap.add_argument("--stack", action="store_true",
+                    help="가로로 잇지 않고 위아래로 쌓는다 (도구 창의 머리와 표를 붙일 때)")
     a = ap.parse_args()
 
     src = Path(a.src).resolve()
@@ -46,8 +48,15 @@ def main() -> None:
     iw, ih = png_size(src)
 
     lab_h = 22 if labels else 0
-    h = max(r[3] for r in rects) + lab_h
-    w = sum(r[2] for r in rects) + a.gap * (len(rects) - 1)
+    if a.stack:
+        # 위아래로 쌓기 — 도구 창에서 머리(제목·탭)와 필요한 표만 남기고 사이의
+        # 빈 자리를 걷어낼 때 쓴다. 창 하나를 잘라 붙인 것이므로 가로 폭은 같아야
+        # 보기에 어색하지 않다.
+        w = max(r[2] for r in rects)
+        h = sum(r[3] for r in rects) + a.gap * (len(rects) - 1) + lab_h * len(rects)
+    else:
+        h = max(r[3] for r in rects) + lab_h
+        w = sum(r[2] for r in rects) + a.gap * (len(rects) - 1)
 
     cells = []
     for i, (x, y, cw, ch) in enumerate(rects):
@@ -60,7 +69,8 @@ def main() -> None:
             f"width:{iw}px;height:{ih}px;max-width:none'></div></div>")
 
     html = f"""<!doctype html><meta charset=utf-8><style>
- *{{box-sizing:border-box}} body{{margin:0;background:#fff;display:flex;gap:{a.gap}px}}
+ *{{box-sizing:border-box}} body{{margin:0;background:#fff;display:flex;gap:{a.gap}px;
+      flex-direction:{'column' if a.stack else 'row'}}}
  .col{{display:flex;flex-direction:column}}
  .lb{{height:{lab_h}px;line-height:{lab_h}px;font-family:'NanumGothic',sans-serif;
       font-size:12px;font-weight:700;color:#217346;text-align:center;

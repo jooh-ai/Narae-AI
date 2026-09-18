@@ -20,12 +20,15 @@ module.exports = {
   toolGap: 'tool_gap.png',   // 아래 절반 — 온도별 차이와 실측점
   toolMod: 'tool_models.png',
   toolStatus: 'tool_status.png',
-  /* 2026-09-17 추가 — 회신 "시뮬레이션 기능이나 loocv 기능도 캡쳐해서
-     흐름에 맞게 넣으면 좋겠다". `ui_shots.py` 가 오프스크린으로 뽑았고,
-     장표에서 글자가 읽히도록 `crop_shot.py` 로 필요한 부분만 오렸다. */
-  toolSim:   'tool_sim.png',        // 출력 시뮬레이션 탭 (조건 넣고 실행한 화면)
-  toolSimOut:'tool_sim_out.png',    // 그 결과 칸만 — 계산이 이어지는 자리
-  toolLoocv: 'tool_loocv_top.png',  // 모델 선정 탭의 교차검증 표 (상위 3개 + 판정)
+  /* 2026-09-17 회신 — "Tool 에서 가져 왔다는 느낌이 잘 없음. 캡쳐 범위를
+     넓게" / "PPT 를 밝게 했으니 Tool 캡쳐도 밝은 느낌으로".
+     그래서 **창 전체**를 잡았다(제목줄·탭줄 포함). 색은 캡처할 때만 밝은
+     팔레트를 얹었고 도구 코드는 그대로다 — `ui_shots.py` 주석 참조.
+     밑에 남긴 어두운 캡처(toolWin·toolGap·toolStatus…)는 18장판·v2 가 쓴다. */
+  toolWinRun:   'tool_win_run.png',      // 공급가능용량 산정 — 온도 61구간 결과
+  toolWinSim:   'tool_win_sim.png',      // 출력 시뮬레이션 — 실행한 화면
+  toolWinCurve: 'tool_win_curve_s.png',  // 출력곡선 비교 — 이론 vs 신고값 + 보정값
+  toolWinSel:   'tool_win_sel_t.png',    // 모델 선정 — 후보 7가지 교차검증 전체
   toolList:'tool_list.png',
   ci:      'ci_narae.png',
 };

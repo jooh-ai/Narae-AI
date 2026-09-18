@@ -24,8 +24,7 @@ module.exports = (pptx, T, meta, D) => {
   const { d } = T.shell(pptx, { name: '문제점', idx: 2, step: 2 });
   const B = D.impact.blanket;
   const P = LOG.pairs;
-  const m1 = avg(P.map(p => p.dev1)), m2 = avg(P.map(p => p.dev2));
-  const ma = avg(P.map(p => p.applied));
+  const m1 = avg(P.map(p => p.dev1)), ma = avg(P.map(p => p.applied));
 
   T.title(d, '기존 방식의 문제점', null, { px: 33 });
   T.lead(d, '절차가 번거로웠고, 더하는 값을 하나로 끝냈습니다. 그래서 신고한 숫자가 어긋났습니다.',
@@ -46,8 +45,12 @@ module.exports = (pptx, T, meta, D) => {
 
   /* ── 구획 2 · 개선 목표 (배점표 '해결 목표의 타당성') ─────────── */
   let y2 = d.section(644, 174, 564, 116, 2, '개선 목표', '이 두 가지만 한다');
-  [['하나로 합치기', '엑셀 4개를 도구 하나로'],
-   ['온도마다 다르게', '시험 실적을 쌓아 온도별 값으로']].forEach(([k, v], i) => {
+  /* 2026-09-17 회신: "온도마다 다르게 — '시험 실적을 쌓아 온도별 값으로' 라고
+     텍스트가 있는데 목적어가 없음. PPT 전반적으로 검토해서 주어나 목적어가
+     없는 텍스트는 문장이 되도록 수정." 서술을 문장으로 고쳤다. */
+  [['하나로 합치기', '엑셀 파일 4개로 하던 일을 도구 하나로 합친다.'],
+   ['온도마다 다르게', '시험 실적을 쌓아, 더하는 값을 온도마다 다르게 만든다.']]
+    .forEach(([k, v], i) => {
     const x = 664 + i * 272;
     d.rect(x, y2, 4, 42, C.brass);
     d.text(k, { x: x + 16, y: y2 - 2, w: 240, px: 15.5, lh: 1.25, bold: true, color: C.ink });
@@ -56,52 +59,66 @@ module.exports = (pptx, T, meta, D) => {
 
   /* ── 구획 3 · 표와 그래프를 한자리에 ──────────────────────────── */
   const y3 = d.section(G.L, 306, G.W, 334, 3, '더하는 값은 하나, 실제 차이는 매번 달랐다',
-                       '왼쪽 기존 기록 · 오른쪽 누적 ' + D.n + '회');
+                       '왼쪽 기존 실적 7일 · 오른쪽 누적 ' + D.n + '회');
 
-  /* 왼쪽 — 기존 실적 시트 기록. 일자별로 두 취득 구간을 나란히 둔다. */
-  d.text('기존 실적 시트 · 단위 MW', { x: 92, y: y3, w: 300, px: 11, lh: 1.2,
-                                       color: C.dim2 });
-  const num = (v, col) => ({ t: v.toFixed(1), px: 11, color: col });
+  /* 왼쪽 — 기존 실적 시트 기록.
+     2026-09-17 회신: "날짜별로 16~17시, 17~18시 데이터 대신 이론값, 실제값으로
+     변경 후 그 차이로 인한 보정값으로 표를 만들면 좋을 것 같음."
+     그래서 시트의 네 열을 그대로 옮긴다 — 공급가능 용량 CC(Net)[이론값],
+     Actual Data CC(Net)[실제값], Dev.(MW)[차이], BLT 적용값[더한 값].
+     한 일자에 행이 두 개인데, 담당자가 실제로 기준 삼은 **앞 구간(16~17시)**
+     한 줄만 싣는다. 둘을 섞어 늘어놓으면 오독된다(legacy_log.json `_구조`). */
+  d.text('기존 실적 시트 · 단위 MW · 데이터 취득 ' + LOG.win1,
+         { x: 92, y: y3, w: 400, px: 11, lh: 1.2, color: C.dim2 });
+  const f1 = v => v.toFixed(1);
   d.table(92, y3 + 18,
-    [{ label: '날짜', w: 62 },
-     { label: LOG.win1, w: 80, align: 'right', mono: true },
-     { label: LOG.win2, w: 80, align: 'right', mono: true },
+    [{ label: '날짜', w: 56 },
+     { label: '이론값', w: 86, align: 'right', mono: true },
+     { label: '실제값', w: 86, align: 'right', mono: true },
+     { label: '차이', w: 98, align: 'right', mono: true },
      { label: '더한 값', w: 74, align: 'right', mono: true }],
-    P.map(p => [p.date, num(p.dev1, C.body), num(p.dev2, C.dim2),
-                { t: '+' + p.applied, px: 11, bold: true, color: C.brass }]),
+    P.map(p => [p.date,
+      { t: f1(p.theory1), px: 11, color: C.slateL },
+      { t: f1(p.actual1), px: 11, color: C.body },
+      { t: (p.dev1 > 0 ? '+' : '−') + Math.abs(p.dev1).toFixed(1), px: 11, bold: true,
+        color: p.dev1 < 0 ? C.red : C.ink },
+      { t: '+' + p.applied, px: 11, bold: true, color: C.brass }]),
     { rh: 17, hh: 22,
-      foot: ['평균', { t: m1.toFixed(1), px: 11, bold: true, color: C.ink },
-             { t: m2.toFixed(1), px: 11 },
-             { t: '+' + ma.toFixed(1), px: 11, bold: true, color: C.brass }] });
-  d.text('앞 구간만 모으면 평균 ' + m1.toFixed(1) + ' — 더한 값 ' + ma.toFixed(1) +
-         ' 과 거의 같습니다. 두 값 가운데 *낮은 쪽*을 기준으로 잡은 것입니다.',
-         { x: 92, y: y3 + 202, w: 300, px: 11.5, lh: 1.4, lines: 3, color: C.body });
+      foot: ['범위', '', '',
+             { t: '−' + Math.abs(Math.min(...P.map(p => p.dev1))).toFixed(1) + ' ~ +' +
+                  Math.max(...P.map(p => p.dev1)).toFixed(1), px: 10.5, bold: true },
+             { t: '+' + Math.min(...P.map(p => p.applied)) + ' ~ +' +
+                  Math.max(...P.map(p => p.applied)), px: 10.5, bold: true,
+               color: C.brass }] });
+  d.text('*이론값*은 그날 온도·대기압·습도로 계산한 값, *실제값*은 시험에서 실제로 낸 값입니다. ' +
+         '차이는 날마다 −4.6 ~ +8.7 로 흔들리는데, 더한 값은 시즌 내내 거의 하나였습니다.',
+         { x: 92, y: y3 + 202, w: 400, px: 11, lh: 1.4, lines: 4, color: C.body });
 
   /* 오른쪽 — 누적 40회. 점은 시험 한 번, 점선은 늘 같던 '더한 값'. */
-  const X = t => 470 + (t + 4) * 15.6, Y = c => y3 + 30 + (13 - c) * 7.4;
+  const X = t => 548 + (t + 4) * 14.0, Y = c => y3 + 30 + (13 - c) * 7.4;
   [12, 8, 4, -4].forEach(v => d.hline(X(-4), Y(v), X(40) - X(-4), C.rule2, 1));
   d.hline(X(-4), Y(0), X(40) - X(-4), C.rule, 1);
   [12, 8, 4, 0, -4].forEach(v => d.text((v > 0 ? '+' : '') + v,
-    { x: 430, y: Y(v) - 7, w: 32, px: 10, lh: 1.2, mono: true, color: C.dim2,
+    { x: 508, y: Y(v) - 7, w: 32, px: 10, lh: 1.2, mono: true, color: C.dim2,
       align: 'right' }));
   [0, 10, 20, 30, 40].forEach(t => d.text(t === 0 ? '0℃' : String(t),
     { x: X(t) - 20, y: Y(-6) + 4, w: 40, px: 10, lh: 1.2, mono: true, color: C.dim2,
       align: 'center' }));
   d.hline(X(-4), Y(D.blanket.flat), X(40) - X(-4), C.slateL, LW.ref, 'dash');
-  d.text('더한 값 (늘 하나)', { x: X(28), y: Y(D.blanket.flat) - 17, w: 168, px: 11,
+  d.text('더한 값 (늘 하나)', { x: X(30), y: Y(D.blanket.flat) - 17, w: 168, px: 11,
                                  lh: 1.2, bold: true, color: C.slateL, align: 'right' });
   D.scatter.forEach(([t, c]) => d.dot(X(t), Y(c), 2.8, C.body));
   d.text('가로 외기온도 ℃ · 세로 실제 차이 MW · 점 하나가 시험 한 번',
-         { x: 430, y: Y(-6) + 22, w: 560, px: 10.5, lh: 1.2, color: C.dim2 });
+         { x: 508, y: Y(-6) + 22, w: 560, px: 10.5, lh: 1.2, color: C.dim2 });
 
   /* 두 그림을 잇는 한 줄 — 왜 어긋나는지 */
   const yc = y3 + 212;
-  d.rect(430, yc, 4, 76, C.red);
+  d.rect(508, yc, 4, 76, C.red);
   d.text('겨울에는 적게 신고하고, 여름에는 못 내는데 많이 신고하게 됩니다.',
-         { x: 448, y: yc, w: 748, px: 14.5, lh: 1.4, bold: true, color: C.ink });
+         { x: 526, y: yc, w: 656, px: 14.5, lh: 1.4, bold: true, color: C.ink });
   d.text('시험 ' + D.n + '회 가운데 *' + B.short + '회*가 신고한 만큼 못 냈습니다. ' +
          '가장 크게 어긋난 회차는 *' + B.max.toFixed(1) + ' MW* 였습니다.',
-         { x: 448, y: yc + 26, w: 748, px: 12.5, lh: 1.45, lines: 2, color: C.body });
+         { x: 526, y: yc + 26, w: 656, px: 12.5, lh: 1.45, lines: 2, color: C.body });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
   T.foot(d, '더하는 값을 잘못 고른 것이 아니라, 하나로 끝내는 구조가 문제였습니다.');
