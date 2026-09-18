@@ -31,5 +31,6 @@ module.exports = {
   toolWinSel:   'tool_win_sel_t.png',    // 모델 선정 — 후보 7가지 교차검증 전체
   toolWinRunT:  'tool_win_run_t.png',    // 공급가능용량 산정 — 온도 61구간 표
   toolList:'tool_list.png',
-  ci:      'ci_narae.png',
+  /* ci_narae.png 은 v3 에서 쓰지 않는다 — 2026-09-18 회신 "회사 CI 둘다
+     지우고". 파일은 v2 표지가 아직 쓰므로 지우지 않는다. */
 };
