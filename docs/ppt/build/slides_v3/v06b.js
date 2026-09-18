@@ -38,59 +38,54 @@ module.exports = (pptx, T, meta, D) => {
   const { d } = T.shell(pptx, { name: '해결 방안', idx: 4, step: 4 });
   const M = D.methods, base = M[0];
 
-  T.title(d, '회귀 모델 선정', null, { px: 33 });
-  T.lead(d, '어떤 회귀 모델을 써야 하는지 우리가 정할 수 없었습니다. 후보 7가지를 같은 데이터로 겨루게 했습니다.',
+  T.title(d, '예측 · 보정 모델 개발', null, { px: 33 });
+  T.lead(d, '온도별 곡선을 어떤 회귀 모델로 그릴지 정했습니다. 후보 7가지를 같은 데이터로 겨루게 했습니다.',
          { y: 134, lines: 1 });
 
   /* ── 구획 1 · 후보 7가지 성적 ─────────────────────────────────────
      막대는 MAE 절대값이 아니라 **1등과의 차이**로 그린다. 절대값으로 그으면
-     1.301 ~ 1.475 라 막대 길이가 12% 밖에 안 벌어져 눈으로 구분되지 않는다
-     (종전 6장의 막대가 그랬다). 차이로 그리면 0 ~ 0.174 라 그대로 보인다. */
-  const y1 = d.section(G.L, 168, G.W, 200, 1, '후보 7가지 성적',
+     1.301 ~ 1.475 라 막대 길이가 12% 밖에 안 벌어져 눈으로 구분되지 않는다. */
+  const y1 = d.section(G.L, 168, G.W, 190, 1, '후보 7가지 성적',
                        '같은 데이터 · 같은 채점 · 단위 MW');
   const dmax = Math.max(...M.map(m => m.mae - base.mae)) || 1;
   const BX = 262, BW = 300;
-  d.vline(BX, y1 + 2, 128, C.steel, 1);
+  d.vline(BX, y1 + 2, 112, C.steel, 1);
   M.forEach((m, i) => {
-    const y = y1 + 4 + i * 18, win = i === 0;
+    const y = y1 + 2 + i * 16, win = i === 0;
     const diff = m.mae - base.mae;
-    d.text(NAME[m.key] || m.key, { x: 92, y, w: 158, px: 11.5, lh: 1.2, bold: win,
+    d.text(NAME[m.key] || m.key, { x: 92, y, w: 158, px: 11, lh: 1.2, bold: win,
                                    color: win ? C.brass : C.body, align: 'right' });
-    if (win) d.rect(BX, y + 3, 5, 9, C.brass);
-    else d.rect(BX + 1, y + 4, Math.max(2, Math.round(BW * diff / dmax)), 7, C.steel);
-    d.text(m.mae.toFixed(3), { x: BX + BW + 14, y, w: 58, px: 11, lh: 1.2, mono: true,
+    if (win) d.rect(BX, y + 2, 5, 9, C.brass);
+    else d.rect(BX + 1, y + 3, Math.max(2, Math.round(BW * diff / dmax)), 7, C.steel);
+    d.text(m.mae.toFixed(3), { x: BX + BW + 14, y, w: 58, px: 10.5, lh: 1.2, mono: true,
                                bold: win, color: win ? C.brass : C.dim, align: 'right' });
     d.text(win ? '기준' : '+' + diff.toFixed(3),
-           { x: BX + BW + 80, y, w: 62, px: 11, lh: 1.2, mono: true,
+           { x: BX + BW + 80, y, w: 62, px: 10.5, lh: 1.2, mono: true,
              color: win ? C.dim2 : C.red, align: 'right' });
-    d.text(win ? '★ 선정' : KIND[m.key],
-           { x: BX + BW + 158, y, w: 420, px: 11, lh: 1.2, bold: win,
+    d.text(win ? '★ 선정 · 가장 부드러운 곡선' : KIND[m.key],
+           { x: BX + BW + 156, y, w: 464, px: 10.5, lh: 1.2, bold: win,
              color: win ? C.brass : C.dim });
   });
-  d.text('막대는 1등과의 차이(오른쪽으로 갈수록 더 틀린 것) · 가운데 숫자가 평균 오차 · ' +
-         '채점은 한 회씩 가려 맞혀 보는 방식으로, 누적 ' + D.n + '회 가운데 ' + D.n_score +
-         '회를 썼습니다(한 회차는 구간평균이 답을 못 내 빠집니다)',
-         { x: 92, y: y1 + 130, w: 1090, px: 10, lh: 1.3, color: C.dim2 });
-  d.text('* GP = 가우시안 프로세스. 값 하나를 내는 것이 아니라 곡선 전체를 후보로 두고 ' +
-         '실적에 가장 잘 맞는 곡선을 고릅니다. 뒤에 붙은 이름(RBF · Matérn …)은 곡선이 ' +
-         '얼마나 부드러운지를 정하는 설정입니다.',
-         { x: 92, y: y1 + 146, w: 1090, px: 10, lh: 1.3, color: C.dim2 });
+  d.text('* 막대는 1등과의 차이 · 가운데 숫자가 평균 오차 · 한 회씩 가려 맞혀 보는 방식으로 ' +
+         '누적 ' + D.n + '회 가운데 ' + D.n_score + '회를 썼습니다(한 회차는 구간평균이 답을 못 내 빠집니다).',
+         { x: 92, y: y1 + 118, w: 1090, px: 10, lh: 1.3, color: C.dim2 });
+  d.text('* GP = 가우시안 프로세스 — 값 하나가 아니라 곡선 전체를 후보로 두고 실적에 가장 ' +
+         '잘 맞는 곡선을 고릅니다. 뒤에 붙은 이름은 곡선이 얼마나 부드러운지를 정하는 설정입니다.',
+         { x: 92, y: y1 + 132, w: 1090, px: 10, lh: 1.3, color: C.dim2 });
 
-  /* ── 구획 2 · 도구 안에서 고릅니다 ────────────────────────────── */
-  const y2 = d.section(G.L, 380, G.W, 260, 2, '도구 안에서 고릅니다',
-                       '모델 선정 화면 · 위 표와 같은 숫자입니다');
-  d.img(A.toolWinSel, 92, y2, 757, 220);
-  [['왜 도구에 넣었나', '시험이 ' + D.n + '회뿐입니다. 실적이 늘면 성적이 바뀔 수 있어 ' +
-    '그때마다 다시 채점해야 합니다.'],
-   ['어떻게 채점하나', '한 회를 가리고 나머지로 그 회를 맞혀 봅니다. 전 회차를 돌아가며 ' +
-    '반복해 평균을 냅니다.'],
-   ['앞서면 바꾼다', '다른 모델이 앞서면 그때 바꿉니다. 지금은 GP·RBF 가 앞섭니다.']]
+  /* ── 구획 2 · 고른 모델이 그린 곡선 (도구 화면) ───────────────── */
+  const y2 = d.section(G.L, 370, G.W, 270, 2, '도구 화면 · 출력곡선 비교',
+                       'GP · RBF 로 그린 결과');
+  d.img(A.toolWinCurve, 92, y2, 661, 232);
+  [['위 칸', '이론값(점선)과 도구가 신고하는 값(빨간 선). 두 선이 벌어진 만큼이 그 온도에서 더하는 값입니다.'],
+   ['아래 칸', '온도마다 더하는 값과 시험 실적 점. 연한 띠는 도구가 함께 내는 90% 범위입니다.'],
+   ['점이 없는 온도', '곡선이 메웁니다. 다만 시험한 범위를 벗어나면 끝값을 그대로 씁니다.']]
     .forEach(([k, v], i) => {
-      const y = y2 + i * 76;
-      d.text(k, { x: 880, y, w: 302, px: 11.5, lh: 1.2, bold: true, color: C.brass });
-      d.text(v, { x: 880, y: y + 18, w: 302, px: 11, lh: 1.35, lines: 3, color: C.dim });
+      const y = y2 + i * 78;
+      d.text(k, { x: 773, y, w: 409, px: 11.5, lh: 1.2, bold: true, color: C.brass });
+      d.text(v, { x: 773, y: y + 18, w: 409, px: 11, lh: 1.35, lines: 3, color: C.dim });
     });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '사람이 고른 것이 아니라 성적이 골랐습니다. 그 채점이 도구 안에 들어 있습니다.');
+  T.foot(d, '사람이 고른 것이 아니라 성적이 골랐습니다. 그 곡선이 신고 숫자를 만듭니다.');
 };
