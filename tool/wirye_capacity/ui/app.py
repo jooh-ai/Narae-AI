@@ -59,9 +59,9 @@ def _status_text(s: str) -> str:
 
 def _status_color(s: str) -> str:
     if "🔴" in s:
-        return THEME_C["red"]                    # 데이터 부족
+        return THEME_C["redT"]                   # 데이터 부족 — 적는 색
     if "🟢" in s:
-        return THEME_C["brass"]                  # 자동반영 — 목표 충족
+        return THEME_C["brassT"]                 # 자동반영 — 목표 충족
     if "△" in s:
         return THEME_C["slateL"]                 # 보수적 고정
     return THEME_C["dim2"]                       # Shaft Limit 등
@@ -106,7 +106,7 @@ _SHORT_HEAD = {
     "cc_real_gross": "CC 현실 Gross", "cc_real_net": "★ CC 현실 Net",
 }
 
-# ── 스타일시트는 theme.py 한 곳에서 온다 (v2 「계측 기록지」) ─────────────
+# ── 스타일시트는 theme.py 한 곳에서 온다 (「밝은 기록지」) ────────────────
 # 발표자료(docs/ppt/build/theme.js)와 같은 팔레트다. 색을 고치려면 theme.py 만
 # 고친다 — 화면과 보고자료가 갈라지지 않게 하려는 것이 이 분리의 목적이다.
 from .theme import C as THEME_C, QSS, runtime_qss as _runtime_qss  # noqa: E402
@@ -858,8 +858,8 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
             # 받으므로 점마다 색을 준다 — 이모지를 쓰면 팔레트 밖 색이 된다.
             cap = QtWidgets.QLabel(
                 "온도구간별 보정값 현황 (엑셀4 '보정값 현황' 시트와 동일).&nbsp;&nbsp;"
-                f"<span style='color:{THEME_C['brass']}'>●</span> 자동반영 &nbsp;·&nbsp; "
-                f"<span style='color:{THEME_C['red']}'>●</span> 데이터 부족 &nbsp;·&nbsp; "
+                f"<span style='color:{THEME_C['brassT']}'>●</span> 자동반영 &nbsp;·&nbsp; "
+                f"<span style='color:{THEME_C['redT']}'>●</span> 데이터 부족 &nbsp;·&nbsp; "
                 f"<span style='color:{THEME_C['slateL']}'>△</span> 보수적 고정 &nbsp;·&nbsp; "
                 f"<span style='color:{THEME_C['dim2']}'>─</span> Shaft Limit")
             cap.setTextFormat(QtCore.Qt.TextFormat.RichText)
@@ -1194,18 +1194,19 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                         src = dict(r, **edits) if edits else r
                         item = QtWidgets.QTableWidgetItem(self._cell_text(src, field, dp))
                         if not editable:         # 파생값 — 편집 불가 + 뜻에 맞는 색
-                            # 밝은 테마에서는 회색 배경으로 '못 고치는 칸' 을 표시했다.
-                            # 어두운 테마에서는 배경차가 안 보이므로 글자색으로 말한다 —
-                            # 이론기준값은 슬레이트, 보정값은 앰버. 발표자료와 같은 뜻이다.
+                            # 회색 배경 + 글자색 둘 다로 말한다. 배경은 rule2 다 —
+                            # ground(흰색)는 표 바닥과 같아 차이가 없고, panel 은
+                            # 줄무늬와 같은 색이라 '못 고치는 칸' 으로 읽히지 않는다.
+                            # 글자는 이론기준값이 슬레이트, 보정값이 레드다(발표자료와 같은 뜻).
                             item.setFlags(item.flags()
                                           & ~QtCore.Qt.ItemFlag.ItemIsEditable)
-                            item.setBackground(QtGui.QColor(THEME_C["ground"]))
+                            item.setBackground(QtGui.QColor(THEME_C["rule2"]))
                             item.setForeground(QtGui.QColor(
-                                THEME_C["brass"] if field == "corr" else THEME_C["slateL"]))
+                                THEME_C["brassT"] if field == "corr" else THEME_C["slateL"]))
                             item.setToolTip("이론기준값·보정값은 저장 시 자동 재계산됩니다.")
-                        if field in edits:       # 고친 셀 — 앰버 강조
+                        if field in edits:       # 고친 셀 — 레드 강조
                             item.setBackground(QtGui.QColor(THEME_C["brassS"]))
-                            item.setForeground(QtGui.QColor(THEME_C["brass"]))
+                            item.setForeground(QtGui.QColor(THEME_C["brassT"]))
                             f = item.font(); f.setBold(True); item.setFont(f)
                         if marked:               # 삭제 대기 행 — 취소선 + 흐리게
                             f = item.font(); f.setStrikeOut(True); item.setFont(f)

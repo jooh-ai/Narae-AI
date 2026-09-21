@@ -16,26 +16,39 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from .. import constants as C
 
 # 색상 — theme.py 한 곳에서 온다. 뜻은 발표자료와 같게 고정한다:
-#   슬레이트 = 이론(보정 없음) / 앰버 = 현실화·보정 반영 / 레드 = 위험
-# 종전에는 현실화가 레드였는데, 레드는 '위험' 자리다. 두 뜻이 겹치면
-# 화면과 보고자료를 나란히 놓았을 때 같은 색이 다른 말을 하게 된다.
+#   슬레이트 = 이론(보정 없음) / 레드 = 현실화·보정 반영 / 주황 = 위험
+# 강조색과 위험색은 서로 다른 색이어야 한다. 두 뜻이 한 색을 쓰면 화면과
+# 보고자료를 나란히 놓았을 때 같은 색이 다른 말을 하게 된다.
 from .theme import C as _T                                        # noqa: E402
 
 _c = lambda k: QtGui.QColor(_T[k])                                # noqa: E731
+
+
+def _a(key: str, alpha: int) -> QtGui.QColor:
+    """같은 색, 알파만 얹는다 — 띠·말풍선 바닥에 쓴다.
+
+    색을 리터럴로 박아 두면 팔레트를 바꿀 때 이 자리만 옛 테마로 남는다.
+    """
+    c = QtGui.QColor(_T[key])
+    c.setAlpha(alpha)
+    return c
+
+
 C_BG = _c("groove")                     # 차트 바닥 — 데이터가 앉는 홈 면
 C_THEORY = _c("slateL")                 # 이론 - 슬레이트(선)
-C_REAL = _c("brass")                    # 현실화 - 앰버
-C_MARGIN = _c("red")                    # 마진 적용 - 레드(보수적으로 깎은 선)
-C_CORR = _c("brass")                    # 보정값 - 앰버
-# 앰버를 남색 바탕에 옅게 얹으면 올리브로 탁해진다(색 계산상 어쩔 수 없다).
-# 알파만 올리면 곡선과 경쟁하므로, 알파는 조금만 올리고 위·아래 경계에 점선을
-# 그어 '띠' 라는 것이 색이 아니라 형태로 읽히게 한다.
-C_BAND = QtGui.QColor(239, 177, 60, 58)  # 예측구간 - 앰버 58/255
-C_BAND_LINE = QtGui.QColor(239, 177, 60, 150)   # 예측구간 경계 점선
-C_PT = _c("ink")                        # 실측점 - 회백
+C_REAL = _c("brass")                    # 현실화 - 레드
+C_MARGIN = _c("red")                    # 마진 적용 - 주황(보수적으로 깎은 선)
+C_CORR = _c("brass")                    # 보정값 - 레드
+# 예측구간 띠 — 흰 바탕에서는 같은 알파가 남색 바탕보다 훨씬 진하게 보인다.
+# 그래서 면은 58 에서 34 로, 경계선은 150 에서 110 으로 내렸다. 띠가 곡선과
+# 경쟁하면 안 되고, '띠' 라는 것은 색이 아니라 위·아래 경계 점선의 형태로
+# 읽히게 한다.
+C_BAND = _a("brass", 34)                # 예측구간 면
+C_BAND_LINE = _a("brass", 110)          # 예측구간 경계 점선
+C_PT = _c("ink")                        # 실측점 - 검정
 C_PT_EDGE = _c("groove")                # 실측점 테두리(바닥색)
-C_GRID = _c("rule2")
-C_AXIS = _c("rule")
+C_GRID = _c("rule")                     # 흰 바탕에서 rule2 는 1.2:1 — 안 보인다
+C_AXIS = _c("slate")
 C_TEXT = _c("dim")
 C_LABEL = _c("ink")
 
@@ -346,7 +359,7 @@ class CurveChart(QtWidgets.QWidget):
         bx = min(x + 12, g["px"] + g["pw"] - w)
         by = g["ty"] + 4
         p.setPen(QtGui.QPen(_c("rule"), 1))
-        p.setBrush(QtGui.QColor(19, 34, 52, 246))
+        p.setBrush(_a("panel", 246))
         p.drawRoundedRect(QtCore.QRectF(bx, by, w, h), 4, 4)
         p.setPen(C_TEXT)
         for i, s in enumerate(lines):
