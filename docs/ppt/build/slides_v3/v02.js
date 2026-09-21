@@ -23,7 +23,7 @@ module.exports = (pptx, T, meta, D) => {
   const { C, G } = T;
   const { d } = T.shell(pptx, {});
   T.title(d, '목차', null, { y: 96, px: 36 });
-  T.lead(d, '문제에서 시작해 개선효과와 확산까지 하나로 잇습니다.', { y: 152, lines: 1 });
+  T.lead(d, '문제 → 원인 → 해결 → 효과 → 확산 순서로 이어집니다.', { y: 152, lines: 1 });
 
   ITEM.forEach(([no, name, desc, page, orig], i) => {
     const y = 200 + i * 42;

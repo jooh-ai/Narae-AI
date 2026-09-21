@@ -13,7 +13,7 @@ module.exports = (pptx, T, meta, D) => {
   const { d } = T.shell(pptx, { name: '개선효과', idx: 6, step: 6 });
 
   T.title(d, '개선 효과 · 정성', null, { px: 33 });
-  T.lead(d, '숫자로 적기 어렵지만 일하는 방식에서 달라진 것들입니다.',
+  T.lead(d, '숫자로 적기는 어렵지만, 일하는 방식이 이렇게 달라졌습니다.',
          { y: 134, lines: 1 });
 
   /* ── 구획 1 · 시험 전에 미리 가늠한다 (도구 「출력 시뮬레이션」 창) ── */
@@ -47,5 +47,5 @@ module.exports = (pptx, T, meta, D) => {
     });
 
   d.hline(G.L, G.RULE2, G.W, C.rule, 1);
-  T.foot(d, '숫자 말고도, 일하는 방식이 사람 손에서 도구 쪽으로 옮겨 왔습니다.');
+  T.foot(d, '숫자뿐 아니라 일하는 방식도 사람 손에서 도구로 넘어왔습니다.');
 };
