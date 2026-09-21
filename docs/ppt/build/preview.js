@@ -139,6 +139,15 @@ fs.mkdirSync(OUTDIR, { recursive: true });
 const pptx = fakePptx();
 if (T.resetPage) T.resetPage();
 const made = [];
+/* 부록 한 장만 미리보기 — node preview.js --v3 --one x01_model */
+const oneIdx = process.argv.indexOf('--one');
+if (oneIdx > 0) {
+  const nm = process.argv[oneIdx + 1];
+  const before = pptx.slides.length;
+  require(path.join(SLIDE_DIR, nm + '.js'))(pptx, T, STATE.meta, DATA);
+  for (let i = before; i < pptx.slides.length; i++) made.push([0, pptx.slides[i]]);
+  STATE.slides = [];
+}
 for (const it of STATE.slides) {
   const f = path.join(SLIDE_DIR, it.file);
   if (!fs.existsSync(f)) continue;

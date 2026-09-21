@@ -27,3 +27,6 @@ wirye_measurements.db
 wirye_tool.json
 *.db-journal
 
+
+# 미리보기 중간 산물(HTML) — PNG 만 남긴다
+docs/ppt/build/preview/*.html

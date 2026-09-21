@@ -43,7 +43,29 @@ function placeholder(pptx, it) {
   d.hline(T.G.L, T.G.RULE2, T.G.W, T.C.rule, 1);
 }
 
+/* 한 장만 뽑기 — 본편에 끼워 넣을 부록 장을 따로 만든다.
+     node docs/ppt/build/build.js --v3 --one x01_model
+   본편 13장은 건드리지 않는다. 쪽번호는 슬라이드 쪽에서 끈다(끼워 넣는
+   자리에 따라 번호가 달라지므로 넣는 사람이 정한다).                     */
+function buildOne(name) {
+  const pptx = new pptxgen();
+  pptx.defineLayout({ name: 'W169', width: 13.333, height: 7.5 });
+  pptx.layout = 'W169';
+  pptx.title = name;
+  pptx.company = '나래에너지서비스';
+  pptx.author = state.meta.authors.join(', ');
+  if (T.resetPage) T.resetPage();
+  require(path.join(SLIDE_DIR, name + '.js'))(pptx, T, state.meta, DATA);
+  const out = path.join(DIR, '..', `부록_${name}.pptx`);
+  return pptx.writeFile({ fileName: out }).then(() => {
+    const kb = (fs.statSync(out).size / 1024).toFixed(0);
+    console.log('출력  ' + path.relative(process.cwd(), out) + '  (' + kb + ' KB)  1 장');
+  });
+}
+
 function main() {
+  const oneIdx = process.argv.indexOf('--one');
+  if (oneIdx > 0) return buildOne(process.argv[oneIdx + 1]);
   const listOnly = process.argv.includes('--list');
   const pptx = new pptxgen();
   pptx.defineLayout({ name: 'W169', width: 13.333, height: 7.5 });
