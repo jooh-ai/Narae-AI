@@ -53,7 +53,7 @@ module.exports = (pptx, T, meta, D) => {
   d.hline(92, y1 + 62, 1090, C.rule2, 1);
   d.text('병행 운전', { x: 92, y: y1 + 70, w: 90, px: 11.5, lh: 1.2, bold: true,
                          color: C.brass });
-  d.text(CM.from + ' ~ ' + CM.to + ' 에 *' + CM.n + '회*. 평균 어긋난 폭은 *' +
+  d.text(CM.from + ' ~ ' + CM.to + ' 에 *' + CM.n + '회*. 어긋난 폭은 평균 *' +
          CM.mae.toFixed(2) + ' MW* 였고, 한쪽으로 쏠리지도 않았습니다 (치우침 ' +
          CM.me.toFixed(2).replace('-', '−') + ' MW).',
          { x: 190, y: y1 + 70, w: 992, px: 12.5, lh: 1.3, color: C.body });
@@ -72,7 +72,7 @@ module.exports = (pptx, T, meta, D) => {
          '다시 돌립니다. 1등이 바뀌면 쓰는 모델을 바꿉니다.',
          { x: 92, y: y2 + 20, w: 1090, px: 12.5, lh: 1.3, color: C.body });
   d.img(A.toolWinSel, 92, y2 + 46, 832, 242);
-  [['★ 선정', '도구가 성적이 가장 좋은 모델에 표시합니다.'],
+  [['★ 선정', '성적이 가장 좋은 모델을 도구가 표시해 줍니다.'],
    ['판정 열', 'MAE · RMSE · R² · 편차 · 과대 신고 건수를 한 화면에서 봅니다.'],
    ['지금', 'GP · RBF 가 1등입니다. 다음 회차에 이 표를 다시 계산합니다.']]
     .forEach(([k, v], i) => {

@@ -24,7 +24,7 @@ module.exports = (pptx, T, meta, D) => {
                                           bold: true, color: C.ink });
   d.text('온도별 보정 모델 개발', { x: G.L, y: 320, w: 1000, px: 44, lh: 1.28,
                                     bold: true, color: C.ink });
-  d.text('온도 프로파일 생성 절차 통합과 누적 ' + D.n + '회 실적 기반 보정 곡선 적용',
+  d.text('산정 절차를 하나로 합치고, 누적 ' + D.n + '회 실적으로 온도별 보정 곡선을 만들었습니다',
          { x: G.L, y: 392, w: 1000, px: 17, lh: 1.5, color: C.body });
 
   d.hline(G.L, 452, G.W, C.rule, 1);

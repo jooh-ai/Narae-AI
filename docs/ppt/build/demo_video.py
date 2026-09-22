@@ -577,7 +577,7 @@ def timeline(V, win, tabs, A, forecast: Path):
     V.move_to(win.start_in, 0.7)
     V.click(0.4)
     V.type_text(win.start_in, "17:00", 1.6)
-    V.callout(win.start_in, "1시간 평균 창", "right")
+    V.callout(win.start_in, "1시간 평균 구간", "right")
     V.hold(1.4)
     V.clear_callouts()
     V.hold(3.2)
@@ -669,7 +669,7 @@ def timeline(V, win, tabs, A, forecast: Path):
     V.click(0.5, lambda: tabs.setCurrentIndex(1))
     V.hold(6.7)
     V.note("실적이 적은 구간은 도구가 표시해 줍니다")
-    V.callout(win.status_tbl, "시험이 적은 구간은 보수적으로", "above")
+    V.callout(win.status_tbl, "시험이 적으면 보수적으로", "above")
     V.hold(3.0)
     V.clear_callouts()
     V.hold(7.0)
@@ -707,7 +707,7 @@ def timeline(V, win, tabs, A, forecast: Path):
     box = V.cell(win.list_tbl, win.list_tbl.item(hit, col))
     old = win.list_tbl.item(hit, col).text()
     new = "%.2f" % (float(old.replace(",", "")) + 1.5)
-    V.callout(box, "센서가 이상하면 여기서", "left")
+    V.callout(box, "센서가 이상하면 여기서 고칩니다", "left")
     V.move_to(tuple(V._rect(box).center().toTuple()), 0.9)
     V.click(0.5)
     V.hold(1.4)
@@ -737,7 +737,7 @@ def timeline(V, win, tabs, A, forecast: Path):
     # 3-5 저장 7초 — 되돌리기로 취소하고 넘어간다(실적을 지우지 않는다)
     V.note("저장을 눌러야 반영됩니다 — 그 전에는 되돌릴 수 있습니다")
     V.move_to(win.undo_btn, 0.8, dx=40)
-    V.callout(win.save_btn, "저장해야 DB 에 남습니다", "left")
+    V.callout(win.save_btn, "저장해야 실제로 남습니다", "left")
     V.click(0.5, win._on_undo_delete)
     V.hold(3.2)
     V.clear_callouts()
@@ -761,7 +761,7 @@ def timeline(V, win, tabs, A, forecast: Path):
     V.hold(3.4)
 
     # 4-2 실측 CC 9초
-    V.note("시험이 끝난 뒤 실측값과 대 볼 수도 있습니다")
+    V.note("시험이 끝난 뒤 실측값과 견줘 볼 수도 있습니다")
     V.move_to(win.sim_meas_use, 0.8, dx=12)
     V.callout(win.sim_meas, "시험 뒤 대조용", "right")
     V.click(0.5, lambda: win.sim_meas_use.setChecked(True))
@@ -873,7 +873,7 @@ def timeline(V, win, tabs, A, forecast: Path):
     V.hold(1.8)
 
     # 6-3 후보 고르기 6초
-    V.note("겨루게 할 모델을 골라 담습니다")
+    V.note("시험할 모델을 골라 담습니다")
     cb = list(win.sel_chks.values())[1]
     V.move_to(cb, 0.8, dx=12)
     V.click(0.5, lambda: cb.setChecked(False))
