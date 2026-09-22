@@ -20,6 +20,7 @@
   post    관측 뒤 곡선 5개 + 평균 + 95% 구간
   kern    같은 관측에 커널만 바꾼 평균·구간 — RBF / Matérn 5/2 / 지수
   nw      커널회귀(Nadaraya-Watson) 곡선 — GP 가 아니다. 구간이 없다.
+  bin     구간평균 — 가장 단순한 방법. 빈 구간에는 답이 없다.
   ls      길이척도 효과 — 짧으면 출렁이고 길면 뭉갠다
 
 numpy 가 없는 환경이라 순수 파이썬으로 짠다. 관측이 13점뿐이라
@@ -185,6 +186,27 @@ def nadaraya_watson(ox, oy, grid, h):
     return out
 
 
+def bin_mean(ox, oy, grid, edges):
+    """구간평균 — 가장 단순한 방법. 구간마다 그 안의 평균을 쓴다.
+
+    점이 없는 구간은 답이 없다(None). 계단이 끊기는 것이 이 방법의 성질이라
+    그대로 둔다 — 장표에서 그 자리가 비어 보여야 설명이 된다.
+    """
+    val = []
+    for i in range(len(edges) - 1):
+        ys = [oy[j] for j, x in enumerate(ox) if edges[i] <= x < edges[i + 1]]
+        val.append(sum(ys) / len(ys) if ys else None)
+    out = []
+    for x in grid:
+        k = None
+        for i in range(len(edges) - 1):
+            if edges[i] <= x < edges[i + 1]:
+                k = i
+                break
+        out.append(None if k is None else val[k])
+    return out
+
+
 def r3(v):
     return [None if x is None else round(x, 4) for x in v]
 
@@ -214,6 +236,8 @@ def main() -> int:
         data["kern"][name] = {"mean": r3(mm), "sd": r3(ss)}
 
     data["nw"] = r3(nadaraya_watson(OBS_X, obs_y, GRID, 0.8))
+    data["bin_edges"] = [0.0, 2.5, 5.0, 7.5, 10.001]
+    data["bin"] = r3(bin_mean(OBS_X, obs_y, GRID, data["bin_edges"]))
 
     data["ls"] = {}
     for tag, ell in (("short", 0.35), ("long", 3.0)):
