@@ -1,5 +1,17 @@
 """가우시안 프로세스(GP) 보정기 — 예측 불확실성까지 산출하는 연속 보정곡선.
 
+커널을 골라 쓸 수 있다 (kernel= 인자). 하이퍼파라미터는 커널마다 따로 주변우도로
+맞추므로, 사용자가 정하는 것은 **곡선의 성격(커널)** 하나다:
+
+    rbf        제곱지수. 매끄럽고 완만하다. 기본값 — 지금까지 쓴 커널이다.
+    matern52   Matérn 5/2. RBF 보다 국소 변화를 조금 더 따라간다.
+    matern32   Matérn 3/2. 더 거칠다. 구간마다 성격이 다를 때 유리하다.
+    exp        지수(Matérn 1/2). 가장 거칠다 — 이웃 실측에 거의 그대로 붙는다.
+    rq         Rational Quadratic. 여러 길이척도가 섞인 형태(α=1 고정).
+
+거친 커널일수록 실측을 잘 따라가지만 외삽·잡음에 약하다. 어느 쪽이 나은지는
+데이터가 정하는 문제이므로 scripts/... 와 [🔬 모델 선정] 탭에서 LOOCV 로 고른다.
+
 curve.CorrectionCurve 와 동일한 인터페이스(corrector 로 주입)이며, 추가로 온도별
 예측 표준편차 sigma(cit) 를 제공한다. 실측 32건 LOOCV 검증:
 
@@ -25,6 +37,38 @@ from .correction import aggregate_bins, bin_for
 _LS = (2.0, 3.0, 4.0, 6.0, 8.0, 10.0, 14.0)
 _SF = (2.0, 3.0, 5.0, 8.0)
 _SN = (0.8, 1.2, 1.8, 2.5)
+
+# 선택 가능한 커널. 격자는 커널마다 동일하게 두어 비교가 공정하도록 한다.
+KERNELS = ("rbf", "matern52", "matern32", "exp", "rq")
+KERNEL_LABEL = {
+    "rbf": "RBF (제곱지수)",
+    "matern52": "Matérn 5/2",
+    "matern32": "Matérn 3/2",
+    "exp": "지수 (Matérn 1/2)",
+    "rq": "Rational Quadratic",
+}
+_RQ_ALPHA = 1.0          # RQ 의 α. 격자 크기를 커널 간 동일하게 유지하려 고정한다.
+_SQRT3, _SQRT5 = math.sqrt(3.0), math.sqrt(5.0)
+
+
+def kernel_value(name: str, sf2: float, ls: float, r: float) -> float:
+    """커널 함수 k(r). r 은 두 온도의 거리(°C). k(0)=sf2 는 모든 커널 공통이다."""
+    if ls <= 0:
+        raise ValueError(f"길이척도는 0보다 커야 합니다 (입력: {ls})")
+    u = r / ls
+    if name == "rbf":
+        return sf2 * math.exp(-0.5 * u * u)
+    if name == "matern52":
+        a = _SQRT5 * u
+        return sf2 * (1.0 + a + 5.0 * u * u / 3.0) * math.exp(-a)
+    if name == "matern32":
+        a = _SQRT3 * u
+        return sf2 * (1.0 + a) * math.exp(-a)
+    if name == "exp":
+        return sf2 * math.exp(-u)
+    if name == "rq":
+        return sf2 * (1.0 + u * u / (2.0 * _RQ_ALPHA)) ** (-_RQ_ALPHA)
+    raise ValueError(f"알 수 없는 커널 '{name}' — 가능: {', '.join(KERNELS)}")
 
 
 def _cholesky(A: list[list[float]]) -> list[list[float]] | None:
@@ -53,13 +97,13 @@ def _solve(L: list[list[float]], b: list[float]) -> list[float]:
     return x
 
 
-def _log_ml(xs, ys, ls, sf, sn) -> float:
+def _log_ml(xs, ys, ls, sf, sn, kernel: str = "rbf") -> float:
     """log marginal likelihood — 학습 데이터만으로 하이퍼파라미터를 평가."""
     n = len(xs)
     mu = sum(ys) / n
     y0 = [v - mu for v in ys]
     sf2, sn2 = sf * sf, sn * sn
-    K = [[sf2 * math.exp(-0.5 * ((xs[i] - xs[j]) / ls) ** 2) + (sn2 if i == j else 0.0)
+    K = [[kernel_value(kernel, sf2, ls, abs(xs[i] - xs[j])) + (sn2 if i == j else 0.0)
           for j in range(n)] for i in range(n)]
     L = _cholesky(K)
     if L is None:
@@ -74,10 +118,15 @@ class GPCorrectionCurve:
     """온도→보정값 GP 보정기. profile/pipeline 의 corrector 로 주입해 사용.
 
     records: [{'cit': float, 'corr': float}, ...]
+    kernel:  KERNELS 중 하나. 곡선의 성격을 정한다(기본 'rbf' — 종전과 동일).
     hyper:   None 이면 주변우도로 자동 선택. (ls, sf, sn) 튜플로 고정도 가능.
     """
 
-    def __init__(self, records, *, hyper: tuple[float, float, float] | None = None):
+    def __init__(self, records, *, kernel: str = "rbf",
+                 hyper: tuple[float, float, float] | None = None):
+        if kernel not in KERNELS:
+            raise ValueError(f"알 수 없는 커널 '{kernel}' — 가능: {', '.join(KERNELS)}")
+        self.kernel = kernel
         all_pts = sorted((r["cit"], r["corr"]) for r in records)
         self._bins = aggregate_bins([{"cit": t, "corr": c} for t, c in all_pts])
         # 곡선 적합은 'avg' 구간 실측만 사용(특수구간 고정점이 곡선을 왜곡하지 않도록)
@@ -93,7 +142,7 @@ class GPCorrectionCurve:
             return
         self.hyper = hyper or max(
             ((ls, sf, sn) for ls in _LS for sf in _SF for sn in _SN),
-            key=lambda h: _log_ml(self.temps, self.corrs, *h))
+            key=lambda h: _log_ml(self.temps, self.corrs, *h, kernel=kernel))
         ls, sf, sn = self.hyper
         self._sf2, self._sn2, self._ls = sf * sf, sn * sn, ls
         self.mu = sum(self.corrs) / len(self.corrs)
@@ -107,7 +156,7 @@ class GPCorrectionCurve:
         self._alpha = _solve(self._L, [c - self.mu for c in self.corrs])
 
     def _k(self, a: float, b: float) -> float:
-        return self._sf2 * math.exp(-0.5 * ((a - b) / self._ls) ** 2)
+        return kernel_value(self.kernel, self._sf2, self._ls, abs(a - b))
 
     def _clamp(self, t: float) -> float:
         return min(max(t, self.tmin), self.tmax)     # 외삽 금지

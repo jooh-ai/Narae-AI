@@ -27,6 +27,14 @@ class AcquiredTest:
     rh_mbl: float | None = None
     rh_cxm: float | None = None
     rh_source: str | None = None
+    # 습도를 그대로 믿으면 안 되는 회차 표식. 두 센서가 정상 편차를 크게 벗어났을 때
+    # 켜진다. 값 자체는 바꾸지 않고(자동 대체는 편차로 못 가른다 — pick_rh 주석 참조),
+    # 파이프라인이 '사람 확인 없이는 누적하지 않는다' 를 판정하는 데 쓴다.
+    #
+    # 왜 경고만으로는 부족한가: 2026-08 시운전 3회차(2026-07-07)에서 경고가 떴는데도
+    # 반영이 그대로 됐고, RH 19.6%(표 68.5%)로 계산된 보정값 -5.19(정답 -0.62)가
+    # 누적에 들어갔다. 30~41°C 구간 평균을 0.46 MW 끌어내리는 오염이다.
+    rh_suspect: bool = False
     # 취득 품질 경고 — 값은 돌려주되 사람이 확인해야 하는 사항을 담는다.
     # (예: 서버 집계 StatusCode 가 Good 아님, CC 태그와 GT+ST 합이 크게 벌어짐)
     warnings: list[str] = field(default_factory=list)
