@@ -1,0 +1,640 @@
+<title>공급가능용량 발표 디자인안</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;700&display=swap">
+<style>
+/* ══════════════════════════════════════════════════════════════
+   위례 공급가능용량 발표 — 디자인 v2 「계측 기록지」
+   v1 은 참고 샘플의 문법(딥배경+민트단색+라운드 카드+영문 대문자 키커+
+   2행 제목 둘째줄 통째 강조)을 그대로 옮겨 모방으로 읽혔다.
+   v2 는 그 문법을 전부 버리고, 이 과제의 세계(계측·검침·발전 계기판)에서
+   디자인 언어를 다시 뽑았다.
+     · 색   민트 폐기 → 놋쇠 앰버(SK 오렌지 계열)=개선 / SK 레드=위험
+     · 온도 쿨그레이 글자 → 따뜻한 회백 (샘플과 온도감이 반대)
+     · 형태 라운드 채움 카드 → 각진 개방 패널(모서리 0 · 상단 헤어라인)
+     · 라벨 영문 대문자 키커 → 한글 섹션명 + mono 회차 번호
+     · 제목 둘째 줄 통째 강조 → 핵심 어절만 인라인 강조
+     · 지표 취소선 두 막대 → 계기 눈금 게이지(종전 눈금 → 개선 침)
+   폰트는 맑은 고딕을 1순위로 둔다 — 부장님 PC 에서 목업이 곧 PPT 모습이 된다.
+
+   ── 2차 회신 반영 (구분감) ──────────────────────────────────
+   "숫자만 엄청 크고 다른 건 모두 하나의 느낌. 글·부가 정보가 작아 눈에 안
+   들어온다. slide2 의 과거/현재 비교도 작다."
+     ① 활자 계급을 2단(T1 숫자 46px / T4 라벨·본문 13.5px)에서 4단으로
+        T1 데이터 30~50px 앰버 · T2 주장 21px 회백 · T3 본문 15~18px · T4 라벨 10.5px
+     ② 본문 색을 dim(#93A6BA) → body-c(#BCC9D6) 로 올려 문장이 먼저 읽히게
+     ③ 차트·막대·게이지는 전부 홈(.zone) 면 위로, 글은 바탕에 → 종류가 색면으로 갈림
+     ④ slide2 과거/현재 비교를 112px 한 덩어리 → 148px 두 덩어리로.
+        각 덩어리에 T2 주장 한 줄을 넣고 칩을 9.5px→13px 로, 화살표 20px→32px
+     ⑤ 태그 칩을 mono 자간 라벨에서 본문 서체로 — 라벨과 내용을 서체로 구분
+   ══════════════════════════════════════════════════════════════ */
+:root{
+  --ground:#0F1A28;    /* 딥 네이비 — 검정이 아니라 '푸른' 네이비 */
+  --groove:#0A1320;    /* 한 톤 더 깊은 홈 (묶음 배경) */
+  --rule:#22354A;      /* 헤어라인 */
+  --rule2:#182838;     /* 더 약한 헤어라인 */
+  --ink:#EAE7E0;       /* 본문 — 따뜻한 회백 */
+  --dim:#93A6BA;       /* 보조 설명 */
+  --dim2:#63798F;      /* 더 약한 보조 */
+  --brass:#EFB13C;     /* 개선·핵심 수치 (SK 오렌지 계열 놋쇠) */
+  --brass-d:#8A6620;   /* 놋쇠 어둡게 — 열세 후보 막대 */
+  --red:#FF4D63;       /* 위험·미달 (어두운 바탕 보정) */
+  --red-d:#7E2333;     /* 레드 어둡게 */
+  --slate:#5E7793;     /* 종전 방식·비교군 — 채워진 면(막대·박스)에 */
+  --slate-l:#8CA3BC;   /* 종전 '선' 전용 — 2px 선은 면보다 훨씬 어둡게 보인다.
+                          홈 면(#0A1320) 위 대비 7.2:1 (면용 슬레이트는 4.2:1) */
+  --body-c:#BCC9D6;    /* 본문 문장 — dim 보다 밝게 (대비 10:1) */
+  --disp:'Malgun Gothic','맑은 고딕','IBM Plex Sans KR',sans-serif;
+  --body:'Malgun Gothic','맑은 고딕','IBM Plex Sans KR',sans-serif;
+  --mono:Consolas,'IBM Plex Mono',ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);margin:0;padding:0 0 72px}
+h1,h2,h3,p{margin:0}
+
+/* ── 페이지 셸 ─────────────────────────────── */
+.shell{max-width:1352px;margin:0 auto;padding:0 20px}
+.head{padding:46px 0 6px;border-bottom:1px solid var(--rule);margin-bottom:30px}
+.eyebrow{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.2em;color:var(--brass)}
+.head h1{font-family:var(--disp);font-weight:700;font-size:32px;letter-spacing:-.02em;margin:12px 0 12px;text-wrap:balance}
+.head p{color:var(--dim);font-size:14.5px;line-height:1.78;max-width:70ch;margin:0 0 22px}
+.head p b{color:var(--ink);font-weight:700}
+.head p em{color:var(--brass);font-style:normal;font-weight:700}
+.bar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding-bottom:24px}
+.btn{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.09em;background:var(--groove);
+     color:var(--dim);border:1px solid var(--rule);border-radius:0;padding:8px 14px;cursor:pointer}
+.btn:hover{color:var(--ink);border-color:var(--dim2)}
+.btn[aria-pressed="true"]{background:var(--brass);color:#1A1204;border-color:var(--brass)}
+.btn:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+.note{font-size:12.5px;color:var(--dim2)}
+
+/* ── 슬라이드 프레임 ───────────────────────── */
+.wrap{margin:34px 0 0}
+.cap{display:flex;align-items:baseline;gap:13px;margin:0 0 11px;font-family:var(--mono);
+     font-size:11px;letter-spacing:.15em;color:var(--dim2)}
+.cap b{color:var(--brass);font-weight:700}
+.cap span.k{font-family:var(--body);letter-spacing:0;font-size:13px;color:var(--dim)}
+.stage{position:relative;width:100%;overflow:hidden;border:1px solid var(--rule);background:#05090E}
+.slide{position:relative;width:1280px;height:720px;transform-origin:0 0;background:var(--ground);overflow:hidden}
+.guide{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .15s}
+body.g .guide{opacity:1}
+.guide .safe{position:absolute;left:72px;right:72px;top:44px;bottom:50px;border:1px dashed rgba(239,177,60,.4)}
+.guide .col{position:absolute;top:44px;bottom:50px;background:rgba(239,177,60,.05)}
+
+/* ── 슬라이드 공통 ─────────────────────────── */
+.sec{position:absolute;left:72px;top:40px;font-family:var(--mono);font-size:12px;
+     font-weight:700;letter-spacing:.16em;color:var(--dim)}
+.sec i{color:var(--brass);font-style:normal;margin-right:10px}
+.pscale{position:absolute;right:72px;top:41px;display:flex;align-items:flex-end;height:13px}
+.pscale i{display:block;width:3px;height:5px;background:var(--rule);margin-left:11px}
+.pscale i.on{height:13px;background:var(--brass)}
+.hrule{position:absolute;left:72px;right:72px;height:1px;background:var(--rule)}
+.title{position:absolute;left:72px;font-family:var(--disp);font-weight:700;font-size:37px;
+       line-height:1.26;letter-spacing:-.022em}
+.title em{font-style:normal;color:var(--brass)}
+/* ── 활자 4계급 ────────────────────────────────────────────
+   종류가 다르면 크기·서체·색이 전부 다르게 한다. v2 는 T1 과 T4 만 있어
+   숫자만 튀고 나머지가 한 덩어리로 읽혔다. T2·T3 를 넣어 사이를 벌린다.
+     T1 데이터  Consolas 700 · 30~50px · 앰버          숫자
+     T2 주장    맑은고딕 700 · 21px  · 회백            그 영역이 말하는 것
+     T3 본문    맑은고딕 400 · 15~18px · 밝은 슬레이트  설명 문장
+     T4 라벨    Consolas 700 · 10.5px · 자간 .16em     무엇의 수치인가
+   그리고 차트·표는 홈(groove) 면에 앉히고 글은 바탕에 둔다
+   → 데이터인지 글인지가 색면으로 먼저 갈린다.                        */
+.lead{position:absolute;left:72px;font-size:18px;line-height:1.66;color:var(--body-c)}
+.lead b{color:var(--ink);font-weight:700}
+.lead em{font-style:normal;color:var(--brass);font-weight:700}
+.sub{font-family:var(--disp);font-weight:700;font-size:21px;line-height:1.42;
+     color:var(--ink);letter-spacing:-.016em}
+.sub em{font-style:normal;color:var(--brass)}
+.sub s{color:var(--slate);text-decoration:none}
+.txt{font-size:15px;line-height:1.68;color:var(--body-c)}
+.txt b{color:var(--ink);font-weight:700}
+.txt em{font-style:normal;color:var(--brass);font-weight:700}
+/* 데이터가 앉는 면 — 차트·막대·표는 반드시 이 안에 */
+.zone{background:var(--groove);border:1px solid var(--rule2);padding:14px 16px}
+.foot{position:absolute;left:72px;right:72px;bottom:34px;font-size:16.5px;color:var(--body-c);
+      display:flex;align-items:baseline;gap:15px}
+.foot u{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.18em;
+        color:var(--brass);text-decoration:none;flex:0 0 auto;padding-top:2px}
+.foot b{color:var(--ink);font-weight:700}
+.foot em{font-style:normal;color:var(--brass);font-weight:700}
+
+/* 개방 패널 — 채움 없음 · 모서리 0 · 상단 헤어라인 */
+.pan{position:absolute;border-top:2px solid var(--rule);padding:14px 0 0}
+.pan.on{border-top-color:var(--brass)}
+.pan.bad{border-top-color:var(--red-d)}
+.plab{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.15em;color:var(--dim2)}
+.pan h3{font-family:var(--disp);font-weight:700;font-size:19px;line-height:1.36;margin:9px 0 8px}
+.pan p{font-size:15px;line-height:1.68;color:var(--body-c)}
+.pan p b{color:var(--ink);font-weight:700}
+/* 홈(groove) — 묶음 배경이 필요할 때만 */
+.groove{position:absolute;background:var(--groove);border-top:1px solid var(--rule)}
+
+.big{font-family:var(--mono);font-weight:700;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.big u{font-family:var(--disp);font-size:.4em;font-weight:700;text-decoration:none;margin-left:4px;letter-spacing:0}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.was{font-family:var(--mono);font-size:14px;color:var(--slate);font-variant-numeric:tabular-nums}
+.tag{font-family:var(--body);font-size:13px;font-weight:400;color:var(--dim);
+     border:1px solid var(--rule);padding:6px 11px;white-space:nowrap}
+.tag.on{color:var(--brass);border-color:rgba(239,177,60,.45)}
+.tag.bad{color:var(--red);border-color:var(--red-d)}
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.flow s{color:var(--dim2);font-size:13px;text-decoration:none}
+
+/* 표지 */
+.meta{font-family:var(--mono);font-size:12px;letter-spacing:.15em;color:var(--dim2)}
+.meta b{color:var(--dim);font-weight:400}
+
+table.mini{border-collapse:collapse;width:100%;font-size:13px}
+table.mini th{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;color:var(--dim2);
+              text-align:right;padding:0 0 7px;border-bottom:1px solid var(--rule)}
+table.mini th:first-child{text-align:left}
+table.mini td{padding:6px 0;border-bottom:1px solid var(--rule2);text-align:right;color:var(--dim);
+              font-family:var(--mono);font-variant-numeric:tabular-nums}
+table.mini td:first-child{text-align:left;color:var(--ink);font-family:var(--body)}
+
+/* 대조표 (셸) */
+.diff{border-collapse:collapse;width:100%;font-size:13.5px;margin-top:6px}
+.diff th{font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.14em;color:var(--dim2);
+         text-align:left;padding:0 14px 9px 0;border-bottom:1px solid var(--rule)}
+.diff td{padding:11px 14px 11px 0;border-bottom:1px solid var(--rule2);color:var(--dim);vertical-align:top;line-height:1.6}
+.diff td:first-child{color:var(--ink);white-space:nowrap}
+.diff td.o{color:var(--slate)}
+.diff td.n{color:var(--brass)}
+.qgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:0 34px}
+.q{border-top:2px solid var(--rule);padding:14px 0 20px}
+.q .plab{margin-bottom:9px;display:block}
+.q p{font-size:13.5px;line-height:1.7;color:var(--dim)}
+.q p b{color:var(--ink);font-weight:700}
+.q p em{font-style:normal;color:var(--brass);font-weight:700}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="shell">
+<header class="head">
+  <div class="eyebrow">DESIGN v2 · 계측 기록지 · 계급 정리</div>
+  <h1>샘플 문법을 버리고, 계급을 4단으로 벌렸습니다</h1>
+  <p>v1 이 샘플처럼 읽힌 이유는 분명합니다. <b>어두운 배경 · 민트 단색 강조 · 라운드 채움 카드 ·
+    영문 대문자 키커 · 2행 제목의 둘째 줄 통째 강조</b> — 샘플의 문법을 그대로 옮겼기 때문입니다.
+    v2 는 그 다섯 가지를 전부 바꾸고, 디자인 언어를 <em>이 과제의 세계(계측·검침·발전 계기판)</em>에서
+    다시 뽑았습니다. 좋다고 하신 <b>그래프·차트·구성</b>은 그대로 두고 표면만 갈아 끼웠습니다.
+    아래 세 장은 v1 과 <b>같은 내용·같은 순서</b>라 바로 비교하실 수 있습니다.</p>
+  <p><b>2차 회신 반영 — 구분감.</b> 직전 판은 계급이 <b>숫자 46px</b>과
+    <b>나머지 전부 13.5px</b> 두 단뿐이라 숫자만 튀고 글은 한 덩어리로 읽혔습니다.
+    사이를 <em>네 단(데이터 / 주장 / 본문 / 라벨)</em>으로 벌리고, 본문 색을 한 단 올렸습니다.
+    그리고 <b>차트·막대·게이지는 전부 홈(groove) 면 위로</b> 내려앉히고 글은 바탕에 두었습니다 —
+    데이터인지 글인지가 크기보다 먼저 <b>색면으로</b> 갈립니다.
+    두 번째 장의 과거/현재 비교는 <em>두 배 가까이 키워</em> 두 덩어리로 갈라 놓았습니다.</p>
+  <div class="bar">
+    <button class="btn" id="gb" aria-pressed="false">12컬럼 가이드</button>
+    <span class="note">여백 0.75in · 1280×720 고정좌표 = 13.333×7.5in @96dpi → PPT 1:1 이식</span>
+  </div>
+</header>
+
+<!-- ═══════════ 01 표지 ═══════════ -->
+<section class="wrap">
+  <div class="cap"><b>SLIDE 01</b><span class="k">표지 — 온도축 위의 두 선이 곧 이 과제의 결론</span></div>
+  <div class="stage"><div class="slide">
+    <div class="guide"><div class="safe"></div></div>
+
+    <div class="meta" style="position:absolute;left:72px;top:40px">나래에너지서비스 · 위례열병합발전소</div>
+    <div class="meta" style="position:absolute;right:72px;top:40px">2026. 09.</div>
+    <div class="hrule" style="top:72px"></div>
+
+    <h1 class="title" style="top:112px;width:596px;font-size:47px;line-height:1.2">
+      공급가능용량 산정,<br>사람의 판단에서 <em>데이터로</em>
+    </h1>
+
+    <div class="sub" style="position:absolute;left:72px;top:280px;width:568px;font-size:25px;line-height:1.46">
+      온도가 달라도 <s>보정값 하나</s>로 맞춰 온 신고를,
+      <em>온도별로 학습하는 모델</em>로 바꿨습니다.
+    </div>
+    <p class="txt" style="position:absolute;left:72px;top:392px;width:552px">
+      종전 방식과 <b>같은 데이터 · 같은 조건</b>에서 채점한 결과입니다.
+      누적 36회차, 한 건씩 가려 맞혀봤습니다.
+    </p>
+
+    <!-- 히어로: 종전 수평선 vs 개선 곡선 (실측 RBF 4점) -->
+    <div class="zone" style="position:absolute;left:668px;top:112px;width:540px">
+      <div class="plab" style="margin-bottom:12px">보정값 · 단위 MW &nbsp;·&nbsp; 외기온도 0 ~ 30&#8451;</div>
+      <!-- 축 규격: x 0℃=48 · 30℃=474 (14.2px/℃) · y 13px/MW · 0MW=y128
+           실측 GP·RBF 4점 (0,+7.50)(10,+5.17)(20,+3.47)(30,−2.38) → y=31,61,83,159
+           종전 일괄 +2.4 → y=97.  붉은 괄호는 0℃·30℃ 그 자리에 정확히 세운다. -->
+      <svg width="508" height="210" viewBox="0 0 508 210" role="img"
+           aria-label="종전의 일괄 보정값은 수평 점선, 개선 모델은 온도에 따라 내려가는 곡선. 겨울에는 5.1 MW 과소, 여름에는 4.8 MW 과대가 된다">
+        <!-- 격자 -->
+        <line x1="40" y1="24"  x2="490" y2="24"  stroke="var(--rule2)"></line>
+        <line x1="40" y1="128" x2="490" y2="128" stroke="var(--rule)"></line>
+        <line x1="40" y1="180" x2="490" y2="180" stroke="var(--rule2)"></line>
+        <line x1="40" y1="24"  x2="40"  y2="180" stroke="var(--rule)"></line>
+        <g class="num" font-size="10" fill="#63798F">
+          <text x="0" y="28">+8</text><text x="0" y="132">0</text><text x="0" y="184">&#8722;4</text>
+        </g>
+        <!-- x 눈금 -->
+        <g stroke="#63798F">
+          <line x1="48"  y1="180" x2="48"  y2="185"></line><line x1="190" y1="180" x2="190" y2="185"></line>
+          <line x1="332" y1="180" x2="332" y2="185"></line><line x1="474" y1="180" x2="474" y2="185"></line>
+        </g>
+        <g class="num" font-size="10" fill="#63798F" text-anchor="middle">
+          <text x="48" y="200">0&#8451;</text><text x="190" y="200">10</text>
+          <text x="332" y="200">20</text><text x="474" y="200">30</text>
+        </g>
+        <!-- 종전 · 일괄 +2.4 — 개선 곡선과 같은 굵기(2.6)로 대등하게 세운다 -->
+        <line x1="40" y1="97" x2="490" y2="97" stroke="var(--slate-l)" stroke-width="2.6" stroke-dasharray="9 6"></line>
+        <text x="48" y="89" class="num" font-size="12" font-weight="700" fill="#8CA3BC">종전 · 일괄 +2.4</text>
+        <!-- 개선 · GP·RBF 실측 4점 -->
+        <polyline fill="none" stroke="var(--brass)" stroke-width="2.6" points="48,31 190,61 332,83 474,159"></polyline>
+        <g fill="var(--brass)">
+          <rect x="44" y="27" width="8" height="8"></rect><rect x="186" y="57" width="8" height="8"></rect>
+          <rect x="328" y="79" width="8" height="8"></rect><rect x="470" y="155" width="8" height="8"></rect>
+        </g>
+        <g class="num" font-size="12" font-weight="700" fill="#EFB13C">
+          <text x="58" y="52">+7.5</text><text x="466" y="174" text-anchor="end">&#8722;2.4</text>
+        </g>
+        <!-- 두 선의 간격 = 손실. 0℃ 와 30℃ 자리에 정확히 -->
+        <g stroke="var(--red)" stroke-width="1.6">
+          <line x1="48" y1="37" x2="48" y2="91"></line>
+          <line x1="42" y1="37" x2="54" y2="37"></line><line x1="42" y1="91" x2="54" y2="91"></line>
+          <line x1="474" y1="103" x2="474" y2="153"></line>
+          <line x1="468" y1="103" x2="480" y2="103"></line><line x1="468" y1="153" x2="480" y2="153"></line>
+        </g>
+      </svg>
+      <div style="display:flex;gap:26px;margin-top:12px;align-items:center">
+        <span class="num" style="font-size:12px;color:var(--slate-l);display:flex;align-items:center;gap:8px">
+          <span style="display:block;width:26px;height:0;border-top:2.6px dashed var(--slate-l)"></span>종전 · 일괄 +2.4</span>
+        <span class="num" style="font-size:12px;color:var(--brass);display:flex;align-items:center;gap:8px">
+          <span style="display:block;width:26px;height:0;border-top:2.6px solid var(--brass)"></span>개선 · 온도별 곡선</span>
+      </div>
+      <div class="num" style="font-size:12px;color:var(--red);margin-top:7px">
+        겨울 0&#8451; 5.1 MW 과소 &nbsp;·&nbsp; 여름 30&#8451; 4.8 MW 과대</div>
+    </div>
+    <div class="sub" style="position:absolute;left:668px;top:452px;width:540px;font-size:19px;line-height:1.46">
+      점선 하나를 <em>곡선</em>으로 바꾼 것이 전부입니다.
+    </div>
+
+    <!-- 핵심 3수치 — 데이터 띠 -->
+    <div class="hrule" style="top:506px"></div>
+    <div style="position:absolute;left:72px;top:522px;display:flex;align-items:stretch;gap:0">
+      <div style="width:208px">
+        <div class="plab">예측 오차</div>
+        <div class="big" style="font-size:48px;color:var(--brass);margin-top:11px">66<u>%&#8595;</u></div>
+        <div class="num" style="font-size:15px;color:var(--ink);margin-top:11px">3.83 &#8594; 1.29 MW</div>
+      </div>
+      <div style="width:1px;background:var(--rule)"></div>
+      <div style="width:208px;padding-left:26px">
+        <div class="plab">기준 미달 회차</div>
+        <div class="big" style="font-size:48px;color:var(--brass);margin-top:11px">79<u>%&#8595;</u></div>
+        <div class="num" style="font-size:15px;color:var(--ink);margin-top:11px">14 &#8594; 3 건</div>
+      </div>
+      <div style="width:1px;background:var(--rule)"></div>
+      <div style="width:208px;padding-left:26px">
+        <div class="plab">과대 신고 누계</div>
+        <div class="big" style="font-size:48px;color:var(--brass);margin-top:11px">88<u>%&#8595;</u></div>
+        <div class="num" style="font-size:15px;color:var(--ink);margin-top:11px">65.4 &#8594; 7.6 MW</div>
+      </div>
+      <div style="width:1px;background:var(--rule)"></div>
+      <div style="width:452px;padding-left:26px">
+        <div class="plab">무엇이 달라졌나</div>
+        <p class="txt" style="margin-top:11px">
+          <b>사람이 정하던 보정값 1개</b>가 사라졌습니다.
+          이제 온도별 실적이 값을 만들고, 회차가 쌓이면 스스로 다시 고릅니다.</p>
+      </div>
+    </div>
+
+    <div class="hrule" style="top:634px"></div>
+    <div class="meta" style="position:absolute;left:72px;top:656px">
+      <b>&#9633;&#9633;팀</b> &nbsp;·&nbsp; <b>&#9633;&#9633;&#9633;</b></div>
+    <div class="meta" style="position:absolute;right:72px;top:656px">발표 10분 &nbsp;·&nbsp; Tool 시연 4분</div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 02 한 장 요약 ═══════════ -->
+<section class="wrap">
+  <div class="cap"><b>SLIDE 02</b><span class="k">한 장 요약 — 계기 눈금 게이지로 종전→개선을 읽힌다</span></div>
+  <div class="stage"><div class="slide">
+    <div class="guide"><div class="safe"></div></div>
+    <div class="sec"><i>&#9632;</i>한 장 요약</div>
+    <div class="pscale"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="hrule" style="top:72px"></div>
+
+    <h2 class="title" style="top:96px;width:1040px">
+      판단 하나에 기대던 숫자를,<br>데이터가 <em>스스로 갱신합니다</em>
+    </h2>
+
+    <p class="lead" style="top:210px;width:1060px">
+      온도가 달라도 <b>같은 보정값 하나</b>를 쓰던 방식을 온도별 실적을 학습하는 모델로 바꿨습니다.
+      같은 데이터로 채점했을 때 <em>세 지표가 동시에</em> 좋아졌습니다.
+    </p>
+
+    <!-- KPI 3 · 개방 패널 + 계기 게이지 -->
+    <div class="pan on" style="left:72px;top:282px;width:346px">
+      <div class="plab">예측 오차 &nbsp;·&nbsp; MW</div>
+      <div style="display:flex;align-items:baseline;gap:13px;margin-top:12px">
+        <div class="big" style="font-size:42px;color:var(--brass)">1.29</div>
+        <div class="was" style="font-size:19px">&#8592; 3.83</div>
+      </div>
+      <p style="margin-top:10px">평균적으로 몇 MW 틀리는가</p>
+      <div class="zone" style="margin-top:12px;padding:9px 12px">
+      <svg width="322" height="28" viewBox="0 0 346 30" role="img"
+           aria-label="종전 3.83 위치에서 개선 1.29 위치까지 침이 내려왔다">
+        <line x1="0" y1="16" x2="346" y2="16" stroke="var(--rule)" stroke-width="1"></line>
+        <rect x="0" y="12" width="117" height="8" fill="var(--brass)"></rect>
+        <line x1="346" y1="6" x2="346" y2="26" stroke="var(--slate-l)" stroke-width="2.6"></line>
+        <text x="122" y="9" class="num" font-size="10.5" fill="#EFB13C" font-weight="700">개선</text>
+        <text x="342" y="9" class="num" font-size="10.5" fill="#8CA3BC" text-anchor="end">종전</text>
+      </svg></div>
+    </div>
+
+    <div class="pan bad" style="left:467px;top:282px;width:346px">
+      <div class="plab">기준 미달 회차 &nbsp;·&nbsp; 건</div>
+      <div style="display:flex;align-items:baseline;gap:13px;margin-top:12px">
+        <div class="big" style="font-size:42px;color:var(--brass)">3</div>
+        <div class="was" style="font-size:19px;color:var(--red)">&#8592; 14</div>
+      </div>
+      <p style="margin-top:10px">실제가 낮아 <b>벌점</b>이 걸린 회차</p>
+      <div class="zone" style="margin-top:12px;padding:9px 12px">
+      <svg width="322" height="28" viewBox="0 0 346 30" role="img"
+           aria-label="종전 14건에서 개선 3건으로 줄었다">
+        <line x1="0" y1="16" x2="346" y2="16" stroke="var(--rule)" stroke-width="1"></line>
+        <rect x="0" y="12" width="74" height="8" fill="var(--brass)"></rect>
+        <line x1="346" y1="6" x2="346" y2="26" stroke="var(--red)" stroke-width="2"></line>
+        <text x="79" y="9" class="num" font-size="10.5" fill="#EFB13C" font-weight="700">개선</text>
+        <text x="342" y="9" class="num" font-size="10.5" fill="#FF4D63" text-anchor="end">종전</text>
+      </svg></div>
+    </div>
+
+    <div class="pan on" style="left:862px;top:282px;width:346px">
+      <div class="plab">과대 신고 누계 &nbsp;·&nbsp; MW</div>
+      <div style="display:flex;align-items:baseline;gap:13px;margin-top:12px">
+        <div class="big" style="font-size:42px;color:var(--brass)">7.6</div>
+        <div class="was" style="font-size:19px">&#8592; 65.4</div>
+      </div>
+      <p style="margin-top:10px">실제보다 높게 신고한 양의 합계</p>
+      <div class="zone" style="margin-top:12px;padding:9px 12px">
+      <svg width="322" height="28" viewBox="0 0 346 30" role="img"
+           aria-label="종전 65.4에서 개선 7.6으로 줄었다">
+        <line x1="0" y1="16" x2="346" y2="16" stroke="var(--rule)" stroke-width="1"></line>
+        <rect x="0" y="12" width="40" height="8" fill="var(--brass)"></rect>
+        <line x1="346" y1="6" x2="346" y2="26" stroke="var(--slate-l)" stroke-width="2.6"></line>
+        <text x="45" y="9" class="num" font-size="10.5" fill="#EFB13C" font-weight="700">개선</text>
+        <text x="342" y="9" class="num" font-size="10.5" fill="#8CA3BC" text-anchor="end">종전</text>
+      </svg></div>
+    </div>
+
+    <!-- 종전 / 현재 대비 — 외곽여백(72~1208)에 딱 맞춘 한 덩어리.
+         내부를 세로 룰로 반 갈라 배열이 KPI 3열과 어긋나지 않게 한다.
+         상단 룰만 좌=슬레이트 / 우=앰버로 갈라 두 방식을 색으로도 구분. -->
+    <div style="position:absolute;left:72px;top:486px;width:1136px;height:130px;background:var(--groove)"></div>
+    <div style="position:absolute;left:72px;top:486px;width:568px;height:2px;background:var(--slate)"></div>
+    <div style="position:absolute;left:640px;top:486px;width:568px;height:2px;background:var(--brass)"></div>
+    <div style="position:absolute;left:640px;top:510px;width:1px;height:82px;background:var(--rule)"></div>
+    <div style="position:absolute;left:616px;top:532px;width:48px;height:38px;background:var(--groove);
+                text-align:center;font-size:30px;line-height:38px;color:var(--brass)">&#8594;</div>
+
+    <!-- 좌 96~616 / 우 664~1184 — 세로 룰(x=640)에서 좌우 544px 로 대칭.
+         칩은 space-between 으로 각 절반 전폭을 채운다 (한쪽으로 쏠리지 않게). -->
+    <div style="position:absolute;left:96px;top:503px;width:520px">
+      <div class="plab" style="color:var(--slate)">종전 &nbsp;·&nbsp; 사람의 판단</div>
+      <div class="sub" style="margin-top:10px;color:var(--slate)">보정값 <em style="color:var(--slate)">1개</em>를 사람이 정수로</div>
+      <div class="flow" style="margin-top:14px;justify-content:space-between">
+        <span class="tag">이론값 계산</span><s>&#8594;</s>
+        <span class="tag">실적과 비교</span><s>&#8594;</s>
+        <span class="tag">정수로 판단</span>
+      </div>
+    </div>
+    <div style="position:absolute;left:664px;top:503px;width:520px">
+      <div class="plab" style="color:var(--brass)">현재 &nbsp;·&nbsp; 데이터의 학습</div>
+      <div class="sub" style="margin-top:10px">온도별 곡선을 <em>데이터가 갱신</em></div>
+      <div class="flow" style="margin-top:14px;justify-content:space-between">
+        <span class="tag on">자동 취득</span><s>&#8594;</s>
+        <span class="tag on">온도별 학습</span><s>&#8594;</s>
+        <span class="tag on">최적 방식 재선정</span>
+      </div>
+    </div>
+
+    <div class="hrule" style="top:636px"></div>
+    <div class="foot"><u>결론</u><span>사람이 정하던 값이 아니라,
+      <em>36회차 실적이 스스로 만들어 내는 값</em>입니다.</span></div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 03 데이터 슬라이드 ═══════════ -->
+<section class="wrap">
+  <div class="cap"><b>SLIDE 03</b><span class="k">데이터 슬라이드 — 정보 밀도 기준 (v1 샘플 03 과 같은 내용)</span></div>
+  <div class="stage"><div class="slide">
+    <div class="guide"><div class="safe"></div></div>
+    <div class="sec"><i>04</i>모델 개발</div>
+    <div class="pscale"><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i></div>
+    <div class="hrule" style="top:72px"></div>
+
+    <h2 class="title" style="top:96px;width:1080px">
+      잇는 방식 7가지를 똑같은 조건에서 겨뤄<br><em>가장 잘 맞히는 하나</em>를 골랐습니다
+    </h2>
+
+    <p class="lead" style="top:210px;width:1080px">
+      정답을 <b>한 건씩 가리고 나머지로 맞혀보는 방식</b>으로 36번 채점했습니다.
+      <em>GP · RBF</em> 가 세 지표 모두 1위였습니다.
+    </p>
+
+    <!-- 좌 패널 -->
+    <div class="pan" style="left:72px;top:284px;width:660px">
+      <div class="plab">평균 오차 &nbsp;·&nbsp; 단위 MW &nbsp;·&nbsp; 낮을수록 좋음</div>
+
+      <!-- 헤드라인 비교 — 데이터는 홈 면 위에 -->
+      <div class="zone" style="margin-top:11px">
+        <svg width="628" height="78" viewBox="0 0 660 82" role="img"
+             aria-label="종전 일괄 보정 3.83 대비 개선 GP RBF 1.31">
+          <text x="0" y="11" class="num" font-size="11" fill="#5E7793" font-weight="700">종전 · 일괄 보정</text>
+          <rect x="0" y="18" width="560" height="15" fill="var(--slate)"></rect>
+          <text x="572" y="32" class="num" font-size="18" fill="#5E7793" font-weight="700">3.83</text>
+          <text x="0" y="57" class="num" font-size="11" fill="#EFB13C" font-weight="700">개선 · GP · RBF</text>
+          <rect x="0" y="64" width="190" height="15" fill="var(--brass)"></rect>
+          <text x="202" y="79" class="num" font-size="25" fill="#EFB13C" font-weight="700">1.31</text>
+        </svg>
+      </div>
+
+      <div class="plab" style="display:block;margin-top:16px">후보 7가지 정밀 비교
+        <span style="color:var(--brass)">&nbsp; 1.30 ~ 1.50 구간만 확대</span></div>
+
+      <svg width="660" height="158" viewBox="0 0 660 158" style="margin-top:10px" role="img"
+           aria-label="후보 7가지의 평균 오차를 확대해 비교. GP RBF 가 1위">
+        <g stroke="var(--rule2)">
+          <line x1="188" y1="0" x2="188" y2="130"></line><line x1="300" y1="0" x2="300" y2="130"></line>
+          <line x1="412" y1="0" x2="412" y2="130"></line><line x1="524" y1="0" x2="524" y2="130"></line>
+        </g>
+        <g class="num" font-size="9.5" fill="#63798F" text-anchor="middle">
+          <text x="188" y="148">1.30</text><text x="300" y="148">1.35</text>
+          <text x="412" y="148">1.40</text><text x="524" y="148">1.45</text>
+        </g>
+        <g font-family="Malgun Gothic,sans-serif" font-size="12.5">
+          <text x="0" y="12" fill="#EFB13C" font-weight="700">GP · RBF</text>
+          <rect x="188" y="2" width="27" height="13" fill="var(--brass)"></rect>
+          <text x="223" y="13" class="num" font-size="13.5" fill="#EFB13C" font-weight="700">1.312</text>
+
+          <text x="0" y="31" fill="#93A6BA">Rational Quadratic</text>
+          <rect x="188" y="21" width="63" height="13" fill="var(--brass-d)"></rect>
+          <text x="259" y="32" class="num" fill="#93A6BA">1.328</text>
+
+          <text x="0" y="50" fill="#93A6BA">Matérn 5/2</text>
+          <rect x="188" y="40" width="74" height="13" fill="var(--brass-d)"></rect>
+          <text x="270" y="51" class="num" fill="#93A6BA">1.333</text>
+
+          <text x="0" y="69" fill="#93A6BA">Matérn 3/2</text>
+          <rect x="188" y="59" width="110" height="13" fill="var(--brass-d)"></rect>
+          <text x="306" y="70" class="num" fill="#93A6BA">1.349</text>
+
+          <text x="0" y="88" fill="#93A6BA">지수형</text>
+          <rect x="188" y="78" width="222" height="13" fill="#3F5468"></rect>
+          <text x="418" y="89" class="num" fill="#93A6BA">1.399</text>
+
+          <text x="0" y="107" fill="#93A6BA">거리가중 평균</text>
+          <rect x="188" y="97" width="278" height="13" fill="#3F5468"></rect>
+          <text x="474" y="108" class="num" fill="#93A6BA">1.424</text>
+
+          <text x="0" y="126" fill="#93A6BA">온도구간 평균</text>
+          <rect x="188" y="116" width="410" height="13" fill="var(--slate)"></rect>
+          <text x="606" y="127" class="num" fill="#93A6BA">1.483</text>
+        </g>
+      </svg>
+    </div>
+
+    <!-- 우 패널 -->
+    <div class="pan" style="left:772px;top:284px;width:436px">
+      <div class="plab">방식별 보정 곡선 &nbsp;·&nbsp; 0 ~ 30&#8451;</div>
+      <div class="zone" style="margin-top:11px">
+      <svg width="404" height="189" viewBox="0 0 436 204" role="img"
+           aria-label="다섯 방식의 보정 곡선. 가운데는 거의 겹치고 양 끝에서만 갈린다">
+        <line x1="36" y1="150" x2="424" y2="150" stroke="var(--rule)" stroke-dasharray="4 4"></line>
+        <g class="num" font-size="9" fill="#63798F">
+          <text x="0" y="34">+8</text><text x="0" y="154">0</text><text x="0" y="190">&#8722;4</text>
+        </g>
+        <g class="num" font-size="9" fill="#63798F" text-anchor="middle">
+          <text x="36" y="202">0&#8451;</text><text x="165" y="202">10</text>
+          <text x="295" y="202">20</text><text x="424" y="202">30</text>
+        </g>
+        <!-- 열세 4방식 (실측 4점) -->
+        <g fill="none" stroke-width="1.5" opacity=".72">
+          <polyline stroke="#6E7FA8" points="36,36 165,73 295,95 424,187"></polyline>
+          <polyline stroke="#7C7A9E" points="36,37 165,73 295,96 424,187"></polyline>
+          <polyline stroke="#8A7690" points="36,37 165,77 295,100 424,187"></polyline>
+          <polyline stroke="#98748A" points="36,37 165,80 295,104 424,186"></polyline>
+        </g>
+        <!-- 채택 -->
+        <polyline fill="none" stroke="var(--brass)" stroke-width="2.6" points="36,38 165,73 295,99 424,187"></polyline>
+        <g stroke="var(--red)" stroke-width="1.4">
+          <line x1="30" y1="35" x2="30" y2="39"></line><line x1="430" y1="185" x2="430" y2="189"></line>
+        </g>
+        <g class="num" font-size="9.5" fill="#FF4D63">
+          <text x="42" y="26">끝에서 0.11 갈림</text>
+          <text x="424" y="176" text-anchor="end">끝에서 0.43 갈림</text>
+        </g>
+      </svg>
+      </div>
+      <div class="sub" style="margin-top:15px">양 끝에서만 <em>갈립니다</em></div>
+      <p class="txt" style="margin-top:9px">가운데는 거의 같아 눈으로는 고를 수 없습니다.</p>
+    </div>
+
+    <div class="hrule" style="top:636px"></div>
+    <div class="foot"><u>결론</u><span>방식을 <b>감으로 정하지 않았습니다</b> —
+      같은 조건에서 채점해 <em>1위를 데이터가 지목</em>했습니다.</span></div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 무엇을 바꿨는가 ═══════════ -->
+<section style="margin:56px 0 0;border-top:1px solid var(--rule);padding-top:34px">
+  <div class="eyebrow">WHAT CHANGED</div>
+  <h2 style="font-family:var(--disp);font-weight:700;font-size:25px;margin:12px 0 22px;letter-spacing:-.02em">
+    닮아 보였던 다섯 가지를 이렇게 바꿨습니다</h2>
+  <div style="overflow-x:auto">
+  <table class="diff">
+    <thead><tr><th>항목</th><th>v1 (샘플 문법)</th><th>v2 (계측 기록지)</th><th>왜</th></tr></thead>
+    <tbody>
+      <tr><td>강조색</td><td class="o">민트 #2FE3A8</td><td class="n">놋쇠 앰버 #EFB13C</td>
+        <td>민트가 샘플의 지문이었습니다. 앰버는 발전 계기판의 색이고 SK 오렌지 계열이라 CI 와도 이어집니다.</td></tr>
+      <tr><td>글자 온도감</td><td class="o">쿨 그레이 #F2F5F7</td><td class="n">따뜻한 회백 #EAE7E0</td>
+        <td>배경은 푸르게, 글자는 따뜻하게 — 샘플과 정반대 온도감이라 첫인상이 달라집니다.</td></tr>
+      <tr><td>구획 방식</td><td class="o">라운드 채움 카드</td><td class="n">모서리 0 · 개방 패널</td>
+        <td>채움과 라운드를 걷어내고 상단 헤어라인만 남겼습니다. 계측 기록지·시험성적서의 형태입니다.</td></tr>
+      <tr><td>섹션 라벨</td><td class="o">영문 대문자 키커</td><td class="n">한글 섹션명 + 우상단 7눈금</td>
+        <td>영문 조어를 쓰지 않기로 한 §3 원칙과 맞습니다. 진행 표시는 점 7개 대신 계기 눈금으로.</td></tr>
+      <tr><td>제목 강조</td><td class="o">둘째 줄을 통째로 색칠</td><td class="n">핵심 어절만 인라인</td>
+        <td>줄 단위 색칠이 샘플에서 가장 눈에 띄던 장치입니다. 어절 강조가 보고서 어투에 맞습니다.</td></tr>
+      <tr><td>지표 대비</td><td class="o">취소선 + 두 줄 막대</td><td class="n">계기 눈금 게이지</td>
+        <td>종전 눈금에서 개선 침이 내려온 형태. 같은 정보를 이 과제의 언어로 말합니다.</td></tr>
+      <tr><td>활자 계급</td><td class="o">숫자 46px / 나머지 13.5px — 2단</td>
+        <td class="n">데이터 · 주장 · 본문 · 라벨 — 4단</td>
+        <td>2단뿐이라 숫자만 튀고 글이 한 덩어리로 읽혔습니다. 사이에 <b>주장 21px</b>과
+          <b>본문 15px</b>을 넣고 본문 색을 <b>#93A6BA → #BCC9D6</b> 로 올렸습니다.</td></tr>
+      <tr><td>글 / 데이터</td><td class="o">같은 바탕에 나란히</td>
+        <td class="n">데이터는 홈 면, 글은 바탕</td>
+        <td>차트·막대·게이지를 전부 홈(groove) 면 위로 내렸습니다. 종류가 크기보다 먼저
+          색면으로 갈립니다.</td></tr>
+      <tr><td>과거/현재 비교</td><td class="o">112px 한 덩어리 · 칩 9.5px</td>
+        <td class="n">148px 두 덩어리 · 칩 13px</td>
+        <td>각 덩어리에 주장 한 줄(21px)을 넣고, 상단 룰을 슬레이트 / 앰버로 갈라
+          두 방식이 색으로도 구분되게 했습니다. 화살표는 20px → 32px.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p style="font-size:13.5px;line-height:1.75;color:var(--dim);margin-top:20px;max-width:74ch">
+    <b style="color:var(--ink)">유지한 것</b> — 좋다고 하신 그래프·차트·구성, 색의 뜻 고정(회색=종전 /
+    강조색=개선 / 레드=위험), 하단 결론 한 줄, 문장형 제목, 샘플 03 수준의 정보 밀도.
+    <b style="color:var(--ink)">폰트</b> — 목업 1순위를 <em style="font-style:normal;color:var(--brass)">맑은
+    고딕</em>으로 바꿨습니다. 부장님 PC 에서는 이 목업이 곧 PPT 의 자막폭이 됩니다.
+    숫자·영문 라벨은 Consolas 입니다. 굵기는 400·700 만 씁니다(맑은 고딕에 800 이 없어 v1 은 PPT 에서
+    다르게 나올 수 있었습니다).
+  </p>
+</section>
+
+<!-- ═══════════ 확인 요청 ═══════════ -->
+<section style="margin:50px 0 0;border-top:1px solid var(--rule);padding-top:34px">
+  <div class="eyebrow">NEXT</div>
+  <h2 style="font-family:var(--disp);font-weight:700;font-size:25px;margin:12px 0 24px;letter-spacing:-.02em">
+    이 방향이면 15장으로 갑니다 — 네 가지만 알려주십시오</h2>
+  <div class="qgrid">
+    <div class="q"><span class="plab">01 · 표지 부서 · 작성자</span>
+      <p>지금 <b>&#9633;&#9633;팀 · &#9633;&#9633;&#9633;</b> 자리표시자입니다.
+        부서명과 성명을 주시면 그대로 넣습니다. 로고 파일이 있으면 좌상단
+        <b>1.1 × 0.35 in</b> 자리에 앉히고, 없으면 지금처럼 회사명 텍스트로 둡니다.</p></div>
+    <div class="q"><span class="plab">02 · 금액 환산</span>
+      <p>미달 페널티 단가나 기회손실 환산 기준이 있으면 <em>MW &#8594; 원</em>으로 바꿉니다.
+        직책자에게는 이쪽이 훨씬 셉니다. 없으면 MW 로만 가고 <b>추정치는 만들지 않습니다</b>.</p></div>
+    <div class="q"><span class="plab">03 · Tool 스크린샷</span>
+      <p>보유한 5장은 8/20자라 <b>모델 선정 탭 · 습도 경고 가드</b>가 없습니다.
+        다시 캡쳐해 주시겠습니까? 아니면 규격 맞춘 자리표시자 프레임을 넣어 두고 직접 삽입하시겠습니까?</p></div>
+    <div class="q"><span class="plab">04 · 수평 전개 · 발표자 노트</span>
+      <p>전개 대상 사업소를 <b>실명</b>으로 쓸 수 있습니까, 아니면 "동일 구조 입찰 사업소"로 일반화할까요?
+        그리고 10분 발표 스크립트를 슬라이드 노트에 넣어 둘까요?</p></div>
+  </div>
+</section>
+</div>
+
+<script>
+  // 슬라이드는 1280×720 고정좌표. 화면 폭에 맞춰 배율만 조정한다.
+  var SW = 1280, SH = 720;
+  function fit(){
+    document.querySelectorAll('.stage').forEach(function(st){
+      var sl = st.querySelector('.slide'), s = st.clientWidth / SW;
+      sl.style.transform = 'scale(' + s + ')';
+      st.style.height = Math.round(SH * s) + 'px';
+    });
+  }
+  document.querySelectorAll('.guide').forEach(function(g){
+    var L = 72, R = 72, gut = 17.28, n = 12;
+    var w = (SW - L - R - gut * (n - 1)) / n;
+    for (var i = 0; i < n; i++){
+      var d = document.createElement('div');
+      d.className = 'col';
+      d.style.left = (L + i * (w + gut)) + 'px';
+      d.style.width = w + 'px';
+      g.appendChild(d);
+    }
+  });
+  var b = document.getElementById('gb');
+  b.addEventListener('click', function(){
+    var on = document.body.classList.toggle('g');
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  window.addEventListener('resize', fit);
+  fit();
+</script>

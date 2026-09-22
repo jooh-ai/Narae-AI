@@ -19,6 +19,20 @@ from .store import MeasurementStore
 from .theory import TheoryEngine
 from .weather import WeatherForecast, applied_pressure, load_excel3_1
 
+# 입찰파일 도장·화면 표기에 쓰는 방법 이름. 키는 correction_method 인자와 같다.
+# select.METHOD_LABEL 이 'bin'/'curve'/'gp:<커널>' 을 모두 담는다. 'gp' 는 예전
+# 설정·CLI·입찰파일 도장에서 쓰던 키라 'gp:rbf' 별칭으로 남긴다(하위호환).
+from .select import METHOD_LABEL as _SEL_LABEL  # noqa: E402
+from .select import make_corrector as _make_corrector  # noqa: E402
+
+METHOD_LABEL = {"gp": "GP", **_SEL_LABEL}
+GP_DEFAULT = "gp:rbf"
+
+
+def resolve_method(name: str) -> str:
+    """'gp' → 'gp:rbf'. 그 외는 그대로."""
+    return GP_DEFAULT if name == "gp" else name
+
 
 @dataclass
 class PipelineResult:
@@ -34,34 +48,53 @@ class PipelineResult:
     duplicate_skipped: bool = False  # 같은 날짜가 이미 있어 반영을 건너뛰었는지
     fingerprint: str = ""            # 보정 테이블 지문 — 입찰파일 최신 여부 검사용
     acq_warnings: list = field(default_factory=list)  # 취득 품질 경고(커넥터가 올린 것)
+    correction_method: str = "bin"    # 이번 산출에 쓴 보정 방법 (화면·도장 표기용)
+    igv: bool = True                  # 이 시험의 IGV Turn-up 실시 여부
+    igv_skipped: bool = False         # IGV 미실시라 누적 반영을 막았는지
+    rh_unconfirmed: bool = False      # 습도 미확정이라 누적 반영을 막았는지
 
 
 def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None = None,
                  connector=None, engine: TheoryEngine | None = None,
                  deg: float = C.DEFAULT_DEG,
                  forecast: WeatherForecast | None = None, forecast_path: str | None = None,
-                 bid_day: str | None = None, template_path: str | Path = DEFAULT_TEMPLATE,
+                 template_path: str | Path = DEFAULT_TEMPLATE,
                  accumulate: bool = False, correction_method: str = "bin",
                  bandwidth: float = 3.5, margin_k: float = 0.0,
-                 start: str = "17:00") -> PipelineResult:
+                 start: str = "17:00", igv: bool = True,
+                 rh: float | None = None) -> PipelineResult:
     """전 단계 실행. connector 가 있으면 RiMS 자동취득.
 
     accumulate=False(기본): 취득·보정값 계산만(확인용) — 누적에 저장 안 함.
     accumulate=True: 그 테스트를 누적에 반영(저장). 같은 날짜가 이미 있으면 건너뜀.
-    forecast/forecast_path 로 입찰 대기압(예보 중위 − 8) 결정. 없으면 ISO 1013.
+    forecast/forecast_path 로 입찰 대기압 결정 — 예보 3~7일차(D+2~D+6) 중위 평균 − 8.
+      엑셀3 '온도 Profile'!M2 = AVERAGE(Y8:Y12)-8 과 같은 값이다. 없으면 ISO 1013.
     correction_method: 'bin'(구간 평균, 기본) / 'curve'(커널회귀) / 'gp'(가우시안 프로세스).
       실측 32건 LOOCV 예측오차(MAE): bin 1.419 / curve 1.341 / gp 1.243 MW.
     margin_k: 미달 방지 안전마진 계수(0=미적용). 마진 = k × 구간별 실측변동.
       k=0.8 이면 시드 32건에서 미달 0건(오차는 커지지만 전부 안전한 방향).
     output_path 가 있으면 엑셀3 양식 입찰 파일 생성.
     start: 테스트 시작 시각(기본 17:00, 1시간 창). 다른 시각에 수행된 테스트 취득용.
+    igv: 이 시험에서 IGV Turn-up 을 실시했는가(기본 True).
+
+      False 면 W=0 으로 계산해 보여 주기만 하고 **누적에는 절대 넣지 않는다**
+      (accumulate=True 여도 막는다). 담당자 방침이다 — IGV 실시 여부에 따라 출력
+      변동이 너무 커서, 일관성을 위해 IGV 실시 시험만 보정값에 쓴다.
+
+      W=0 을 미실시 표식으로 쓸 수 없다는 점에 주의. igv_turnup() 은 극저온
+      구간(CIT<0)에서도 0 을 돌려주므로 둘을 구분할 수 없다. 그래서 별도 인자다.
+    rh: 상대습도 재정의(%). None 이면 취득값을 쓴다. MBL 센서 드리프트로 취득 습도가
+      담당자 표와 크게 어긋날 때 사람이 옳은 값을 넣는다 — 습도 1개가 보정값을
+      2 MW 이상 움직인다(2026-05-27: MBL 32.5% vs 표 74.1% → 보정값 -2.65 vs -0.50).
     """
     eng = engine or TheoryEngine()
 
     # 1. 날씨 → 적용 대기압
     if forecast is None and forecast_path:
         forecast = load_excel3_1(forecast_path)
-    pressure = (applied_pressure(forecast, day=bid_day) if forecast is not None
+    # 적용 대기압 = 예보 3~7일차 중위 평균 − 8 (엑셀3 M2 수식과 동일). 적용일을
+    # 고르는 인자는 없다 — 담당자 실무가 이 창 하나로 고정이다.
+    pressure = (applied_pressure(forecast) if forecast is not None
                 else C.REF_PRESSURE)
 
     # 2. RiMS 취득 → 보정값 계산(확인용). 반영(저장)은 accumulate=True 일 때만.
@@ -69,12 +102,38 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     reflected = False
     duplicate_skipped = False
     acq_warnings: list = []
+    igv_skipped = False
+    rh_unconfirmed = False
     if connector is not None:
-        new_record = store.compute_from_rims(connector, date, start=start, engine=eng, deg=deg)
+        new_record = store.compute_from_rims(connector, date, start=start, engine=eng,
+                                             deg=deg, w=None if igv else 0.0, rh=rh)
         # 취득 품질 경고(집계 상태·CC vs GT+ST 불일치 등). 지원하는 커넥터만 채운다.
         acq_warnings = list(getattr(connector, "last_warnings", None) or [])
+        if rh is not None:
+            # 습도를 손으로 바꾼 것은 반드시 기록에 남는다 — 보정값을 2 MW 넘게
+            # 움직이는 개입이라 나중에 "왜 이 값이지" 를 되짚을 수 있어야 한다.
+            acq_rh = getattr(getattr(connector, "last_acquired", None), "rh", None)
+            src = f"취득 {acq_rh:.1f}% → " if isinstance(acq_rh, (int, float)) else ""
+            acq_warnings.append(f"상대습도 수동 지정: {src}{rh:.1f}% 로 계산했습니다")
         if accumulate:
-            if store.has_date(date):
+            if not igv:
+                # 담당자 방침: IGV 미실시 시험은 보정값에 쓰지 않는다. 반영 요청이
+                # 있어도 막는다 — 넣으면 그 회차만이 아니라 곡선 전체가 오염된다.
+                igv_skipped = True
+                acq_warnings.append(
+                    "IGV Turn-up 미실시 — 누적에 반영하지 않았습니다(보정값 산출 제외 방침)")
+            elif rh is None and getattr(
+                    getattr(connector, "last_acquired", None), "rh_suspect", False):
+                # 습도 두 센서가 크게 어긋난 회차. 경고만 띄우고 넣으면 조용히 오염된다
+                # (2026-07-07: RH 19.6% vs 표 68.5% → 보정값 -5.19 vs -0.62).
+                # 사람이 습도를 확정해야만 누적된다. 취득값이 맞다고 판단했으면
+                # 같은 값을 수동으로 넣으면 된다 — 그것도 명시적 확인이다.
+                rh_unconfirmed = True
+                acq_warnings.append(
+                    "습도 확인 필요 — 누적에 반영하지 않았습니다. 두 습도계가 크게 "
+                    "어긋났습니다. [상대습도 RH] 에 옳은 값을 넣고 다시 실행하십시오"
+                    "(취득값이 맞다고 판단하면 같은 값을 넣으면 됩니다).")
+            elif store.has_date(date):
                 duplicate_skipped = True            # 같은 날짜 이미 반영됨 → 중복 방지
             else:
                 store.add(new_record)
@@ -83,13 +142,11 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     # 3. 보정 테이블 재집계 (+ 보정 방법 · 안전마진)
     table = store.correction_table()
     recs = [{"cit": r.cit, "corr": r.corr} for r in store.all()]
-    corrector = None
     if correction_method == "curve":
         from .curve import CorrectionCurve
-        corrector = CorrectionCurve(recs, bandwidth=bandwidth)
-    elif correction_method == "gp":
-        from .gp import GPCorrectionCurve
-        corrector = GPCorrectionCurve(recs)
+        corrector = CorrectionCurve(recs, bandwidth=bandwidth)   # bandwidth 는 커널회귀 전용
+    else:
+        corrector = _make_corrector(resolve_method(correction_method), recs)
     if margin_k and margin_k > 0:          # 미달 방지 안전마진(실측 변동 비례)
         from .correction import applied_correction
         from .margin import MarginCorrector
@@ -105,8 +162,15 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
     rows = build_profile(eng, table, pressure=pressure, deg=deg, corrector=corrector)
     out = None
     if output_path:
+        # 보정방법을 도장에 남긴다. 지문(table_fingerprint)은 구간 테이블만 해싱하므로
+        # 같은 누적이면 방법이 달라도 지문이 같다 — 지문만으로는 어느 방법으로 만든
+        # 파일인지 구분할 수 없다. 지문 알고리즘 자체는 건드리지 않는다(바꾸면 이미
+        # 만들어 둔 입찰파일이 전부 구버전으로 오판된다).
+        note = METHOD_LABEL.get(correction_method, correction_method)
+        if margin_k and margin_k > 0:
+            note += f"+마진{margin_k:g}×"
         stamp = (f"위례입찰툴 | 테스트 {date} | 누적 {store.count()}건 | "
-                 f"보정지문 {fp} | 생성 {datetime.now():%Y-%m-%d %H:%M}")
+                 f"보정방법 {note} | 보정지문 {fp} | 생성 {datetime.now():%Y-%m-%d %H:%M}")
         out = fill_excel3_template(output_path, engine=eng, correction_table=table,
                                    pressure=pressure, deg=deg, forecast=forecast,
                                    template_path=template_path, corrector=corrector,
@@ -116,4 +180,7 @@ def run_pipeline(*, date: str, store: MeasurementStore, output_path: str | None 
                           measurement_count=store.count(), new_record=new_record,
                           correction_table=table, profile_rows=rows, output_path=out,
                           reflected=reflected, duplicate_skipped=duplicate_skipped,
-                          fingerprint=fp, acq_warnings=acq_warnings)
+                          fingerprint=fp, acq_warnings=acq_warnings,
+                          correction_method=correction_method,
+                          igv=igv, igv_skipped=igv_skipped,
+                          rh_unconfirmed=rh_unconfirmed)
