@@ -32,8 +32,10 @@ ROOT = Path(__file__).resolve().parents[3]
 
 # ── 화면 규격 ────────────────────────────────────────────────────────────
 CW, CH = 1920, 1080                 # 캔버스
-LOG_W, LOG_H = 1340, 800            # 도구 창(논리 픽셀). QT_SCALE_FACTOR=2 로 잡는다
-WIN_W = 1574                         # 캔버스에 앉히는 창 크기
+LOG_W, LOG_H = 1340, 900            # 도구 창(논리 픽셀). QT_SCALE_FACTOR=2 로 잡는다
+#   900 인 까닭 — ④ 출력 시뮬레이션 탭의 왼쪽 열이 길어서 800 이면
+#   [시뮬레이션 실행] 버튼이 잘린다(버튼 하단이 854 논리픽셀).
+WIN_W = 1399                         # 캔버스에 앉히는 창 크기 (높이 940 에 맞춘 폭)
 WIN_H = round(WIN_W * LOG_H / LOG_W)          # 940
 WIN_X, WIN_Y = (CW - WIN_W) // 2, 52
 S = WIN_W / LOG_W                             # 논리 → 캔버스 배율 1.1746
@@ -82,6 +84,7 @@ class Video:
         self.show_cursor = True
         self._cache = None
         self.dry = dry
+        self.start_at = 0.0
         self.limit = 1e9
         self.frames = 0
         self.proc = None
@@ -144,6 +147,13 @@ class Video:
     # ── 창 그림 ─────────────────────────────────────────────────────────
     def _window_image(self):
         if self._cache is None:
+            # 레이아웃을 먼저 돌린다. setMinimumHeight 같은 변경은 이벤트를
+            # 한 번 돌려야 반영되는데, 그냥 grab 하면 옛 배치가 찍힌다
+            # (④ 의 예상 입찰값 칸이 두 줄인데도 한 줄 높이로 잘려 나왔다).
+            from PySide6 import QtWidgets
+            _app = QtWidgets.QApplication.instance()
+            if _app is not None:
+                _app.processEvents()
             g = self.win.grab().toImage()
             self._cache = g.scaled(
                 WIN_W, WIN_H, self.Qt.AspectRatioMode.IgnoreAspectRatio,
@@ -292,7 +302,7 @@ class Video:
         self.t = self.frames / self.fps
         if self.t > self.limit:
             raise _Cut()
-        if self.dry:
+        if self.dry or self.t < self.start_at:
             return
         b = img.constBits()
         self.proc.stdin.write(bytes(b)[: CW * CH * 4])
@@ -300,6 +310,10 @@ class Video:
     def hold(self, sec: float):
         """정지 — 한 장 합성해 같은 프레임을 반복한다."""
         n = max(1, round(sec * self.fps))
+        if self.t + sec < self.start_at:          # --from 앞 구간은 합성도 건너뛴다
+            self.frames += n
+            self.t = self.frames / self.fps
+            return
         img = self._compose()
         raw = bytes(img.constBits())[: CW * CH * 4] if not self.dry else b""
         for _ in range(n):
@@ -317,6 +331,10 @@ class Video:
             k = (i + 1) / n
             if step is not None:
                 step(k)
+            if self.t + 1.0 / self.fps < self.start_at:
+                self.frames += 1
+                self.t = self.frames / self.fps
+                continue
             self._write(self._compose())
 
     # ── 동작 도우미 ─────────────────────────────────────────────────────
@@ -900,6 +918,8 @@ def main() -> int:
     ap.add_argument("--dry", action="store_true", help="프레임 수·길이만 세고 끝낸다")
     ap.add_argument("--limit", type=float, default=0.0,
                     help="이 초까지만 뽑는다 — 눈으로 확인할 때 쓴다")
+    ap.add_argument("--from", dest="start", type=float, default=0.0,
+                    help="이 초부터 뽑는다 — 한 구간만 다시 볼 때 쓴다")
     a = ap.parse_args()
 
     A, tmp = boot(Path(a.tool_root).resolve())
@@ -921,6 +941,7 @@ def main() -> int:
         V = Video(win, Path(a.out), a.fps, dry=a.dry)
         if a.limit:
             V.limit = a.limit
+        V.start_at = a.start
         try:
             timeline(V, win, tabs, A, forecast)
         except _Cut:
