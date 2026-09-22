@@ -1048,6 +1048,13 @@ def main(argv=None):  # pragma: no cover - GUI 셸(사내 실행)
                 big += (f"\n실측 Net {res.meas_net:.2f} MW"
                         f"  ·  차이 {res.net_diff:+.2f} MW  ·  {verdict}")
             self.sim_big.setText(big)
+            # 실측 대조를 켜면 이 칸이 두 줄이 된다. QLabel 의 sizeHint 는
+            # 스타일시트 padding(12px)을 셈에 넣지 않아서, 두 줄일 때 위아래가
+            # 잘려 글자가 반만 보였다(시연 영상 3:02 에서 발견). 줄 수에 맞춰
+            # 최소높이를 직접 잡아 준다.
+            _fm = self.sim_big.fontMetrics()
+            self.sim_big.setMinimumHeight(
+                _fm.lineSpacing() * (big.count("\n") + 1) + 46)
             self.sim_out.setPlainText(format_result(res, inp))
 
         # ---------- 출력곡선 비교 탭 ----------
