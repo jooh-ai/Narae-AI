@@ -474,7 +474,9 @@ def prepare(win, A, tmp: Path):
         win.statusBar().showMessage(f"누적 {win.store.count()}건")
     except Exception:                                          # noqa: BLE001
         pass
-    return make_forecast(tmp / f"{SEED_DATE}_windfinder.xlsx", SEED_DATE)
+    fc = make_forecast(tmp / f"{SEED_DATE}_windfinder.xlsx", SEED_DATE)
+    os.chdir(tmp)
+    return fc
 
 
 def find_button(win, text: str):
@@ -588,7 +590,7 @@ def timeline(V, win, tabs, A, forecast: Path):
     V.note("윈드파인더에서 받은 예보 파일을 올립니다")
     V.move_to(find_btn, 0.9, dx=40)
     V.callout(win.forecast_in["edit"], "대기압 예보 엑셀", "above")
-    V.click(0.5, lambda: win.forecast_in["edit"].setText(str(forecast)))
+    V.click(0.5, lambda: win.forecast_in["edit"].setText(forecast.name))
     V.hold(3.2)
     V.clear_callouts()
     V.note("예보 3~7일차 중위 평균에서 8 mbar 를 뺀 값을 씁니다")
