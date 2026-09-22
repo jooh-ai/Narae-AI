@@ -141,11 +141,16 @@ if (T.resetPage) T.resetPage();
 const made = [];
 /* 부록 한 장만 미리보기 — node preview.js --v3 --one x01_model */
 const oneIdx = process.argv.indexOf('--one');
+const PREFIX = oneIdx > 0 ? 'one' : 'slide';   // 부록은 본편 파일을 덮지 않는다
 if (oneIdx > 0) {
-  const nm = process.argv[oneIdx + 1];
-  const before = pptx.slides.length;
-  require(path.join(SLIDE_DIR, nm + '.js'))(pptx, T, STATE.meta, DATA);
-  for (let i = before; i < pptx.slides.length; i++) made.push([0, pptx.slides[i]]);
+  const names = String(process.argv[oneIdx + 1]).split(',')
+    .map(s => s.trim()).filter(Boolean);
+  for (const nm of names) {
+    const before = pptx.slides.length;
+    require(path.join(SLIDE_DIR, nm + '.js'))(pptx, T, STATE.meta, DATA);
+    for (let i = before; i < pptx.slides.length; i++)
+      made.push([made.length, pptx.slides[i]]);   // 부록도 장마다 다른 파일로
+  }
   STATE.slides = [];
 }
 for (const it of STATE.slides) {
@@ -165,9 +170,9 @@ html,body{margin:0;padding:0}
        background:#${s.background.color}}
 #slide div,#slide img,#slide svg{box-sizing:content-box}
 </style><div id="slide">${s._parts.join('\n')}</div>`;
-  const hp = path.join(OUTDIR, `slide${String(no).padStart(2, '0')}.html`);
+  const hp = path.join(OUTDIR, `${PREFIX}${String(no).padStart(2, '0')}.html`);
   fs.writeFileSync(hp, html, 'utf8');
-  shots.push([no, hp, path.join(OUTDIR, `slide${String(no).padStart(2, '0')}.png`)]);
+  shots.push([no, hp, path.join(OUTDIR, `${PREFIX}${String(no).padStart(2, '0')}.png`)]);
 }
 
 for (const [no, hp, pp] of shots) {

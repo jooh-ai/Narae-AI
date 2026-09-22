@@ -48,18 +48,21 @@ function placeholder(pptx, it) {
    본편 13장은 건드리지 않는다. 쪽번호는 슬라이드 쪽에서 끈다(끼워 넣는
    자리에 따라 번호가 달라지므로 넣는 사람이 정한다).                     */
 function buildOne(name) {
+  const names = String(name).split(',').map(s => s.trim()).filter(Boolean);
   const pptx = new pptxgen();
   pptx.defineLayout({ name: 'W169', width: 13.333, height: 7.5 });
   pptx.layout = 'W169';
-  pptx.title = name;
+  pptx.title = names.join(' · ');
   pptx.company = '나래에너지서비스';
   pptx.author = state.meta.authors.join(', ');
   if (T.resetPage) T.resetPage();
-  require(path.join(SLIDE_DIR, name + '.js'))(pptx, T, state.meta, DATA);
-  const out = path.join(DIR, '..', `부록_${name}.pptx`);
+  for (const nm of names)
+    require(path.join(SLIDE_DIR, nm + '.js'))(pptx, T, state.meta, DATA);
+  const out = path.join(DIR, '..', `부록_${names.join('_')}.pptx`);
   return pptx.writeFile({ fileName: out }).then(() => {
     const kb = (fs.statSync(out).size / 1024).toFixed(0);
-    console.log('출력  ' + path.relative(process.cwd(), out) + '  (' + kb + ' KB)  1 장');
+    console.log('출력  ' + path.relative(process.cwd(), out) +
+                '  (' + kb + ' KB)  ' + names.length + ' 장');
   });
 }
 
