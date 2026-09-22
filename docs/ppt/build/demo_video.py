@@ -54,6 +54,10 @@ STAGES = ["공급가능용량 산정", "온도 구간별 보정값 현황", "Tes
 CIRCLED = "①②③④⑤⑥"
 
 
+class _Cut(Exception):
+    """--limit 로 앞부분만 뽑을 때 타임라인을 끊는다."""
+
+
 # ── 캔버스 ───────────────────────────────────────────────────────────────
 class Video:
     """프레임을 만들어 ffmpeg 에 흘린다.
@@ -78,6 +82,7 @@ class Video:
         self.show_cursor = True
         self._cache = None
         self.dry = dry
+        self.limit = 1e9
         self.frames = 0
         self.proc = None
         if not dry:
@@ -143,6 +148,9 @@ class Video:
             self._cache = g.scaled(
                 WIN_W, WIN_H, self.Qt.AspectRatioMode.IgnoreAspectRatio,
                 self.Qt.TransformationMode.SmoothTransformation)
+            # 원본 grab 은 devicePixelRatio 2 다. 그대로 두면 drawImage 가
+            # 절반 크기로 앉혀 창이 화면의 1/4 만 채운다.
+            self._cache.setDevicePixelRatio(1.0)
         return self._cache
 
     # ── 합성 ────────────────────────────────────────────────────────────
@@ -282,6 +290,8 @@ class Video:
     def _write(self, img):
         self.frames += 1
         self.t = self.frames / self.fps
+        if self.t > self.limit:
+            raise _Cut()
         if self.dry:
             return
         b = img.constBits()
@@ -297,6 +307,8 @@ class Video:
             self.t = self.frames / self.fps
             if not self.dry:
                 self.proc.stdin.write(raw)
+            if self.t > self.limit:
+                raise _Cut()
 
     def anim(self, sec: float, step=None):
         """동작 — 매 프레임 step(k) 를 부르고 합성한다. k 는 0→1."""
@@ -773,7 +785,7 @@ def timeline(V, win, tabs, A, forecast: Path):
     V.move_to((WIN_X + 840, WIN_Y + 100), 0.9)
     V.click(0.5, lambda: tabs.setCurrentIndex(4))
     V.hold(1.2)
-    V.callout((20, 150, 1300, 300), "이론값(점선) vs 신고값(빨간 선)", "below")
+    V.callout(win.chart, "이론값(점선) vs 신고값(빨간 선)", "below")
     V.hold(3.4)
     V.clear_callouts()
     V.hold(2.0)
@@ -858,7 +870,9 @@ def timeline(V, win, tabs, A, forecast: Path):
 
     # 6-5 결과 5초
     V.note("사람이 고르지 않고 성적이 고릅니다")
-    V.callout((10, 455, 1320, 34), "★ 선정 — 성적이 골랐습니다", "below")
+    _b = V.cell(win.sel_loocv, win.sel_loocv.item(0, 0))
+    V.callout((_b[0], _b[1], win.sel_loocv.viewport().width(), _b[3]),
+              "★ 선정 — 성적이 골랐습니다", "below")
     V.hold(8.0)
     V.clear_callouts()
 
@@ -882,6 +896,8 @@ def main() -> int:
     ap.add_argument("--out", default=str(ROOT / "docs" / "ppt" / "assets" / "시연.mp4"))
     ap.add_argument("--fps", type=int, default=25)
     ap.add_argument("--dry", action="store_true", help="프레임 수·길이만 세고 끝낸다")
+    ap.add_argument("--limit", type=float, default=0.0,
+                    help="이 초까지만 뽑는다 — 눈으로 확인할 때 쓴다")
     a = ap.parse_args()
 
     A, tmp = boot(Path(a.tool_root).resolve())
@@ -901,8 +917,12 @@ def main() -> int:
         for _ in range(6):
             app.processEvents()
         V = Video(win, Path(a.out), a.fps, dry=a.dry)
+        if a.limit:
+            V.limit = a.limit
         try:
             timeline(V, win, tabs, A, forecast)
+        except _Cut:
+            pass
         finally:
             V.close()
         state["n"] = V.frames
